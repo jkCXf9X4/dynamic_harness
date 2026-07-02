@@ -15,25 +15,33 @@ if TYPE_CHECKING:
 
 
 class Runtime:
-    def __init__(self, artifact_root: Path, repo_root: Path) -> None:
+    def __init__(self, artifact_root: Path, repo_root: Path, generated_root: Path | None = None) -> None:
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
+        self.generated_root = (generated_root or artifact_root / "generated_agents").resolve()
+        self.generated_root.mkdir(parents=True, exist_ok=True)
         self._agents: dict[str, Agent] = {}
         self._task_graph: dict[str, list[str]] = {}
-        self._agent_factory: Callable[[str, Task, Runtime, Agent | None], Agent] | None = None
+        self._agent_registry: dict[str, type[Agent]] = {}
 
         self._report_handlers: list[Callable[[str, ReportPayload], None]] = []
         self._budget_handlers: list[Callable[[str, BudgetRequest], None]] = []
         self._escalation_handlers: list[Callable[[str, Escalation], None]] = []
         self._failure_handlers: list[Callable[[str, Failure], None]] = []
 
-    def set_agent_factory(self, factory: Callable[[str, Task, Runtime, Agent | None], Agent]) -> None:
-        self._agent_factory = factory
+    def register_agent_class(self, name: str, cls: type[Agent]) -> None:
+        self._agent_registry[name] = cls
 
-    def spawn_agent(self, task: Task, parent: Agent | None = None) -> Agent:
-        assert self._agent_factory is not None, "agent_factory not set"
+    def spawn_agent(self, task: Task, parent: Agent | None = None, agent_type: str | None = None) -> Agent:
         agent_id = uuid4().hex[:12]
-        agent = self._agent_factory(agent_id, task, self, parent)
+        if agent_type and agent_type in self._agent_registry:
+            cls = self._agent_registry[agent_type]
+            agent = cls(agent_id, task, self, parent)
+        elif agent_type == "MetaAgent" or agent_type is None:
+            from .meta_agent import MetaAgent
+            agent = MetaAgent(agent_id, task, self, parent)
+        else:
+            raise KeyError(f"Unknown agent type: {agent_type}")
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:

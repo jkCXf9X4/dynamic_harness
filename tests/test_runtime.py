@@ -6,77 +6,40 @@ from pathlib import Path
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.agent_examples import PlannerAgent, ResearchAgent
 from dynamic_harness.core.runtime import Runtime
-from dynamic_harness.core.task import Task
-
-
-class TrackingPlanner(PlannerAgent):
-    def __init__(self, agent_id: str, task: Task, runtime: Runtime, parent: Agent | None = None) -> None:
-        super().__init__(agent_id, task, runtime, parent)
-        self.log: list[str] = []
-
-    async def _decompose(self) -> list[str]:
-        return ["Subtask 1", "Subtask 2"]
-
-    async def _merge(self) -> object:
-        from dynamic_harness.core.task import ReportPayload
-        return ReportPayload(
-            task_id=self.task.id,
-            summary="Merged results from all subtasks",
-            next_actions=[],
-        )
-
-
-def make_tracking_agent(agent_id: str, task: Task, runtime: Runtime, parent: Agent | None = None) -> Agent:
-    if parent is None:
-        return TrackingPlanner(agent_id, task, runtime, parent)
-    return ResearchAgent(agent_id, task, runtime, parent)
+from dynamic_harness.core.task import ReportPayload, Task
 
 
 @pytest.fixture
 def runtime() -> Runtime:
     tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
+    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp / "gen")
 
 
 @pytest.mark.asyncio
-async def test_planner_decomposes_and_runs_subtasks(runtime: Runtime) -> None:
-    runtime.set_agent_factory(make_tracking_agent)
-
-    root_task = Task(description="Solve the problem")
+async def test_metaagent_default_runtime(runtime: Runtime) -> None:
+    root_task = Task(description="Default meta agent test")
     root = runtime.spawn_agent(root_task)
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert runtime.agent_count() >= 3
-
-
-@pytest.mark.asyncio
-async def test_full_recursive_hierarchy(runtime: Runtime) -> None:
-    runtime.set_agent_factory(make_tracking_agent)
-
-    root_task = Task(description="Analyze codebase")
-    root = runtime.spawn_agent(root_task)
-    await root.run()
-
-    graph = runtime.task_graph()
-    assert root.id in graph
-    assert len(graph[root.id]) == 2
-
-    commits = runtime.repository.log()
-    assert len(commits) >= 1
+    assert runtime.agent_count() >= 2
 
 
 @pytest.mark.asyncio
 async def test_runtime_tracks_task_graph(runtime: Runtime) -> None:
-    runtime.set_agent_factory(make_tracking_agent)
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Leaf done",
+            ))
 
-    root_task = Task(description="Root")
-    root = runtime.spawn_agent(root_task)
+    runtime.register_agent_class("LeafAgent", LeafAgent)
 
-    a = root.spawn("A")
-    b = root.spawn("B")
+    root = runtime.spawn_agent(Task(description="Root"), agent_type="LeafAgent")
+    a = root.spawn("A", agent_type="LeafAgent")
+    b = root.spawn("B", agent_type="LeafAgent")
 
     graph = runtime.task_graph()
     assert a.id in graph[root.id]
@@ -85,10 +48,16 @@ async def test_runtime_tracks_task_graph(runtime: Runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_artifact_store_populated_on_report(runtime: Runtime) -> None:
-    runtime.set_agent_factory(make_tracking_agent)
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Populated",
+            ))
 
-    root_task = Task(description="Populate artifacts")
-    root = runtime.spawn_agent(root_task)
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+
+    root = runtime.spawn_agent(Task(description="Populate"), agent_type="LeafAgent")
     await root.run()
 
     commits = runtime.repository.log()
@@ -96,3 +65,30 @@ async def test_artifact_store_populated_on_report(runtime: Runtime) -> None:
         for aid in c.artifact_ids:
             art = runtime.artifact_store.get(aid)
             assert art is not None, f"Artifact {aid} not found in store"
+
+
+@pytest.mark.asyncio
+async def test_runtime_event_handlers(runtime: Runtime) -> None:
+    events: list[str] = []
+
+    runtime.on_report(lambda aid, p: events.append(f"report:{aid[:8]}"))
+    runtime.on_failure(lambda aid, f: events.append(f"fail:{aid[:8]}"))
+
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Test events",
+            ))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    root = runtime.spawn_agent(Task(description="Events"), agent_type="LeafAgent")
+    await root.run()
+
+    assert any("report:" in e for e in events)
+
+
+@pytest.mark.asyncio
+async def test_unknown_agent_type_raises(runtime: Runtime) -> None:
+    with pytest.raises(KeyError, match="UnknownAgent"):
+        runtime.spawn_agent(Task(description="Bad"), agent_type="UnknownAgent")

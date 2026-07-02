@@ -6,76 +6,73 @@ from pathlib import Path
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.agent_examples import ResearchAgent
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
-
-
-class TrackingResearchAgent(ResearchAgent):
-    def __init__(self, agent_id: str, task: Task, runtime: Runtime, parent: Agent | None = None) -> None:
-        super().__init__(agent_id, task, runtime, parent)
-        self.log: list[str] = []
-
-    async def _execute(self) -> ReportPayload:
-        self.log.append(f"execute: {self.task.description}")
-        return ReportPayload(
-            task_id=self.task.id,
-            summary=f"Result: {self.task.description}",
-            claims=[f"Claim about {self.task.description[:50]}"],
-            next_actions=[],
-        )
 
 
 @pytest.fixture
 def runtime() -> Runtime:
     tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
+    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp / "gen")
 
 
 @pytest.mark.asyncio
-async def test_agent_spawn_and_report(runtime: Runtime) -> None:
-    runtime.set_agent_factory(TrackingResearchAgent)
-
-    root_task = Task(description="Analyze the repository")
+async def test_metaagent_spawns_and_completes(runtime: Runtime) -> None:
+    root_task = Task(description="Test task")
     root = runtime.spawn_agent(root_task)
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert runtime.agent_count() == 1
+    assert runtime.agent_count() >= 2
 
 
 @pytest.mark.asyncio
-async def test_agent_hierarchy(runtime: Runtime) -> None:
-    runtime.set_agent_factory(TrackingResearchAgent)
+async def test_agent_hierarchy_via_registry(runtime: Runtime) -> None:
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary=f"Leaf done: {self.task.description}",
+            ))
 
-    root_task = Task(description="Research project")
-    root = runtime.spawn_agent(root_task)
+    class BranchAgent(Agent):
+        async def run(self) -> None:
+            children = [
+                self.spawn("Leaf A", agent_type="LeafAgent"),
+                self.spawn("Leaf B", agent_type="LeafAgent"),
+            ]
+            for c in children:
+                await c.run()
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Branch done",
+            ))
 
-    child1 = root.spawn("Security audit")
-    child2 = root.spawn("Architecture review")
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    runtime.register_agent_class("BranchAgent", BranchAgent)
 
-    await child1.run()
-    await child2.run()
+    root_task = Task(description="Root")
+    root = runtime.spawn_agent(root_task, agent_type="BranchAgent")
+    await root.run()
 
-    assert child1.task.status.value == "completed"
-    assert child2.task.status.value == "completed"
-
+    assert root.task.status.value == "completed"
+    assert len(root.children) == 2
     graph = runtime.task_graph()
     assert root.id in graph
-    assert child1.id in graph[root.id]
-    assert child2.id in graph[root.id]
+    assert len(graph[root.id]) == 2
 
 
 @pytest.mark.asyncio
 async def test_agent_failure(runtime: Runtime) -> None:
-    class FailingAgent(TrackingResearchAgent):
-        async def _execute(self) -> ReportPayload:
-            raise RuntimeError("Something went wrong")
+    class FailingAgent(Agent):
+        async def run(self) -> None:
+            try:
+                raise RuntimeError("Intentional failure")
+            except Exception as e:
+                self.fail(str(e))
 
-    runtime.set_agent_factory(FailingAgent)
-
-    root_task = Task(description="Failing task")
-    root = runtime.spawn_agent(root_task)
+    runtime.register_agent_class("FailingAgent", FailingAgent)
+    root = runtime.spawn_agent(Task(description="Fail"), agent_type="FailingAgent")
     await root.run()
 
     assert root.task.status.value == "failed"
@@ -83,29 +80,57 @@ async def test_agent_failure(runtime: Runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_agent_has_no_sibling_visibility(runtime: Runtime) -> None:
-    runtime.set_agent_factory(TrackingResearchAgent)
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Leaf done",
+            ))
 
-    root_task = Task(description="Root task")
-    root = runtime.spawn_agent(root_task)
+    runtime.register_agent_class("LeafAgent", LeafAgent)
 
-    child_a = root.spawn("Task A")
-    child_b = root.spawn("Task B")
+    root = runtime.spawn_agent(Task(description="Root"), agent_type="LeafAgent")
+    child_a = root.spawn("Task A", agent_type="LeafAgent")
+    child_b = root.spawn("Task B", agent_type="LeafAgent")
 
     assert not hasattr(child_a, "siblings")
     assert not hasattr(child_b, "siblings")
     assert not hasattr(child_a, "task_graph")
     assert not hasattr(child_b, "task_graph")
-    assert hasattr(child_a, "parent")  # agent knows its parent
+    assert hasattr(child_a, "parent")
+    assert child_a.parent is root
 
 
 @pytest.mark.asyncio
 async def test_report_creates_artifact_and_commit(runtime: Runtime) -> None:
-    runtime.set_agent_factory(TrackingResearchAgent)
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Done",
+            ))
 
-    root_task = Task(description="Generate artifact")
-    root = runtime.spawn_agent(root_task)
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    root = runtime.spawn_agent(Task(description="Report"), agent_type="LeafAgent")
     await root.run()
 
     assert runtime.repository.count() >= 1
     commits = runtime.repository.log()
-    assert any(c.task_id == root_task.id for c in commits)
+    assert any(c.task_id == root.task.id for c in commits)
+
+
+@pytest.mark.asyncio
+async def test_agent_guidelines_property(runtime: Runtime) -> None:
+    class TestAgent(Agent):
+        async def run(self) -> None:
+            assert "self.spawn" in self.guidelines
+            assert "self.report" in self.guidelines
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="Guidelines OK",
+            ))
+
+    runtime.register_agent_class("TestAgent", TestAgent)
+    root = runtime.spawn_agent(Task(description="Check"), agent_type="TestAgent")
+    await root.run()
+    assert root.task.status.value == "completed"
