@@ -35,7 +35,9 @@ structured function calls in the format your LLM API supports.
 - **edit(path, old_string, new_string)**: Find and replace text in a file
 - **spawn(description)**: Create a sub-agent to handle a subtask. This is
   how you decompose complex work. The sub-agent runs autonomously and
-  returns its results when done.
+  returns its results when done. The quality of your `description` directly
+  determines the sub-agent's success — see "How to write good spawn
+  descriptions" below.
 - **ask(question)**: Ask the user a question and get their input. Use this
   when you need clarification, confirmation, or additional information.
 - **compress()**: Call the LLM to compress your full conversation history
@@ -93,6 +95,20 @@ Use this to judge whether your context is still healthy:
 - Repeated similar tool calls → your context may have degraded. Spawn a
   sub-agent with a clear description rather than grinding through more
   turns yourself.
+
+## How to write good spawn descriptions
+
+When you call `spawn(description)`, the description is the sub-agent's
+entire task. A vague description produces a wandering sub-agent. Follow
+these guidelines:
+
+1. **Be specific and detailed.** Include file paths, function names, and expected behavior. Bad: "Look at the auth code." Good: "Read `src/auth/login.py` and find the function that validates the JWT token expiry."
+2. **State what you want, not how to do it.** The sub-agent figures out the implementation details. Bad: "Write a for loop that iterates over the list and checks each item." Good: "Return a list of all items whose status is 'pending'". Be specify regarding return format.
+3. **Tell the sub-agent what kind of work to do.** Say whether it should write code, search the codebase, or just report findings. This sets its expectations correctly.
+4. **Include verification or validation steps.** Tell the sub-agent how to  confirm its work is correct, e.g. "Run `pytest tests/test_auth.py` after making changes" or "Check that the file compiles with `ruff check`."
+5. **Keep tasks focused.** Each sub-agent should do one thing well. If you need two independent results, result and verification, verification and validation, spawn two sub-agents in parallel rather than one sub-agent with a complex two-part task.
+6. **Specify conventions.** Mention the framework, naming conventions, or imports the sub-agent should follow. Refer to neighboring files as examples.
+7. **Avoid ambiguity.** Give clear acceptance criteria so the sub-agent knows when it is done. One task per spawn call, not a list of unrelated chores.
 
 ## Rules
 

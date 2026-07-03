@@ -72,6 +72,7 @@ class TUI(App[None]):
         min-width: 44;
         border-right: solid #444;
         background: #1a1a2e;
+        overflow-x: hidden;
     }
 
     Tree > .tree--label {
@@ -81,6 +82,7 @@ class TUI(App[None]):
     RichLog {
         height: 1fr;
         padding: 0 1;
+        overflow-x: hidden;
     }
 
     Input {
@@ -101,6 +103,8 @@ class TUI(App[None]):
     BINDINGS = [
         ("ctrl+c", "exit"),
         ("escape", "cancel"),
+        ("page_up", "page_up"),
+        ("page_down", "page_down"),
     ]
 
     def __init__(self, runtime: Runtime, **kwargs: Any) -> None:
@@ -114,7 +118,7 @@ class TUI(App[None]):
     def compose(self) -> ComposeResult:
         with Horizontal():
             yield Tree("Agent Tree", id="sidebar")
-            yield RichLog(id="output", max_lines=500)
+            yield RichLog(id="output", max_lines=500, wrap=True, highlight=True)
         yield Input(id="input", placeholder="Enter a task or /help for commands...")
 
     def on_mount(self) -> None:
@@ -340,6 +344,12 @@ class TUI(App[None]):
         if self._current_agent_task and not self._current_agent_task.done():
             self._current_agent_task.cancel()
             self.write_output("output-error", "Agent run cancelled.\n")
+
+    def action_page_up(self) -> None:
+        self.query_one("#output", RichLog).scroll_page_up()
+
+    def action_page_down(self) -> None:
+        self.query_one("#output", RichLog).scroll_page_down()
 
 
 def _build_runtime(args: argparse.Namespace) -> Runtime:

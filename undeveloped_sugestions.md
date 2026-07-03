@@ -1,8 +1,6 @@
 
 ---
 
-persist all agent communication and tool calls to disk for traceability
+guidlines fow spawning subagents
 
----
-
-enable up/down to cycle over previous messages
+clear input, clear expectations, clear boundaries
