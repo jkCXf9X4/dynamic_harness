@@ -296,8 +296,31 @@ async def _tool_write(*, agent: Agent, path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {path}"
 
 
+def _build_gitignore_filter() -> Callable[[str], bool]:
+    gitignore = Path.cwd() / ".gitignore"
+    if not gitignore.exists():
+        return lambda p: False
+
+    try:
+        import pathspec
+        spec = pathspec.PathSpec.from_lines(
+            "gitignore", gitignore.read_text().splitlines()
+        )
+
+        def is_ignored(path: str) -> bool:
+            return spec.match_file(path)
+    except ImportError:
+        return lambda p: False
+
+    return is_ignored
+
+
 async def _tool_glob(*, agent: Agent, pattern: str) -> str:
     matches = _glob.glob(pattern, recursive=True)
+    _filter = _build_gitignore_filter()
+    filtered = [m for m in matches if not _filter(m)]
+    if filtered:
+        return _json.dumps(sorted(filtered), indent=2)
     return _json.dumps(sorted(matches), indent=2)
 
 

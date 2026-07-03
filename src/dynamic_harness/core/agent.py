@@ -73,6 +73,7 @@ to disk and call report() with the file paths in artifact_ids.
 
 **Delegation rule:** If a sub-task requires 2 or more tool calls, SPAWN.
 If it requires 0–1 calls (e.g. reading one known file path), do it directly.
+If you must make multiple direct tool calls, BATCH them in a single turn.
 Never accumulate turns grinding through search results yourself — spawn.
 
 ### 4. VERIFY — CRITICAL, do not skip
@@ -164,6 +165,10 @@ message count, estimated tokens, and original task. Act on it:
 
 ## Rules
 
+- When making tool calls, batch all independent work into a single turn.
+  For example, if you need to read 5 files, call read() 5 times in ONE turn —
+  never spread them across separate turns. Same for grep, glob, or any
+  independent tool calls. Sequential turns with single calls are wasteful.
 - You do NOT know about siblings, cousins, or the global task graph.
   You see only your task, your parent, and your children.
 - Write important data to disk with write(). Reference files by path.

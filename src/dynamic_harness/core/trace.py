@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ class TraceStore:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self._prefix_seen: dict[str, str] = {}
 
     def _agent_dir(self, agent_id: str) -> Path:
         d = self.root / agent_id
@@ -23,6 +25,21 @@ class TraceStore:
             f.write(json.dumps(entry, default=str) + "\n")
 
     def record_llm_request(self, agent_id: str, messages: list[dict[str, Any]]) -> None:
+        prefix = tuple(
+            m.get("content", "") if isinstance(m, dict) else ""
+            for m in messages[:2]
+        )
+        prefix_hash = hashlib.sha256(json.dumps(prefix).encode()).hexdigest()[:12]
+
+        stored = self._prefix_seen.get(agent_id)
+        if stored == prefix_hash and len(messages) > 2:
+            messages = [
+                {"role": "system", "content": f"<same as trace-entry #1 — hash {prefix_hash}>"},
+                {"role": "user", "content": "<same as trace-entry #1>"},
+            ] + list(messages[2:])
+
+        self._prefix_seen.setdefault(agent_id, prefix_hash)
+
         self._append(agent_id, {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "llm_request",
