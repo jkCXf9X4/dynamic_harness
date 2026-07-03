@@ -13,17 +13,17 @@ from dynamic_harness.core.task import ReportPayload, Task
 @pytest.fixture
 def runtime() -> Runtime:
     tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp / "gen")
+    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
 
 @pytest.mark.asyncio
-async def test_metaagent_default_runtime(runtime: Runtime) -> None:
-    root_task = Task(description="Default meta agent test")
+async def test_default_agent_runtime(runtime: Runtime) -> None:
+    root_task = Task(description="Default agent test")
     root = runtime.spawn_agent(root_task)
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert runtime.agent_count() >= 2
+    assert runtime.agent_count() >= 1
 
 
 @pytest.mark.asyncio
@@ -89,8 +89,8 @@ async def test_runtime_event_handlers(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_agent_type_falls_back_to_meta(runtime: Runtime) -> None:
+async def test_unknown_agent_type_uses_default(runtime: Runtime) -> None:
     root = runtime.spawn_agent(Task(description="Unknown type"), agent_type="Anything")
     await root.run()
     assert root.task.status.value == "completed"
-    assert runtime.agent_count() >= 2
+    assert runtime.agent_count() >= 1

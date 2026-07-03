@@ -11,7 +11,7 @@ from dynamic_harness.core.task import ReportPayload, Task
 
 async def main() -> None:
     tmp = Path(tempfile.mkdtemp())
-    runtime = Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp / "gen")
+    runtime = Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
     runtime.on_report(lambda aid, p: print(f"[REPORT] {aid[:8]} | {p.summary[:80]}..."))
     runtime.on_failure(lambda aid, f: print(f"[FAIL]  {aid[:8]} | {f.error}"))
@@ -57,16 +57,15 @@ async def main() -> None:
 
     runtime.register_agent_class("DecomposerAgent", DecomposerAgent)
 
-    # Also demonstrate the MetaAgent: dynamically generate a new specialist
-    print("--- Phase 1: spawning MetaAgent that generates a SecurityAuditAgent ---")
-    meta = runtime.spawn_agent(Task(
-        description="Create a SecurityAuditAgent that scans for vulnerabilities"
-    ))
-    await meta.run()
+    # Demonstrate the default (non-LLM) agent: runs and reports immediately
+    print("--- Phase 1: default agent (no LLM) ---")
+    default = runtime.spawn_agent(Task(description="Simple task"))
+    await default.run()
+    print(f"Status: {default.task.status.value}")
 
-    print(f"\nRegistered types after MetaAgent: {list(runtime._agent_registry.keys())}")
+    print(f"\nRegistered types: {list(runtime._agent_registry.keys())}")
 
-    # Now use the fixed decomposition
+    # Use the registered DecomposerAgent
     print("\n--- Phase 2: using registered DecomposerAgent ---")
     root = runtime.spawn_agent(Task(description="Security review"), agent_type="DecomposerAgent")
     await root.run()

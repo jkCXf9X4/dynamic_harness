@@ -6,7 +6,8 @@ import re
 import httpx
 from openai import AsyncOpenAI
 
-from .provider import LLMConfig, LLMProvider, LLMResponse
+from ..core.capabilities import ToolCallData
+from .provider import LLMConfig, LLMProvider, LLMResponse, ToolCallResponse
 
 
 def _extract_json(text: str) -> object:
@@ -48,7 +49,49 @@ class OpenAIProvider(LLMProvider):
         return LLMResponse(
             content=choice.message.content or "",
             model=cfg.model,
-            usage={"prompt_tokens": resp.usage.prompt_tokens, "completion_tokens": resp.usage.completion_tokens} if resp.usage else None,
+            usage={
+                "prompt_tokens": resp.usage.prompt_tokens,
+                "completion_tokens": resp.usage.completion_tokens,
+            } if resp.usage else None,
+        )
+
+    async def generate_with_tools(
+        self, messages: list[dict], tools: list[dict], config: LLMConfig | None = None
+    ) -> ToolCallResponse:
+        cfg = config or LLMConfig(model=self.default_model)
+        kwargs: dict = dict(
+            model=cfg.model,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            messages=messages,
+        )
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+
+        resp = await self.client.chat.completions.create(**kwargs)
+        choice = resp.choices[0]
+        msg = choice.message
+
+        tool_calls = None
+        if msg.tool_calls:
+            tool_calls = [
+                ToolCallData(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments),
+                )
+                for tc in msg.tool_calls
+            ]
+
+        return ToolCallResponse(
+            content=msg.content,
+            tool_calls=tool_calls,
+            model=cfg.model,
+            usage={
+                "prompt_tokens": resp.usage.prompt_tokens,
+                "completion_tokens": resp.usage.completion_tokens,
+            } if resp.usage else None,
         )
 
     async def generate_structured(

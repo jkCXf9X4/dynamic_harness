@@ -10,7 +10,7 @@ from dynamic_harness.core.task import Task
 
 async def main() -> None:
     tmp = Path(tempfile.mkdtemp())
-    runtime = Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp / "gen")
+    runtime = Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
     runtime.on_report(lambda aid, p: print(f"[REPORT] {aid[:8]} | {p.summary[:100]}..."))
     runtime.on_failure(lambda aid, f: print(f"[FAIL]  {aid[:8]} | {f.error}"))

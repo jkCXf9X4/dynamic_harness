@@ -24,7 +24,6 @@ async def main() -> None:
     runtime = Runtime(
         artifact_root=tmp / "artifacts",
         repo_root=tmp / "repo",
-        generated_root=tmp / "gen",
     )
 
     llm = OpenAIProvider(
@@ -39,25 +38,17 @@ async def main() -> None:
     runtime.on_failure(lambda aid, f: print(f"\n[FAIL]  {aid[:8]} | {f.error}"))
 
     root = runtime.spawn_agent(Task(
-        description="Create a Python agent that analyzes a git repository "
-        "and produces a summary of the number of commits, contributors, "
-        "and most changed files"
+        description="Find the 3 largest .py files in /home/eriro/pwa, "
+        "report their paths and line counts. Use glob and read tools."
     ))
 
-    print("=== Running MetaAgent with deepseek/deepseek-v4-flash ===\n")
+    print("=== Running agent with deepseek/deepseek-v4-flash ===\n")
     await root.run()
 
     print(f"\n=== Results ===")
     print(f"Agents spawned: {runtime.agent_count()}")
     print(f"Commits: {runtime.repository.count()}")
     print(f"Registered types: {list(runtime._agent_registry.keys())}")
-
-    print(f"\nGenerated code (tmp/gen/):")
-    for f in sorted(runtime.generated_root.glob("*.py")):
-        if f.name == "__init__.py":
-            continue
-        print(f"\n--- {f.name} ---")
-        print(f.read_text())
 
     print(f"\nTask graph:")
     for pid, kids in runtime.task_graph().items():

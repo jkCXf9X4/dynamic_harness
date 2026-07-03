@@ -13,17 +13,17 @@ from dynamic_harness.core.task import ReportPayload, Task
 @pytest.fixture
 def runtime() -> Runtime:
     tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp / "gen")
+    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
 
 @pytest.mark.asyncio
-async def test_metaagent_spawns_and_completes(runtime: Runtime) -> None:
+async def test_default_agent_completes(runtime: Runtime) -> None:
     root_task = Task(description="Test task")
     root = runtime.spawn_agent(root_task)
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert runtime.agent_count() >= 2
+    assert runtime.agent_count() >= 1
 
 
 @pytest.mark.asyncio
@@ -123,8 +123,9 @@ async def test_report_creates_artifact_and_commit(runtime: Runtime) -> None:
 async def test_agent_guidelines_property(runtime: Runtime) -> None:
     class TestAgent(Agent):
         async def run(self) -> None:
-            assert "self.spawn" in self.guidelines
-            assert "self.report" in self.guidelines
+            assert "read" in self.guidelines
+            assert "spawn" in self.guidelines
+            assert "report" in self.guidelines
             self.report(ReportPayload(
                 task_id=self.task.id,
                 summary="Guidelines OK",

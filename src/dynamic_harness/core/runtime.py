@@ -8,6 +8,7 @@ from uuid import uuid4
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
 from .agent import Agent
+from .capabilities import ToolRegistry, register_default_tools
 from .task import BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
 
 if TYPE_CHECKING:
@@ -15,11 +16,17 @@ if TYPE_CHECKING:
 
 
 class Runtime:
-    def __init__(self, artifact_root: Path, repo_root: Path, generated_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        artifact_root: Path,
+        repo_root: Path,
+        generated_root: Path | None = None,
+    ) -> None:
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
-        self.generated_root = (generated_root or artifact_root / "generated_agents").resolve()
-        self.generated_root.mkdir(parents=True, exist_ok=True)
+        if generated_root:
+            generated_root.mkdir(parents=True, exist_ok=True)
+        self._generated_root = generated_root
         self._agents: dict[str, Agent] = {}
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
@@ -29,6 +36,13 @@ class Runtime:
         self._budget_handlers: list[Callable[[str, BudgetRequest], None]] = []
         self._escalation_handlers: list[Callable[[str, Escalation], None]] = []
         self._failure_handlers: list[Callable[[str, Failure], None]] = []
+
+        self.tool_registry = ToolRegistry()
+        register_default_tools(self.tool_registry)
+
+    @property
+    def generated_root(self) -> Path | None:
+        return self._generated_root
 
     def register_agent_class(self, name: str, cls: type[Agent]) -> None:
         self._agent_registry[name] = cls
@@ -42,8 +56,7 @@ class Runtime:
             cls = self._agent_registry[agent_type]
             agent = cls(agent_id, task, self, parent)
         else:
-            from .meta_agent import MetaAgent
-            agent = MetaAgent(agent_id, task, self, parent, llm=self._llm)
+            agent = Agent(agent_id, task, self, parent)
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+import json
+from abc import ABC
+from typing import TYPE_CHECKING, Any
 
 from .task import (
     BudgetRequest,
@@ -12,49 +13,46 @@ from .task import (
 )
 
 if TYPE_CHECKING:
+    from ..llm.provider import LLMProvider
     from .runtime import Runtime
 
 
-HARNESS_GUIDELINES = """\
-## AGENT CAPABILITIES
+AGENT_SYSTEM_PROMPT = """\
+You are an agent in a recursive tool-calling harness.
 
-You are an agent in a recursive dynamic harness. You build a hierarchy of \
-specialists at runtime rather than using pre-defined types.
+## Your capabilities (available tools)
 
-### self.spawn(description, agent_type=None)
-Create a subagent. Without agent_type, the Runtime spawns a MetaAgent that \
-generates the right specialist class on the fly, saves it to disk, registers it, \
-and runs it. Use agent_type="Name" to reuse a previously generated type.
+You have the following tools at your disposal. Call them by responding with
+structured function calls in the format your LLM API supports.
 
-### self.report(payload)
-Send results to your parent. Include a concise summary and artifact_ids for \
-files written to disk. Your parent never sees your raw working context.
+- **read(path)**: Read a file from disk
+- **write(path, content)**: Write content to a file
+- **glob(pattern)**: List files matching a pattern (e.g. **/*.py)
+- **webfetch(url)**: Fetch content from a URL
+- **edit(path, old_string, new_string)**: Find and replace text in a file
+- **spawn(description)**: Create a sub-agent to handle a subtask. This is
+  how you decompose complex work. The sub-agent runs autonomously and
+  returns its results when done.
+- **report(summary, artifact_ids)**: Submit your final result and signal
+  completion. Call this when your task is done.
+- **escalate(issue)**: Ask your parent agent for help with a problem.
+- **fail(error)**: Report a failure.
 
-### self.escalate(issue, **context)
-Ask your parent for help (spawn a new agent, forward, or handle it).
+## How to work
 
-### self.request_more_budget(current, requested, reason)
-Request more compute budget.
+1. Analyze your task description carefully.
+2. If the task is complex, break it down by spawning sub-agents.
+3. Use read/write/glob/webfetch/edit to gather information and produce output.
+4. When your task is complete, call report() with a summary of findings.
+5. If you encounter a problem you cannot solve, escalate() to your parent.
 
-### self.fail(error)
-Report a failure.
+## Rules
 
-## INFORMATION MODEL
-
-- Working context: private to you, discarded when you finish
-- Artifacts: write important data to disk, reference by ID
-- Summary: your parent receives a short summary + artifact IDs, not raw context
-- Progressive disclosure: artifacts have headline, summary, full report views
-- Agents are disposable: state lives in artifacts, not in agent memory
-
-## ENCAPSULATION
-
-- You know only: your task, your parent, your children, your own state
-- You have NO visibility into siblings, cousins, or the global task graph
-- Authority flows down (parent spawns children, grants requests)
-- Information flows up (children report summaries to parent)
-- If a subtask needs a specialist you haven't seen before, spawn() it \
-dynamically — a MetaAgent will generate the code automatically
+- You do NOT know about siblings, cousins, or the global task graph.
+- You see only your own task, your parent, and your children.
+- Write important data to disk using write(); reference files by path.
+- When you call spawn(), the sub-agent runs immediately and you receive its
+  completion status. You do not need to await it separately.
 """
 
 
@@ -67,11 +65,63 @@ class Agent(ABC):
         self.children: list[Agent] = []
 
     @property
-    def guidelines(self) -> str:
-        return HARNESS_GUIDELINES
+    def llm(self) -> LLMProvider | None:
+        return self._runtime._llm
 
-    @abstractmethod
-    async def run(self) -> None: ...
+    @property
+    def guidelines(self) -> str:
+        return AGENT_SYSTEM_PROMPT
+
+    async def run(self) -> None:
+        llm = self.llm
+        if not llm:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary=f"Agent {self.id} executed: {self.task.description}",
+            ))
+            return
+
+        tools = self._runtime.tool_registry.openai_schemas()
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": AGENT_SYSTEM_PROMPT},
+            {"role": "user", "content": self.task.description},
+        ]
+
+        while True:
+            response = await llm.generate_with_tools(messages, tools)
+
+            if response.tool_calls:
+                assistant_msg: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
+                assistant_msg["tool_calls"] = []
+                results: list[dict[str, Any]] = []
+
+                for tc in response.tool_calls:
+                    assistant_msg["tool_calls"].append({
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments),
+                        },
+                    })
+                    result = await self._runtime.tool_registry.execute(
+                        tc.name, tc.id, agent=self, **tc.arguments
+                    )
+                    results.append({
+                        "role": "tool",
+                        "tool_call_id": result.tool_call_id,
+                        "content": result.content,
+                    })
+
+                messages.append(assistant_msg)
+                messages.extend(results)
+            else:
+                content = response.content or ""
+                self.report(ReportPayload(
+                    task_id=self.task.id,
+                    summary=content,
+                ))
+                return
 
     def spawn(self, description: str, agent_type: str | None = None, **metadata: object) -> Agent:
         child_task = Task(description=description, parent_id=self.task.id, metadata=metadata)
