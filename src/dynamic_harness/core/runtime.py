@@ -11,7 +11,7 @@ from .agent import Agent
 from .task import BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
 
 if TYPE_CHECKING:
-    pass
+    from ..llm.provider import LLMProvider
 
 
 class Runtime:
@@ -23,6 +23,7 @@ class Runtime:
         self._agents: dict[str, Agent] = {}
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
+        self._llm: LLMProvider | None = None
 
         self._report_handlers: list[Callable[[str, ReportPayload], None]] = []
         self._budget_handlers: list[Callable[[str, BudgetRequest], None]] = []
@@ -32,16 +33,17 @@ class Runtime:
     def register_agent_class(self, name: str, cls: type[Agent]) -> None:
         self._agent_registry[name] = cls
 
+    def set_llm(self, llm: LLMProvider | None) -> None:
+        self._llm = llm
+
     def spawn_agent(self, task: Task, parent: Agent | None = None, agent_type: str | None = None) -> Agent:
         agent_id = uuid4().hex[:12]
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
             agent = cls(agent_id, task, self, parent)
-        elif agent_type == "MetaAgent" or agent_type is None:
-            from .meta_agent import MetaAgent
-            agent = MetaAgent(agent_id, task, self, parent)
         else:
-            raise KeyError(f"Unknown agent type: {agent_type}")
+            from .meta_agent import MetaAgent
+            agent = MetaAgent(agent_id, task, self, parent, llm=self._llm)
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -8,6 +9,13 @@ from ..core.agent import HARNESS_GUIDELINES, Agent
 from ..core.runtime import Runtime
 from ..core.task import ReportPayload, Task
 from ..llm.provider import LLMProvider
+
+
+def _clean_code(code: str) -> str:
+    code = code.strip()
+    code = re.sub(r"^```(?:python)?\s*\n?", "", code)
+    code = re.sub(r"\n?\s*```\s*$", "", code)
+    return code.strip()
 
 
 class MetaAgent(Agent):
@@ -51,19 +59,23 @@ class MetaAgent(Agent):
                 f"Generate a complete Python class that extends `Agent`. "
                 f"The class must implement `async def run(self) -> None`.\n\n"
                 f"Rules:\n"
+                f"- Start with `from __future__ import annotations`.\n"
                 f"- The constructor signature MUST be:\n"
                 f"  `def __init__(self, agent_id: str, task: Task, runtime: Runtime, parent: Agent | None = None):`\n"
                 f"- Import Agent from `dynamic_harness.core.agent`.\n"
                 f"- Import ReportPayload, Task from `dynamic_harness.core.task`.\n"
                 f"- Import Runtime from `dynamic_harness.core.runtime`.\n"
+                f"- Do NOT use `typing.Optional` — use `X | None` syntax (requires `from __future__ import annotations`).\n"
                 f"- Use `self.spawn()` to create sub-agents when the task needs decomposition.\n"
                 f"- Call `self.report(ReportPayload(...))` with findings.\n"
-                f"- Use `self.escalate()` if unexpected needs arise.\n"
-                f"- Return ONLY valid Python code. No markdown fences, no explanations."
+                f"- Access task metadata via `self.task.metadata` (dict).\n"
+                f"- Write files via `self._runtime.artifact_store.write_text(artifact_id, filename, content)`.\n"
+                f"- Do NOT reference `self.runtime` — use `self._runtime` if you need the Runtime.\n"
+                f"- Return ONLY valid Python code. No markdown fences, no explanations, no docstrings beyond inline comments."
             )
             user = f"Task to design agent for: {self.task.description}"
             resp = await self.llm.generate(system, user)
-            code = resp.content.strip()
+            code = _clean_code(resp.content)
         else:
             code = self._fallback_code()
 
@@ -105,7 +117,6 @@ class MetaAgent(Agent):
 
     def _fallback_code(self) -> str:
         return (
-            '#Falure: Fallback code\n'
             'from dynamic_harness.core.agent import Agent\n'
             'from dynamic_harness.core.task import ReportPayload, Task\n'
             'from dynamic_harness.core.runtime import Runtime\n\n\n'

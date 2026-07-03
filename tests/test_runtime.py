@@ -89,6 +89,8 @@ async def test_runtime_event_handlers(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_agent_type_raises(runtime: Runtime) -> None:
-    with pytest.raises(KeyError, match="UnknownAgent"):
-        runtime.spawn_agent(Task(description="Bad"), agent_type="UnknownAgent")
+async def test_unknown_agent_type_falls_back_to_meta(runtime: Runtime) -> None:
+    root = runtime.spawn_agent(Task(description="Unknown type"), agent_type="Anything")
+    await root.run()
+    assert root.task.status.value == "completed"
+    assert runtime.agent_count() >= 2

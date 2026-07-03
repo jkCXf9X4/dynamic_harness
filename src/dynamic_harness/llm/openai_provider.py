@@ -1,13 +1,36 @@
 from __future__ import annotations
 
+import json
+import re
+
+import httpx
 from openai import AsyncOpenAI
 
 from .provider import LLMConfig, LLMProvider, LLMResponse
 
 
+def _extract_json(text: str) -> object:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return json.loads(text)
+
+
 class OpenAIProvider(LLMProvider):
-    def __init__(self, model: str = "gpt-4o") -> None:
-        self.client = AsyncOpenAI()
+    def __init__(
+        self,
+        model: str = "gpt-4o",
+        base_url: str | None = None,
+        api_key: str | None = None,
+        verify_ssl: bool = True,
+    ) -> None:
+        http_client = httpx.AsyncClient(verify=verify_ssl)
+        self.client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            http_client=http_client,
+        )
         self.default_model = model
 
     async def generate(self, system: str, user: str, config: LLMConfig | None = None) -> LLMResponse:
@@ -32,14 +55,19 @@ class OpenAIProvider(LLMProvider):
         self, system: str, user: str, response_model: type, config: LLMConfig | None = None
     ) -> object:
         cfg = config or LLMConfig(model=self.default_model)
-        resp = await self.client.beta.chat.completions.parse(
-            model=cfg.model,
-            temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format=response_model,
-        )
-        return resp.choices[0].message.parsed
+        try:
+            resp = await self.client.beta.chat.completions.parse(
+                model=cfg.model,
+                temperature=cfg.temperature,
+                max_tokens=cfg.max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format=response_model,
+            )
+            return resp.choices[0].message.parsed
+        except Exception:
+            text = await self.generate(system, user, cfg)
+            data = _extract_json(text.content)
+            return response_model(**data)
