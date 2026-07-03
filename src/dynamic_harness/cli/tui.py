@@ -46,6 +46,7 @@ class TUI:
         self.console = Console()
         self._events: list[str] = []
         self._run_log: list[dict] = []
+        self._last_reports: list[tuple[str, str]] = []
 
         history_path = Path(tempfile.gettempdir()) / ".dynamic-harness-history"
         self.session = PromptSession[str](
@@ -60,8 +61,8 @@ class TUI:
 
     def _on_report(self, agent_id: str, payload: ReportPayload) -> None:
         tag = agent_id[:8]
-        summary = payload.summary[:200]
-        self._events.append(f"[bold green]✓[/] [dim]{tag}[/] report: {summary}")
+        self._events.append(f"[bold green]✓[/] [dim]{tag}[/] report done")
+        self._last_reports.append((tag, payload.summary))
 
     def _on_failure(self, agent_id: str, fail: ReportPayload) -> None:
         tag = agent_id[:8]
@@ -221,7 +222,11 @@ class TUI:
             await root_task
             live.update(render())
 
-        self.console.print(f"\n[bold green]✓[/] {self.runtime.repository.count()} commits, {self.runtime.agent_count()} agents\n")
+        for tag, summary in self._last_reports:
+            if summary:
+                self.console.print(Panel(summary, title=f"[bold green]Report from {tag}[/]", border_style="green"))
+        self._last_reports.clear()
+        self.console.print(f"[bold green]✓[/] {self.runtime.repository.count()} commits, {self.runtime.agent_count()} agents\n")
 
     async def loop(self) -> None:
         self.console.print()
@@ -307,7 +312,7 @@ def main() -> None:
 
     if args.task:
         from .repl import AgentCLI
-        cli = AgentCLI(runtime=runtime)
+        cli = AgentCLI()
         asyncio.run(cli.run(" ".join(args.task), args=args))
     else:
         tui = TUI(runtime=runtime)

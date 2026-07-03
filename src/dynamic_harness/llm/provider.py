@@ -9,7 +9,7 @@ from typing import Any
 class LLMConfig:
     model: str = "gpt-4o"
     temperature: float = 0.0
-    max_tokens: int = 4096
+    max_tokens: int | None = None
 
 
 @dataclass

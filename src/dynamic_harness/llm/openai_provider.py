@@ -35,15 +35,17 @@ class OpenAIProvider(LLMProvider):
 
     async def generate(self, system: str, user: str, config: LLMConfig | None = None) -> LLMResponse:
         cfg = config or LLMConfig(model=self.default_model)
-        resp = await self.client.chat.completions.create(
+        kwargs: dict = dict(
             model=cfg.model,
             temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
         )
+        if cfg.max_tokens is not None:
+            kwargs["max_tokens"] = cfg.max_tokens
+        resp = await self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         return LLMResponse(
             content=choice.message.content or "",
@@ -61,9 +63,10 @@ class OpenAIProvider(LLMProvider):
         kwargs: dict = dict(
             model=cfg.model,
             temperature=cfg.temperature,
-            max_tokens=cfg.max_tokens,
             messages=messages,
         )
+        if cfg.max_tokens is not None:
+            kwargs["max_tokens"] = cfg.max_tokens
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
@@ -97,17 +100,19 @@ class OpenAIProvider(LLMProvider):
         self, system: str, user: str, response_model: type, config: LLMConfig | None = None
     ) -> object:
         cfg = config or LLMConfig(model=self.default_model)
+        kwargs: dict = dict(
+            model=cfg.model,
+            temperature=cfg.temperature,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            response_format=response_model,
+        )
+        if cfg.max_tokens is not None:
+            kwargs["max_tokens"] = cfg.max_tokens
         try:
-            resp = await self.client.beta.chat.completions.parse(
-                model=cfg.model,
-                temperature=cfg.temperature,
-                max_tokens=cfg.max_tokens,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format=response_model,
-            )
+            resp = await self.client.beta.chat.completions.parse(**kwargs)
             return resp.choices[0].message.parsed
         except Exception:
             text = await self.generate(system, user, cfg)

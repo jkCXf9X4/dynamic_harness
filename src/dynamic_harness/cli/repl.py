@@ -35,11 +35,12 @@ class AgentCLI:
         self.runtime = runtime
         self._llm = llm
         self._events: list[str] = []
+        self._last_reports: list[tuple[str, str]] = []
 
     def _on_report(self, agent_id: str, payload: ReportPayload) -> None:
         tag = agent_id[:8]
-        summary = payload.summary[:200]
-        self._events.append(f"[bold green]✓[/] [dim]{tag}[/] report: {summary}")
+        self._events.append(f"[bold green]✓[/] [dim]{tag}[/] report done")
+        self._last_reports.append((tag, payload.summary))
 
     def _on_failure(self, agent_id: str, fail: ReportPayload) -> None:
         tag = agent_id[:8]
@@ -138,6 +139,10 @@ class AgentCLI:
             await root_task
             live.update(self._render())
 
+        for tag, summary in self._last_reports:
+            if summary:
+                self.console.print(Panel(summary, title=f"[bold green]Report from {tag}[/]", border_style="green"))
+        self._last_reports.clear()
         self.console.print(f"\n[bold green]Done.[/] {self.runtime.agent_count()} agents, {self.runtime.repository.count()} commits\n")
         self._print_summary()
 
