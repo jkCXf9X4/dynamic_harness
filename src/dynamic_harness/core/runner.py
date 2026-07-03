@@ -13,7 +13,7 @@ class AgentRunner:
 
     Spawns, runs, and tracks agents. Emits lifecycle events via callbacks
     so that any UI layer (TUI, CLI, test harness) can observe progress
-    without coupling to Rich, prompt_toolkit, or any particular presentation
+    without coupling to Rich, Textual, or any particular presentation
     library.
     """
 
