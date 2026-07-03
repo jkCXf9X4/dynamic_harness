@@ -80,7 +80,9 @@ class TUI:
         self._current_agent_task: asyncio.Task | None = None
         self._shutdown = asyncio.Event()
         self._output_lines: deque[tuple[str, str]] = deque(maxlen=500)
-        self._output_scroll: int = 0
+        self._follow_bottom: bool = True
+        self._scroll_offset: int = 0
+        self._output_window_height: int = 20
         self._root_agent: Agent | None = None
 
         self._app: Application[None] | None = None
@@ -138,12 +140,33 @@ class TUI:
 
     def _write_output(self, style_class: str, text: str) -> None:
         self._output_lines.append((style_class, text))
-        self._output_scroll = 0
+        self._update_window_height()
         self._invalidate_app()
 
     def _invalidate_app(self) -> None:
         if self._app:
             self._app.invalidate()
+
+    def _update_window_height(self) -> None:
+        wh = getattr(
+            getattr(self._output_window, 'render_info', None), 'window_height', None
+        )
+        if wh is not None and wh > 0:
+            self._output_window_height = wh
+
+    def _visible_lines(self) -> list[tuple[str, str]]:
+        lines = list(self._output_lines)
+        if not lines:
+            return lines
+        h = self._output_window_height
+        if self._follow_bottom:
+            return lines[-h:]
+        total = len(lines)
+        end = max(0, total - self._scroll_offset)
+        start = max(0, end - h)
+        if end <= start:
+            return lines[:h]
+        return lines[start:end]
 
     def _get_tree_fragments(self) -> list[tuple[str, str]]:
         result: list[tuple[str, str]] = [
@@ -213,14 +236,10 @@ class TUI:
         return result
 
     def _get_output_fragments(self) -> list[tuple[str, str]]:
-        lines = list(self._output_lines)
-        if self._output_scroll > 0:
-            lines = lines[:-self._output_scroll]
-        return lines
+        return self._visible_lines()
 
     def _on_input_accepted(self, buf: Any) -> bool:
         text = buf.text.strip()
-        buf.text = ""
         if not text:
             return False
         if text.lower() in ("exit", "quit"):
@@ -229,7 +248,7 @@ class TUI:
                 self._current_agent_task.cancel()
             if self._app:
                 self._app.exit()
-            return True
+            return False
 
         self._write_output("class:output-prompt", f">>> {text}\n")
 
@@ -237,7 +256,7 @@ class TUI:
             asyncio.create_task(self._run_in_background(self._handle_command(text)))
         else:
             asyncio.create_task(self._run_agent_async(text))
-        return True
+        return False
 
     async def _run_in_background(self, coro: Any) -> None:
         try:
@@ -251,14 +270,19 @@ class TUI:
             self._write_output("class:output-error", "Agent run cancelled.\n")
 
     def _handle_page_up(self, _event: object) -> None:
-        self._output_scroll = min(
-            self._output_scroll + 20,
-            max(0, len(self._output_lines) - 1),
+        self._follow_bottom = False
+        max_offset = max(0, len(self._output_lines) - self._output_window_height)
+        self._scroll_offset = min(
+            self._scroll_offset + self._output_window_height, max_offset
         )
         self._invalidate_app()
 
     def _handle_page_down(self, _event: object) -> None:
-        self._output_scroll = max(self._output_scroll - 20, 0)
+        if self._follow_bottom:
+            return
+        self._scroll_offset = max(0, self._scroll_offset - self._output_window_height)
+        if self._scroll_offset == 0:
+            self._follow_bottom = True
         self._invalidate_app()
 
     def _handle_exit(self, _event: object) -> None:
@@ -364,9 +388,8 @@ class TUI:
         else:
             self._write_output("class:output-error", f"Unknown command: {cmd}. Try /help\n")
 
-async def _run_agent_async(self, description: str) -> None:
+    async def _run_agent_async(self, description: str) -> None:
         agent_count_before = self.runtime.agent_count()
-        self._write_output("class:output-event", f">>> {description}\n")
 
         runner = AgentRunner(self.runtime)
         runner.connect()
@@ -407,6 +430,7 @@ async def _run_agent_async(self, description: str) -> None:
 
     async def _refresh_loop(self) -> None:
         while not self._shutdown.is_set():
+            self._update_window_height()
             if self._app:
                 self._app.invalidate()
             try:
