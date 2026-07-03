@@ -31,14 +31,16 @@ def build_runtime(
     if args.temp:
         artifact_root = Path(args.artifact_dir) if args.artifact_dir else Path(tempfile.mkdtemp())
         repo_root = Path(args.repo_dir) if args.repo_dir else Path(tempfile.mkdtemp())
+        trace_root = None
     else:
         base = workspace_dir()
         artifact_root = Path(args.artifact_dir) if args.artifact_dir else base / "artifacts"
         repo_root = Path(args.repo_dir) if args.repo_dir else base / "repo"
+        trace_root = base / "traces"
         base.mkdir(parents=True, exist_ok=True)
         artifact_root.mkdir(parents=True, exist_ok=True)
         repo_root.mkdir(parents=True, exist_ok=True)
-    rt = Runtime(artifact_root=artifact_root, repo_root=repo_root)
+    rt = Runtime(artifact_root=artifact_root, repo_root=repo_root, trace_root=trace_root)
 
     if register_handlers:
         if on_report:

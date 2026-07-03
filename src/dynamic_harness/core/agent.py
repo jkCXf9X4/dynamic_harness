@@ -102,12 +102,22 @@ class Agent:
                     message_count=len(messages),
                 )
 
+            ts = self._runtime.trace_store
+            if ts:
+                ts.record_llm_request(self.id, list(messages))
+
             if response.tool_calls:
                 assistant_msg: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
                 assistant_msg["tool_calls"] = []
                 results: list[dict[str, Any]] = []
 
+                tc_info = []
                 for tc in response.tool_calls:
+                    tc_info.append({
+                        "id": tc.id,
+                        "name": tc.name,
+                        "arguments": tc.arguments,
+                    })
                     assistant_msg["tool_calls"].append({
                         "id": tc.id,
                         "type": "function",
@@ -116,9 +126,18 @@ class Agent:
                             "arguments": json.dumps(tc.arguments),
                         },
                     })
+
+                if ts:
+                    ts.record_llm_response(self.id, response.content, response.model, response.usage, tc_info)
+
+                for tc in response.tool_calls:
+                    if ts:
+                        ts.record_tool_call(self.id, tc.id, tc.name, tc.arguments)
                     result = await self._runtime.tool_registry.execute(
                         tc.name, tc.id, agent=self, **tc.arguments
                     )
+                    if ts:
+                        ts.record_tool_result(self.id, tc.id, tc.name, result.content)
                     results.append({
                         "role": "tool",
                         "tool_call_id": result.tool_call_id,
@@ -130,6 +149,8 @@ class Agent:
                         messages.extend(results)
                         return
             else:
+                if ts:
+                    ts.record_llm_response(self.id, response.content, response.model, response.usage)
                 content = response.content or ""
                 self.report(ReportPayload(
                     task_id=self.task.id,

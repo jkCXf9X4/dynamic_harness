@@ -10,6 +10,7 @@ from ..memory.repository import Commit, Repository
 from .agent import Agent
 from .capabilities import ToolRegistry, register_default_tools
 from .task import BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
+from .trace import TraceStore
 
 if TYPE_CHECKING:
     from ..llm.provider import LLMProvider
@@ -20,10 +21,12 @@ class Runtime:
         self,
         artifact_root: Path,
         repo_root: Path,
+        trace_root: Path | None = None,
         generated_root: Path | None = None,
     ) -> None:
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
+        self.trace_store = TraceStore(trace_root) if trace_root else None
         if generated_root:
             generated_root.mkdir(parents=True, exist_ok=True)
         self._generated_root = generated_root
@@ -156,6 +159,8 @@ class Runtime:
         self._agent_usage.clear()
         self.repository.clear()
         self.artifact_store.clear()
+        if self.trace_store:
+            self.trace_store.clear()
         self._report_handlers.clear()
         self._budget_handlers.clear()
         self._escalation_handlers.clear()
