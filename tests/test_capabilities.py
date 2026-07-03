@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.capabilities import ToolDef, ToolRegistry
+from dynamic_harness.core.capabilities import TOOL_ASK_DEF, ToolDef, ToolRegistry
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task
 
@@ -86,3 +86,16 @@ async def test_edit_tool(runtime: Runtime, tmp_path: Path) -> None:
     result = await runtime.tool_registry.execute("edit", "tc1", agent=agent, path=fpath, old_string="bar", new_string="qux")
     assert "Replaced" in result.content
     assert (tmp_path / "edit.txt").read_text() == "foo qux baz"
+
+
+def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
+    tools = runtime.tool_registry.list_tools()
+    assert "ask" in tools
+    td, fn = runtime.tool_registry.get("ask")
+    assert td.name == "ask"
+    assert "question" in td.input_schema.get("properties", {})
+
+
+def test_default_tools_all_ten(runtime: Runtime) -> None:
+    expected = {"read", "write", "glob", "webfetch", "edit", "spawn", "report", "escalate", "fail", "ask"}
+    assert set(runtime.tool_registry.list_tools()) == expected

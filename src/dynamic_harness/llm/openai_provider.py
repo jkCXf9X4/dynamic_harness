@@ -6,8 +6,7 @@ import re
 import httpx
 from openai import AsyncOpenAI
 
-from ..core.capabilities import ToolCallData
-from .provider import LLMConfig, LLMProvider, LLMResponse, ToolCallResponse
+from .provider import LLMConfig, LLMProvider, LLMResponse, ToolCallData, ToolCallResponse
 
 
 def _extract_json(text: str) -> object:

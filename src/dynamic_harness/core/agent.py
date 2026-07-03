@@ -33,6 +33,8 @@ structured function calls in the format your LLM API supports.
 - **spawn(description)**: Create a sub-agent to handle a subtask. This is
   how you decompose complex work. The sub-agent runs autonomously and
   returns its results when done.
+- **ask(question)**: Ask the user a question and get their input. Use this
+  when you need clarification, confirmation, or additional information.
 - **report(summary, artifact_ids)**: Submit your final result and signal
   completion. Call this when your task is done.
 - **escalate(issue)**: Ask your parent agent for help with a problem.

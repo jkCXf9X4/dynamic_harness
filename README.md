@@ -46,6 +46,9 @@ src/dynamic_harness/
 │   ├── capabilities.py    # ToolDef, ToolCall, ToolRegistry, tool impls
 │   ├── runtime.py         # Runtime (orchestrator, task graph, tool registry)
 │   └── task.py            # Task, ReportPayload, Escalation, etc.
+├── cli/
+│   ├── repl.py            # AgentCLI — single-shot agent runner with Live TUI
+│   └── tui.py             # TUI — continuous REPL wrapping the runtime
 ├── artifact/
 │   ├── store.py           # ArtifactStore with progressive disclosure
 │   └── summary.py         # Hierarchical summarization
@@ -66,32 +69,58 @@ src/dynamic_harness/
 | `webfetch(url)` | Fetch content from a URL |
 | `edit(path, old_string, new_string)` | Find and replace text in a file |
 | `spawn(description)` | Create a sub-agent to handle a subtask |
+| `ask(question)` | Ask the user a question and wait for input |
 | `report(summary, artifact_ids)` | Report final results (completes the agent) |
 | `escalate(issue)` | Escalate to parent agent |
 | `fail(error)` | Report a failure |
 
-## Quick start
+## Usage
+
+### TUI mode (recommended)
+
+Run without arguments to enter the interactive REPL:
+
+```bash
+dynamic-harness
+```
+
+Type a task, see results, type another task — the runtime stays alive across turns.
+
+| Command | Description |
+|---|---|
+| `/help` | Show available commands |
+| `/history` | Show task history from this session |
+| `/tree` | Show the full agent task graph |
+| `/agents` | Show agent count, commits, tasks |
+| `/reset` | Clear agents and task graph |
+| `exit` / `quit` | Exit the TUI |
+
+### Single-shot mode
+
+Pass a task on the command line to run once and exit:
+
+```bash
+dynamic-harness "Find the 3 largest .py files"
+dynamic-harness --no-llm "test without AI"
+dynamic-harness --model gpt-4o --api-key sk-... "analyze this repo"
+```
+
+### Programmatic usage
 
 ```python
 import asyncio
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task
-from dynamic_harness.llm.openai_provider import OpenAIProvider
 
 runtime = Runtime(artifact_root=..., repo_root=...)
-runtime.set_llm(OpenAIProvider(model="gpt-4o"))
-
-async def main():
-    root = runtime.spawn_agent(Task(description="Find the 3 largest .py files"))
-    await root.run()
-    print(f"Spawned {runtime.agent_count()} agents")
-
-asyncio.run(main())
+root = runtime.spawn_agent(Task(description="Find the 3 largest .py files"))
+await root.run()
+print(f"Spawned {runtime.agent_count()} agents")
 ```
 
 ## Without an LLM
 
-If no LLM is set, the agent immediately reports the task description as its summary — useful for testing and non-AI workflows.
+Pass `--no-llm` to run without an AI model. The agent immediately reports the task description as its summary — useful for testing and non-AI workflows.
 
 ## Registering agent types
 

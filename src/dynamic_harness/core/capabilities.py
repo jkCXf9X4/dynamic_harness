@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json as _json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
@@ -185,6 +186,18 @@ TOOL_FAIL_DEF = ToolDef(
     },
 )
 
+TOOL_ASK_DEF = ToolDef(
+    name="ask",
+    description="Ask the user a question and get their response. Use when you need input, clarification, or confirmation.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "question": {"type": "string", "description": "The question to present to the user"},
+        },
+        "required": ["question"],
+    },
+)
+
 
 # ---------------------------------------------------------------------------
 # Tool implementations
@@ -248,6 +261,12 @@ async def _tool_fail(*, agent: Agent, error: str) -> str:
     return f"Failed: {error[:100]}"
 
 
+async def _tool_ask(*, agent: Agent, question: str) -> str:
+    loop = asyncio.get_event_loop()
+    answer = await loop.run_in_executor(None, lambda: input(f"\n[Agent asks] {question}\nYour response: "))
+    return answer.strip()
+
+
 def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_READ_DEF, _tool_read)
     registry.register(TOOL_WRITE_DEF, _tool_write)
@@ -258,3 +277,4 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_REPORT_DEF, _tool_report)
     registry.register(TOOL_ESCALATE_DEF, _tool_escalate)
     registry.register(TOOL_FAIL_DEF, _tool_fail)
+    registry.register(TOOL_ASK_DEF, _tool_ask)
