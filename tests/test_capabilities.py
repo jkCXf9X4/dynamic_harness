@@ -64,7 +64,8 @@ async def test_tool_registry_execute_failure(runtime: Runtime) -> None:
 async def test_spawn_tool_creates_and_runs_child(runtime: Runtime) -> None:
     agent = runtime.spawn_agent(Task(description="parent"))
     result = await runtime.tool_registry.execute("spawn", "tc1", agent=agent, description="child task")
-    assert "Spawned agent completed" in result.content
+    assert "Spawned agent" in result.content
+    assert "Status: completed" in result.content
     assert runtime.agent_count() == 2
 
 
@@ -96,6 +97,6 @@ def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
     assert "question" in td.input_schema.get("properties", {})
 
 
-def test_default_tools_all_fourteen(runtime: Runtime) -> None:
-    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "spawn", "report", "escalate", "fail", "ask", "compress", "converse"}
+def test_default_tools_all_fifteen(runtime: Runtime) -> None:
+    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "spawn", "report", "escalate", "fail", "ask", "compress", "converse", "read_artifact"}
     assert set(runtime.tool_registry.list_tools()) == expected

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from .agent import Agent
 
-from .task import ReportPayload, TaskStatus
+from .task import Failure, ReportPayload, TaskStatus
 
 
 ToolFunc = Callable[..., Awaitable[str]]
@@ -140,7 +140,9 @@ TOOL_EDIT_DEF = ToolDef(
 
 TOOL_SPAWN_DEF = ToolDef(
     name="spawn",
-    description="Spawn a sub-agent to handle a subtask, then return its results",
+    description="Spawn a sub-agent to handle a subtask autonomously. Returns the "
+                "child's status, ID, report summary, artifact IDs, and confidence "
+                "(if set). For failed children, returns the failure reason.",
     input_schema={
         "type": "object",
         "properties": {
@@ -152,7 +154,9 @@ TOOL_SPAWN_DEF = ToolDef(
 
 TOOL_REPORT_DEF = ToolDef(
     name="report",
-    description="Report final results to parent agent and complete this agent's work",
+    description="Report final results to parent agent and complete this agent's work. "
+                "Include a concrete summary of findings, artifact_ids referencing any "
+                "files written, and optionally a confidence score (0.0–1.0).",
     input_schema={
         "type": "object",
         "properties": {
@@ -161,6 +165,10 @@ TOOL_REPORT_DEF = ToolDef(
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Artifact IDs to attach",
+            },
+            "confidence": {
+                "type": "number",
+                "description": "Optional confidence score (0.0 = uncertain, 1.0 = certain)",
             },
         },
         "required": ["summary"],
@@ -260,6 +268,20 @@ TOOL_CONVERSE_DEF = ToolDef(
     },
 )
 
+TOOL_READ_ARTIFACT_DEF = ToolDef(
+    name="read_artifact",
+    description="Read an artifact by its ID. Artifacts are stored when agents call "
+                "report(). Use this to look up a child agent's report contents by its "
+                "artifact ID. Returns the artifact's headline and summary views.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "artifact_id": {"type": "string", "description": "The ID of the artifact to read"},
+        },
+        "required": ["artifact_id"],
+    },
+)
+
 
 # ---------------------------------------------------------------------------
 # Tool implementations
@@ -298,16 +320,45 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
 async def _tool_spawn(*, agent: Agent, description: str) -> str:
     child = agent.spawn(description)
     await child.run()
-    return f"Spawned agent completed. Status: {child.task.status.value}. ID: {child.id}"
+
+    status = child.task.status.value
+    lines = [f"Spawned agent {child.id}. Status: {status}"]
+
+    if child._last_report:
+        r = child._last_report
+        lines.append(f"Summary: {r.summary[:500]}")
+        if r.artifact_ids:
+            lines.append(f"Artifact IDs: {', '.join(r.artifact_ids)}")
+        if r.confidence is not None:
+            lines.append(f"Confidence: {r.confidence:.2f}")
+
+    if child._last_failure:
+        lines.append(f"Failure: {child._last_failure.error[:500]}")
+
+    return "\n".join(lines)
 
 
-async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None) -> str:
+async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, confidence: float | None = None) -> str:
     agent.report(ReportPayload(
         task_id=agent.task.id,
         summary=summary,
         artifact_ids=artifact_ids or [],
+        confidence=confidence,
     ))
     return f"Reported: {summary[:100]}"
+
+
+async def _tool_read_artifact(*, agent: Agent, artifact_id: str) -> str:
+    artifact = agent._runtime.artifact_store.get(artifact_id)
+    if not artifact:
+        return f"Error: no artifact found with ID '{artifact_id}'"
+    views = artifact.views
+    parts = []
+    for name in ("headline", "summary_200", "summary_1000", "technical", "full_report", "raw_data"):
+        v = getattr(views, name, None)
+        if v:
+            parts.append(f"[{name}] {v}")
+    return "\n".join(parts) if parts else f"Artifact {artifact_id} has no content."
 
 
 async def _tool_escalate(*, agent: Agent, issue: str) -> str:
@@ -435,3 +486,4 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_ASK_DEF, _tool_ask)
     registry.register(TOOL_COMPRESS_DEF, _tool_compress)
     registry.register(TOOL_CONVERSE_DEF, _tool_converse)
+    registry.register(TOOL_READ_ARTIFACT_DEF, _tool_read_artifact)
