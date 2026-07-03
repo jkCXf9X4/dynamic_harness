@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import glob as _glob
 import json as _json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
+import httpx as _httpx
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from .agent import Agent
+
+from .task import ReportPayload
 
 
 ToolFunc = Callable[..., Awaitable[str]]
@@ -213,13 +217,11 @@ async def _tool_write(*, agent: Agent, path: str, content: str) -> str:
 
 
 async def _tool_glob(*, agent: Agent, pattern: str) -> str:
-    import glob as _glob
     matches = _glob.glob(pattern, recursive=True)
     return _json.dumps(sorted(matches), indent=2)
 
 
 async def _tool_webfetch(*, agent: Agent, url: str) -> str:
-    import httpx as _httpx
     async with _httpx.AsyncClient() as client:
         resp = await client.get(url, timeout=30)
         resp.raise_for_status()
@@ -242,7 +244,6 @@ async def _tool_spawn(*, agent: Agent, description: str) -> str:
 
 
 async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None) -> str:
-    from .task import ReportPayload
     agent.report(ReportPayload(
         task_id=agent.task.id,
         summary=summary,

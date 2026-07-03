@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from abc import ABC
 from typing import TYPE_CHECKING, Any
 
 from .task import (
@@ -10,6 +9,7 @@ from .task import (
     Failure,
     ReportPayload,
     Task,
+    TaskStatus,
 )
 
 if TYPE_CHECKING:
@@ -58,7 +58,7 @@ structured function calls in the format your LLM API supports.
 """
 
 
-class Agent(ABC):
+class Agent:
     def __init__(self, agent_id: str, task: Task, runtime: Runtime, parent: Agent | None = None) -> None:
         self.id = agent_id
         self.task = task
@@ -115,8 +115,10 @@ class Agent(ABC):
                         "content": result.content,
                     })
 
-                messages.append(assistant_msg)
-                messages.extend(results)
+                    if self.task.status in (TaskStatus.completed, TaskStatus.failed, TaskStatus.escalated):
+                        messages.append(assistant_msg)
+                        messages.extend(results)
+                        return
             else:
                 content = response.content or ""
                 self.report(ReportPayload(

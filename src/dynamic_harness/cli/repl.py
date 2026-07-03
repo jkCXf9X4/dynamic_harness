@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -22,9 +19,10 @@ from ..core.capabilities import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from ..core.task import Task
 from ..llm.openai_provider import OpenAIProvider
+from .common import build_runtime
 
 if TYPE_CHECKING:
-    from ..core.task import ReportPayload
+    from ..core.task import Failure, ReportPayload
 
 
 class AgentCLI:
@@ -42,7 +40,7 @@ class AgentCLI:
         self._events.append(f"[bold green]✓[/] [dim]{tag}[/] report done")
         self._last_reports.append((tag, payload.summary))
 
-    def _on_failure(self, agent_id: str, fail: ReportPayload) -> None:
+    def _on_failure(self, agent_id: str, fail: Failure) -> None:
         tag = agent_id[:8]
         self._events.append(f"[bold red]✗[/] [dim]{tag}[/] fail: {fail.error}")
 
@@ -96,21 +94,7 @@ class AgentCLI:
         return layout
 
     def _build_runtime(self, args: argparse.Namespace) -> Runtime:
-        artifact_root = Path(args.artifact_dir) if args.artifact_dir else Path(tempfile.mkdtemp())
-        repo_root = Path(args.repo_dir) if args.repo_dir else Path(tempfile.mkdtemp())
-        rt = Runtime(artifact_root=artifact_root, repo_root=repo_root)
-        rt.on_report(self._on_report)
-        rt.on_failure(self._on_failure)
-
-        if not args.no_llm:
-            load_dotenv()
-            api_key = args.api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-            if api_key:
-                model = args.model or os.environ.get("LLM_MODEL", "deepseek/deepseek-v4-flash")
-                base_url = args.base_url or os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-                llm = OpenAIProvider(model=model, base_url=base_url, api_key=api_key, verify_ssl=False)
-                rt.set_llm(llm)
-        return rt
+        return build_runtime(args, on_report=self._on_report, on_failure=self._on_failure)
 
     def _install_ask_tool(self) -> None:
         async def _cli_ask(*, agent: Agent, question: str) -> str:
@@ -166,11 +150,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("task", nargs="*", default=[], help="Task description for the root agent")
     parser.add_argument("--no-llm", action="store_true", help="Run without an LLM (agent reports immediately)")
+    parser.add_argument("--temp", action="store_true", help="Use temporary directories (data lost between sessions)")
     parser.add_argument("--model", help="LLM model name (default: from LLM_MODEL env or deepseek/deepseek-v4-flash)")
     parser.add_argument("--base-url", help="LLM API base URL (default: from LLM_BASE_URL env or https://openrouter.ai/api/v1)")
     parser.add_argument("--api-key", help="LLM API key (default: from OPENROUTER_API_KEY or OPENAI_API_KEY env)")
-    parser.add_argument("--artifact-dir", help="Directory for artifacts (default: temp dir)")
-    parser.add_argument("--repo-dir", help="Directory for commit repository (default: temp dir)")
+    parser.add_argument("--artifact-dir", help="Directory for artifacts (default: ~/.dynamic-harness/artifacts)")
+    parser.add_argument("--repo-dir", help="Directory for commit repository (default: ~/.dynamic-harness/repo)")
     parsed = parser.parse_args(argv)
     if not parsed.task:
         parsed.task = ["Explore", "the", "current", "directory", "structure", "and", "report", "what", "you", "find"]

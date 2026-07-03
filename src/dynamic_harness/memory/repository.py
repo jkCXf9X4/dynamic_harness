@@ -17,7 +17,6 @@ class Commit(BaseModel):
     parent_ids: list[str] = Field(default_factory=list)
     child_ids: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    branch: str = "main"
 
 
 def _commit_path(root: Path, commit_id: str) -> Path:
@@ -59,9 +58,9 @@ class Repository:
     def get(self, commit_id: str) -> Commit | None:
         return self._commits.get(commit_id)
 
-    def log(self, branch: str = "main", limit: int = 50) -> Sequence[Commit]:
+    def log(self, limit: int = 50) -> Sequence[Commit]:
         sorted_commits = sorted(self._commits.values(), key=lambda c: c.timestamp, reverse=True)
-        return [c for c in sorted_commits if c.branch == branch][:limit]
+        return sorted_commits[:limit]
 
     def tree(self, root_id: str | None = None) -> dict[str, list[str]]:
         tree: dict[str, list[str]] = {}
@@ -82,3 +81,6 @@ class Repository:
 
     def count(self) -> int:
         return len(self._commits)
+
+    def clear(self) -> None:
+        self._commits.clear()

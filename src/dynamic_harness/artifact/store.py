@@ -71,3 +71,6 @@ class ArtifactStore:
 
     def get(self, artifact_id: str) -> Artifact | None:
         return self._artifacts.get(artifact_id)
+
+    def clear(self) -> None:
+        self._artifacts.clear()

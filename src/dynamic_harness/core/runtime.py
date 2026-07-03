@@ -133,3 +133,9 @@ class Runtime:
     def reset(self) -> None:
         self._agents.clear()
         self._task_graph.clear()
+        self.repository.clear()
+        self.artifact_store.clear()
+        self._report_handlers.clear()
+        self._budget_handlers.clear()
+        self._escalation_handlers.clear()
+        self._failure_handlers.clear()

@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotenv import load_dotenv
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
@@ -20,9 +18,10 @@ from ..core.capabilities import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from ..core.task import Task
 from ..llm.openai_provider import OpenAIProvider
+from .common import build_runtime
 
 if TYPE_CHECKING:
-    from ..core.task import ReportPayload
+    from ..core.task import Failure, ReportPayload
 
 
 COMMANDS = {
@@ -64,7 +63,7 @@ class TUI:
         self._events.append(f"[bold green]✓[/] [dim]{tag}[/] report done")
         self._last_reports.append((tag, payload.summary))
 
-    def _on_failure(self, agent_id: str, fail: ReportPayload) -> None:
+    def _on_failure(self, agent_id: str, fail: Failure) -> None:
         tag = agent_id[:8]
         self._events.append(f"[bold red]✗[/] [dim]{tag}[/] fail: {fail.error}")
 
@@ -276,19 +275,7 @@ class TUI:
 
 
 def _build_runtime(args: argparse.Namespace) -> Runtime:
-    artifact_root = Path(args.artifact_dir) if args.artifact_dir else Path(tempfile.mkdtemp())
-    repo_root = Path(args.repo_dir) if args.repo_dir else Path(tempfile.mkdtemp())
-    rt = Runtime(artifact_root=artifact_root, repo_root=repo_root)
-
-    if not args.no_llm:
-        load_dotenv()
-        api_key = args.api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            model = args.model or os.environ.get("LLM_MODEL", "deepseek/deepseek-v4-flash")
-            base_url = args.base_url or os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-            llm = OpenAIProvider(model=model, base_url=base_url, api_key=api_key, verify_ssl=False)
-            rt.set_llm(llm)
-    return rt
+    return build_runtime(args)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -298,6 +285,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("task", nargs="*", default=[], help="Run a single task and exit (omit for TUI mode)")
     parser.add_argument("--no-llm", action="store_true", help="Run without an LLM")
+    parser.add_argument("--temp", action="store_true", help="Use temporary directories (data lost between sessions)")
     parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--base-url", help="LLM API base URL")
     parser.add_argument("--api-key", help="LLM API key")
