@@ -20,8 +20,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
+from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
-from .agent_loop import AgentLoop, install_ask_tool
 from .common import build_runtime, workspace_dir
 
 
@@ -133,6 +133,9 @@ class TUI:
 
     def _write_output(self, style_class: str, text: str) -> None:
         self._output_lines.append((style_class, text))
+        self._invalidate_app()
+
+    def _invalidate_app(self) -> None:
         if self._app:
             self._app.invalidate()
 
@@ -340,26 +343,16 @@ class TUI:
         agent_count_before = self.runtime.agent_count()
         self._write_output("class:output-event", f"Running: {description}\n")
 
-        loop = AgentLoop(self.console, self.runtime)
-        loop.connect()
+        runner = AgentRunner(self.runtime)
+        runner.connect()
+
+        self.runtime.on_report(lambda aid, p: self._write_output("class:output-event", f"\u2713 {aid[:8]} report done\n"))
+        self.runtime.on_failure(lambda aid, f: self._write_output("class:output-error", f"\u2717 {aid[:8]} fail: {f.error}\n"))
 
         self._shutdown.clear()
 
-        def on_report(agent_id: str, payload: Any) -> None:
-            tag = agent_id[:8]
-            loop._on_report(agent_id, payload)
-            self._write_output("class:output-event", f"\u2713 {tag} report done\n")
-
-        def on_failure(agent_id: str, fail: Any) -> None:
-            tag = agent_id[:8]
-            loop._on_failure(agent_id, fail)
-            self._write_output("class:output-error", f"\u2717 {tag} fail: {fail.error}\n")
-
-        loop._on_report = on_report  # type: ignore[method-assign]
-        loop._on_failure = on_failure  # type: ignore[method-assign]
-
         loop_task = asyncio.create_task(
-            loop.run(description, shutdown_event=self._shutdown, live_display=False)
+            runner.run(description, shutdown_event=self._shutdown, on_update=self._invalidate_app)
         )
         self._current_agent_task = loop_task
         try:
@@ -371,7 +364,7 @@ class TUI:
         finally:
             self._current_agent_task = None
 
-        for tag, summary in loop.last_reports:
+        for tag, summary in runner.last_reports:
             if summary:
                 self.console.print(Panel(summary, title=f"[bold green]Report from {tag}[/]", border_style="green"))
         msg = f"\u2713 {self.runtime.repository.count()} commits, {self.runtime.agent_count()} agents"

@@ -12,9 +12,9 @@ from rich.text import Text
 from rich.tree import Tree
 
 from ..core.agent import Agent
+from ..core.runner import AgentRunner
 from ..core.capabilities import TOOL_ASK_DEF
 from ..core.runtime import Runtime
-from ..core.task import Task
 
 if TYPE_CHECKING:
     from ..core.task import Failure, ReportPayload
@@ -28,25 +28,12 @@ def install_ask_tool(console: Console, runtime: Runtime) -> None:
     runtime.tool_registry.register(TOOL_ASK_DEF, _ask)
 
 
-class AgentLoop:
+class AgentLoop(AgentRunner):
+    """Rich-rendering agent loop: a presentation layer over AgentRunner."""
+
     def __init__(self, console: Console, runtime: Runtime) -> None:
+        super().__init__(runtime)
         self.console = console
-        self.runtime = runtime
-        self.events: list[str] = []
-        self.last_reports: list[tuple[str, str]] = []
-
-    def connect(self) -> None:
-        self.runtime.on_report(self._on_report)
-        self.runtime.on_failure(self._on_failure)
-
-    def _on_report(self, agent_id: str, payload: ReportPayload) -> None:
-        tag = agent_id[:8]
-        self.events.append(f"[bold green]\u2713[/] [dim]{tag}[/] report done")
-        self.last_reports.append((tag, payload.summary))
-
-    def _on_failure(self, agent_id: str, fail: Failure) -> None:
-        tag = agent_id[:8]
-        self.events.append(f"[bold red]\u2717[/] [dim]{tag}[/] fail: {fail.error}")
 
     def _make_tree(self, task_description_limit: int = 50) -> Tree:
         tree = Tree(":robot: [bold]Agent Tree[/]")
@@ -110,28 +97,8 @@ class AgentLoop:
         return layout
 
     async def run(self, description: str, *, clear_events: bool = True, task_description_limit: int = 50, shutdown_event: asyncio.Event | None = None, live_display: bool = True) -> None:
-        if clear_events:
-            self.events.clear()
-
-        root = self.runtime.spawn_agent(Task(description=description))
-
         if live_display:
-            with Live(self._render(), refresh_per_second=4, console=self.console) as live:
-                await self._run_root(root, live, shutdown_event=shutdown_event)
+            with Live(self._render, refresh_per_second=4, console=self.console) as live:
+                await super().run(description, clear_events=clear_events, shutdown_event=shutdown_event, on_update=lambda: live.update(self._render()))
         else:
-            await self._run_root(root, None, shutdown_event=shutdown_event)
-
-    async def _run_root(self, root: Agent, live: Live | None, *, shutdown_event: asyncio.Event | None = None) -> None:
-        root_task = asyncio.create_task(root.run())
-
-        while not root_task.done():
-            if shutdown_event and shutdown_event.is_set():
-                root_task.cancel()
-                break
-            if live:
-                live.update(self._render())
-            await asyncio.sleep(0.25)
-
-        await root_task
-        if live:
-            live.update(self._render())
+            await super().run(description, clear_events=clear_events, shutdown_event=shutdown_event)
