@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from .task import (
@@ -61,12 +62,23 @@ structured function calls in the format your LLM API supports.
 
 
 class Agent:
-    def __init__(self, agent_id: str, task: Task, runtime: Runtime, parent: Agent | None = None) -> None:
+    def __init__(
+        self,
+        agent_id: str,
+        task: Task,
+        runtime: Runtime,
+        parent: Agent | None = None,
+        *,
+        max_iterations: int = 50,
+        repeated_call_limit: int = 3,
+    ) -> None:
         self.id = agent_id
         self.task = task
         self._runtime = runtime
         self.parent = parent
         self.children: list[Agent] = []
+        self.max_iterations = max_iterations
+        self.repeated_call_limit = repeated_call_limit
 
     @property
     def llm(self) -> LLMProvider | None:
@@ -91,7 +103,15 @@ class Agent:
             {"role": "user", "content": self.task.description},
         ]
 
+        iteration = 0
+        recent_batches: deque[list[tuple[str, frozenset[tuple[str, object]]]]] = deque(maxlen=self.repeated_call_limit)
+
         while True:
+            iteration += 1
+            if iteration > self.max_iterations:
+                self.fail(f"Exceeded maximum iterations ({self.max_iterations})")
+                return
+
             response = await llm.generate_with_tools(messages, tools)
 
             if response.usage:
@@ -148,6 +168,25 @@ class Agent:
                         messages.append(assistant_msg)
                         messages.extend(results)
                         return
+
+                messages.append(assistant_msg)
+                messages.extend(results)
+
+                batch_sig = tuple(
+                    (tc.name, frozenset(tc.arguments.items()))
+                    for tc in response.tool_calls
+                )
+                recent_batches.append(batch_sig)
+
+                if (
+                    len(recent_batches) == self.repeated_call_limit
+                    and all(sig == batch_sig for sig in recent_batches)
+                ):
+                    self.fail(
+                        f"Repeated identical tool calls {self.repeated_call_limit} times in a row "
+                        f"(tool: {response.tool_calls[0].name}). The agent is stuck in a loop."
+                    )
+                    return
             else:
                 if ts:
                     ts.record_llm_response(self.id, response.content, response.model, response.usage)
