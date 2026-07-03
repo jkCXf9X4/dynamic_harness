@@ -43,7 +43,6 @@ User: "Analyze /home/eriro/pwa for security issues"
 src/dynamic_harness/
 ├── core/
 │   ├── agent.py           # Agent base class + tool-calling run() loop
-│   ├── meta_agent.py      # MetaAgent subclass (specialized system prompt)
 │   ├── capabilities.py    # ToolDef, ToolCall, ToolRegistry, tool impls
 │   ├── runtime.py         # Runtime (orchestrator, task graph, tool registry)
 │   └── task.py            # Task, ReportPayload, Escalation, etc.

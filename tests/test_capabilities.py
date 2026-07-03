@@ -6,60 +6,15 @@ from pathlib import Path
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.capabilities import ToolCall, ToolDef, ToolRegistry, ToolResult
-from dynamic_harness.core.meta_agent import META_AGENT_PROMPT, MetaAgent
+from dynamic_harness.core.capabilities import ToolDef, ToolRegistry
 from dynamic_harness.core.runtime import Runtime
-from dynamic_harness.core.task import ReportPayload, Task
+from dynamic_harness.core.task import Task
 
 
 @pytest.fixture
 def runtime() -> Runtime:
     tmp = Path(tempfile.mkdtemp())
     return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
-
-
-@pytest.mark.asyncio
-async def test_meta_agent_runs_and_completes(runtime: Runtime) -> None:
-    root_task = Task(description="A meta agent task")
-    root = runtime.spawn_agent(root_task)
-    await root.run()
-
-    assert root.task.status.value == "completed"
-    assert runtime.agent_count() >= 1
-
-
-@pytest.mark.asyncio
-async def test_registered_agent_can_spawn_from_registry(runtime: Runtime) -> None:
-    class LeafAgent(Agent):
-        async def run(self) -> None:
-            self.report(ReportPayload(
-                task_id=self.task.id,
-                summary="Leaf complete",
-            ))
-
-    runtime.register_agent_class("LeafAgent", LeafAgent)
-
-    class RootAgent(Agent):
-        async def run(self) -> None:
-            child = self.spawn("Leaf task", agent_type="LeafAgent")
-            await child.run()
-            self.report(ReportPayload(
-                task_id=self.task.id,
-                summary="Root complete",
-            ))
-
-    runtime.register_agent_class("RootAgent", RootAgent)
-
-    root = runtime.spawn_agent(Task(description="Root"), agent_type="RootAgent")
-    await root.run()
-
-    assert root.task.status.value == "completed"
-
-
-@pytest.mark.asyncio
-async def test_meta_agent_has_custom_guidelines(runtime: Runtime) -> None:
-    meta = MetaAgent("test", Task(description="Test"), runtime)
-    assert "meta-agent" in meta.guidelines.lower() or "decompose" in meta.guidelines.lower()
 
 
 def test_tool_registry_register_and_list() -> None:
