@@ -40,7 +40,7 @@ async def test_runner_tracks_events_and_reports(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
     runner.connect()
     root = runtime.spawn_agent(Task(description="test"), agent_type="LeafAgent")
-    await runner._run_root(root)
+    await runner.run_root(root)
 
     assert any("report done" in e for e in runner.events)
     assert any("Leaf" in summary for _, summary in runner.last_reports)
@@ -56,7 +56,7 @@ async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
     runner.connect()
     root = runtime.spawn_agent(Task(description="fail"), agent_type="FailingAgent")
-    await runner._run_root(root)
+    await runner.run_root(root)
 
     assert any("fail: oops" in e for e in runner.events)
     assert root.task.status.value == "failed"
@@ -114,7 +114,7 @@ async def test_runner_shutdown_event_stops_execution(runtime: Runtime) -> None:
         shutdown.set()
 
     t1 = asyncio.ensure_future(trigger_shutdown())
-    t2 = asyncio.ensure_future(runner._run_root(root, shutdown_event=shutdown))
+    t2 = asyncio.ensure_future(runner.run_root(root, shutdown_event=shutdown))
     await asyncio.wait([t1, t2])
 
     assert root.task.status.value == "running"  # was cancelled mid-execution

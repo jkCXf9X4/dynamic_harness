@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.tree import Tree
 
+from ..core.agent import Agent
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
 from .common import build_runtime, workspace_dir
@@ -31,6 +32,7 @@ COMMANDS = {
     "/agents": "Show agent count and commit stats",
     "/reset": "Reset runtime (clear agents and task graph)",
     "/kill": "Kill the currently running agent immediately",
+    "/new": "Start a fresh conversation (new root agent, preserves history)",
     "exit": "Exit the TUI",
     "quit": "Exit the TUI",
 }
@@ -78,6 +80,8 @@ class TUI:
         self._current_agent_task: asyncio.Task | None = None
         self._shutdown = asyncio.Event()
         self._output_lines: deque[tuple[str, str]] = deque(maxlen=500)
+        self._output_scroll: int = 0
+        self._root_agent: Agent | None = None
 
         self._app: Application[None] | None = None
 
@@ -97,22 +101,22 @@ class TUI:
         self._tree_control = FormattedTextControl(self._get_tree_fragments)
         self._output_control = FormattedTextControl(self._get_output_fragments)
 
+        self._output_window = Window(
+            content=self._output_control,
+            wrap_lines=True,
+        )
         tree_window = Window(
             content=self._tree_control,
             width=44,
             style="class:sidebar",
             wrap_lines=False,
         )
-        output_window = Window(
-            content=self._output_control,
-            wrap_lines=True,
-        )
         input_window = self._input_area.window
 
         body = VSplit([
             tree_window,
             Window(width=1, char="│", style="class:divider"),
-            HSplit([output_window, input_window]),
+            HSplit([self._output_window, input_window]),
         ])
 
         self._layout = Layout(body, focused_element=self._input_area)
@@ -121,6 +125,8 @@ class TUI:
         kb.add("c-c")(self._handle_exit)
         kb.add("escape")(self._handle_sigint)
         kb.add("c-d")(self._handle_eof)
+        kb.add("pageup")(self._handle_page_up)
+        kb.add("pagedown")(self._handle_page_down)
 
         self._app = Application(
             layout=self._layout,
@@ -132,6 +138,7 @@ class TUI:
 
     def _write_output(self, style_class: str, text: str) -> None:
         self._output_lines.append((style_class, text))
+        self._output_scroll = 0
         self._invalidate_app()
 
     def _invalidate_app(self) -> None:
@@ -206,7 +213,10 @@ class TUI:
         return result
 
     def _get_output_fragments(self) -> list[tuple[str, str]]:
-        return list(self._output_lines)
+        lines = list(self._output_lines)
+        if self._output_scroll > 0:
+            lines = lines[:-self._output_scroll]
+        return lines
 
     def _on_input_accepted(self, buf: Any) -> bool:
         text = buf.text.strip()
@@ -239,6 +249,17 @@ class TUI:
         if self._current_agent_task and not self._current_agent_task.done():
             self._current_agent_task.cancel()
             self._write_output("class:output-error", "Agent run cancelled.\n")
+
+    def _handle_page_up(self, _event: object) -> None:
+        self._output_scroll = min(
+            self._output_scroll + 20,
+            max(0, len(self._output_lines) - 1),
+        )
+        self._invalidate_app()
+
+    def _handle_page_down(self, _event: object) -> None:
+        self._output_scroll = max(self._output_scroll - 20, 0)
+        self._invalidate_app()
 
     def _handle_exit(self, _event: object) -> None:
         if self._current_agent_task and not self._current_agent_task.done():
@@ -325,8 +346,13 @@ class TUI:
 
         elif cmd == "/reset":
             self.runtime.reset()
+            self._root_agent = None
             self._run_log.clear()
             self._write_output("class:output-label", "Runtime reset.\n")
+
+        elif cmd == "/new":
+            self._root_agent = None
+            self._write_output("class:output-label", "New conversation started.\n")
 
         elif cmd == "/kill":
             if self._current_agent_task and not self._current_agent_task.done():
@@ -338,9 +364,9 @@ class TUI:
         else:
             self._write_output("class:output-error", f"Unknown command: {cmd}. Try /help\n")
 
-    async def _run_agent_async(self, description: str) -> None:
+async def _run_agent_async(self, description: str) -> None:
         agent_count_before = self.runtime.agent_count()
-        self._write_output("class:output-event", f"Running: {description}\n")
+        self._write_output("class:output-event", f">>> {description}\n")
 
         runner = AgentRunner(self.runtime)
         runner.connect()
@@ -351,7 +377,7 @@ class TUI:
         self._shutdown.clear()
 
         loop_task = asyncio.create_task(
-            runner.run(description, shutdown_event=self._shutdown, on_update=self._invalidate_app)
+            runner.run(description, root_agent=self._root_agent, shutdown_event=self._shutdown, on_update=self._invalidate_app)
         )
         self._current_agent_task = loop_task
         try:
@@ -362,6 +388,13 @@ class TUI:
             self._write_output("class:output-error", f"Error: {e}\n")
         finally:
             self._current_agent_task = None
+            # Store the root agent for conversation continuation
+            if self._root_agent is None:
+                self._root_agent = self.runtime.get_agent(
+                    next(iter(self.runtime.task_graph()), "")
+                ) or self.runtime._agents.get(
+                    next(iter(self.runtime._agents), "")
+                )
 
         msg = f"\u2713 {self.runtime.repository.count()} commits, {self.runtime.agent_count()} agents"
         self._write_output("class:output-label", msg + "\n")

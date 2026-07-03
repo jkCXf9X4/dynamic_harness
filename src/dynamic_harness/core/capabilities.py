@@ -13,7 +13,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from .agent import Agent
 
-from .task import ReportPayload
+from .task import ReportPayload, TaskStatus
 
 
 ToolFunc = Callable[..., Awaitable[str]]
@@ -230,6 +230,36 @@ TOOL_ASK_DEF = ToolDef(
     },
 )
 
+TOOL_COMPRESS_DEF = ToolDef(
+    name="compress",
+    description="Compress this agent's conversation context by asking the LLM "
+                "to summarize all prior messages. The full history is replaced "
+                "by a single compressed summary, reducing token usage and "
+                "preventing context rot.",
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+)
+
+TOOL_CONVERSE_DEF = ToolDef(
+    name="converse",
+    description="Send a message to another agent (by ID) and wait for its "
+                "response. The target agent resumes with this new message "
+                "appended to its existing context. Use this to continue a "
+                "conversation with a child agent after it has reported, or "
+                "to delegate follow-up work without spawning a fresh agent.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "ID of the target agent (e.g. a child)"},
+            "message": {"type": "string", "description": "Message or instruction for the target agent"},
+        },
+        "required": ["agent_id", "message"],
+    },
+)
+
 
 # ---------------------------------------------------------------------------
 # Tool implementations
@@ -335,6 +365,61 @@ async def _tool_bash(*, agent: Agent, command: str, timeout: int = 30000) -> str
     return result.strip() or "(no output)"
 
 
+COMPRESSION_PROMPT = """\
+You are a context compression engine. Condense the following agent
+conversation into a single concise paragraph. Preserve:
+- The original task and goals
+- Key findings, decisions, and code changes
+- Open questions and unresolved issues
+- Current state and next steps
+
+Output ONLY the summary paragraph, no preamble."""
+
+
+async def _tool_compress(*, agent: Agent) -> str:
+    if not agent._messages or len(agent._messages) < 3:
+        return "Nothing to compress."
+    llm = agent._runtime._llm
+    if not llm:
+        return "No LLM available for compression."
+
+    compression_input = [
+        {"role": "system", "content": COMPRESSION_PROMPT},
+    ] + agent._messages[1:]
+
+    response = await llm.generate_with_tools(compression_input, tools=[])
+    summary = (response.content or "").strip()
+    if not summary:
+        return "Compression produced empty summary."
+
+    before = len(agent._messages)
+    agent._messages = [
+        agent._messages[0],
+        {"role": "system", "content": f"[Context compressed] {summary}"},
+    ]
+    after = len(agent._messages)
+    saved = before - after
+    return f"Compressed: {before} messages -> {after} messages ({saved} removed).\nSummary: {summary[:200]}..."
+
+
+async def _tool_converse(*, agent: Agent, agent_id: str, message: str) -> str:
+    target = agent._runtime._agents.get(agent_id)
+    if not target:
+        return f"Error: no agent found with ID {agent_id}"
+    if target.task.status not in (TaskStatus.completed, TaskStatus.running):
+        return f"Error: agent {agent_id} status is '{target.task.status.value}', cannot converse"
+
+    await target.continue_with_input(message)
+
+    summary = ""
+    for msg in reversed(target._messages or []):
+        if msg.get("role") == "assistant" and msg.get("content"):
+            summary = msg["content"][:500]
+            break
+    status = target.task.status.value
+    return f"[Agent {agent_id[:8]}] {summary}\n(Status: {status})"
+
+
 def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_READ_DEF, _tool_read)
     registry.register(TOOL_WRITE_DEF, _tool_write)
@@ -348,3 +433,5 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_ESCALATE_DEF, _tool_escalate)
     registry.register(TOOL_FAIL_DEF, _tool_fail)
     registry.register(TOOL_ASK_DEF, _tool_ask)
+    registry.register(TOOL_COMPRESS_DEF, _tool_compress)
+    registry.register(TOOL_CONVERSE_DEF, _tool_converse)

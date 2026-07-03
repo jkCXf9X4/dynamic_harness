@@ -42,14 +42,28 @@ class AgentRunner:
         clear_events: bool = True,
         shutdown_event: asyncio.Event | None = None,
         on_update: Callable[[], None] | None = None,
+        root_agent: Agent | None = None,
     ) -> None:
         if clear_events:
             self.events.clear()
 
-        root = self.runtime.spawn_agent(Task(description=description))
-        await self._run_root(root, shutdown_event=shutdown_event, on_update=on_update)
+        if root_agent is None:
+            root = self.runtime.spawn_agent(Task(description=description))
+            root_task = asyncio.create_task(root.run())
+        else:
+            root_task = asyncio.create_task(root_agent.continue_with_input(description))
 
-    async def _run_root(
+        while not root_task.done():
+            if shutdown_event and shutdown_event.is_set():
+                root_task.cancel()
+                break
+            if on_update:
+                on_update()
+            await asyncio.sleep(0.25)
+
+        await root_task
+
+    async def run_root(
         self,
         root: Agent,
         *,

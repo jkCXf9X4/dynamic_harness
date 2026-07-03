@@ -38,6 +38,14 @@ structured function calls in the format your LLM API supports.
   returns its results when done.
 - **ask(question)**: Ask the user a question and get their input. Use this
   when you need clarification, confirmation, or additional information.
+- **compress()**: Call the LLM to compress your full conversation history
+  into a concise summary, then replace your context with the summary.
+  Use this when your context feels heavy or you see many turns in the
+  Context Observation.
+- **converse(agent_id, message)**: Send a message to another agent by ID
+  and wait for its response. The target agent resumes with the new message
+  appended to its existing context. Use this to continue a conversation
+  with a child, delegate follow-up work, or ask a sibling for input.
 - **report(summary, artifact_ids)**: Submit your final result and signal
   completion. Call this when your task is done.
 - **escalate(issue)**: Ask your parent agent for help with a problem.
@@ -78,6 +86,10 @@ Use this to judge whether your context is still healthy:
   *Am I still making progress proportional to the growing cost?* If not,
   spawn sub-agents to offload remaining work into fresh contexts, or
   escalate if you have lost the thread.
+- Context growing large? Call **compress()** to summarize everything and
+  reset. The LLM will condense your full history into a single summary,
+  replacing all prior messages. This keeps your context lean without
+  losing the thread.
 - Repeated similar tool calls → your context may have degraded. Spawn a
   sub-agent with a clear description rather than grinding through more
   turns yourself.
@@ -110,6 +122,9 @@ class Agent:
         self.children: list[Agent] = []
         self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
+        self._messages: list[dict[str, Any]] | None = None
+        self._iteration: int = 0
+        self._recent_batches: deque[list[tuple[str, frozenset[tuple[str, object]]]]] | None = None
 
     @property
     def llm(self) -> LLMProvider | None:
@@ -128,20 +143,32 @@ class Agent:
             ))
             return
 
-        tools = self._runtime.tool_registry.openai_schemas()
-        messages: list[dict[str, Any]] = [
+        self._messages = [
             {"role": "system", "content": AGENT_SYSTEM_PROMPT},
             {"role": "user", "content": self.task.description},
         ]
+        self._iteration = 0
+        self._recent_batches = deque(maxlen=self.repeated_call_limit)
+        await self._run_loop()
 
-        iteration = 0
-        recent_batches: deque[
-            list[tuple[str, frozenset[tuple[str, object]]]]
-        ] = deque(maxlen=self.repeated_call_limit)
+    async def continue_with_input(self, user_message: str) -> None:
+        if self._messages is None:
+            self.task.description = user_message
+            await self.run()
+            return
+        self.task.status = TaskStatus.running
+        self._messages.append({"role": "user", "content": user_message})
+        await self._run_loop()
+
+    async def _run_loop(self) -> None:
+        assert self._messages is not None
+        llm = self.llm
+        assert llm is not None
+        tools = self._runtime.tool_registry.openai_schemas()
 
         while True:
-            iteration += 1
-            if iteration > self._safety_max_iterations:
+            self._iteration += 1
+            if self._iteration > self._safety_max_iterations:
                 self.fail(f"Safety limit reached ({self._safety_max_iterations} iterations)")
                 return
 
@@ -150,26 +177,26 @@ class Agent:
 
             context_obs = (
                 f"[Context Observation]\n"
-                f"Turn: {iteration}\n"
-                f"Messages in context: {len(messages)}\n"
+                f"Turn: {self._iteration}\n"
+                f"Messages in context: {len(self._messages)}\n"
                 f"Estimated prompt tokens this agent: {prompt_tokens}\n"
                 f"Your task: {self.task.description}\n"
             )
-            messages.append({"role": "system", "content": context_obs})
+            self._messages.append({"role": "system", "content": context_obs})
 
-            response = await llm.generate_with_tools(messages, tools)
+            response = await llm.generate_with_tools(self._messages, tools)
 
             if response.usage:
                 self._runtime.record_usage(
                     self.id,
                     prompt_tokens=response.usage.get("prompt_tokens", 0),
                     completion_tokens=response.usage.get("completion_tokens", 0),
-                    message_count=len(messages),
+                    message_count=len(self._messages),
                 )
 
             ts = self._runtime.trace_store
             if ts:
-                ts.record_llm_request(self.id, list(messages))
+                ts.record_llm_request(self.id, list(self._messages))
 
             if response.tool_calls:
                 assistant_msg: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
@@ -210,22 +237,23 @@ class Agent:
                     })
 
                     if self.task.status in (TaskStatus.completed, TaskStatus.failed, TaskStatus.escalated):
-                        messages.append(assistant_msg)
-                        messages.extend(results)
+                        self._messages.append(assistant_msg)
+                        self._messages.extend(results)
                         return
 
-                messages.append(assistant_msg)
-                messages.extend(results)
+                self._messages.append(assistant_msg)
+                self._messages.extend(results)
 
                 batch_sig = tuple(
                     (tc.name, frozenset(tc.arguments.items()))
                     for tc in response.tool_calls
                 )
-                recent_batches.append(batch_sig)
+                assert self._recent_batches is not None
+                self._recent_batches.append(batch_sig)
 
                 if (
-                    len(recent_batches) == self.repeated_call_limit
-                    and all(sig == batch_sig for sig in recent_batches)
+                    len(self._recent_batches) == self.repeated_call_limit
+                    and all(sig == batch_sig for sig in self._recent_batches)
                 ):
                     self.fail(
                         f"Repeated identical tool calls {self.repeated_call_limit} times in a row "
