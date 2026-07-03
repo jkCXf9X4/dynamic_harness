@@ -28,6 +28,8 @@ structured function calls in the format your LLM API supports.
 - **read(path)**: Read a file from disk
 - **write(path, content)**: Write content to a file
 - **glob(pattern)**: List files matching a pattern (e.g. **/*.py)
+- **grep(pattern, include, path)**: Search file contents using a regex pattern
+- **bash(command, timeout)**: Execute a shell command and return its output
 - **webfetch(url)**: Fetch content from a URL
 - **edit(path, old_string, new_string)**: Find and replace text in a file
 - **spawn(description)**: Create a sub-agent to handle a subtask. This is
@@ -44,7 +46,7 @@ structured function calls in the format your LLM API supports.
 
 1. Analyze your task description carefully.
 2. If the task is complex, break it down by spawning sub-agents.
-3. Use read/write/glob/webfetch/edit to gather information and produce output.
+3. Use read/write/glob/grep/bash/webfetch/edit to gather information and produce output.
 4. When your task is complete, call report() with a summary of findings.
 5. If you encounter a problem you cannot solve, escalate() to your parent.
 
@@ -91,6 +93,14 @@ class Agent:
 
         while True:
             response = await llm.generate_with_tools(messages, tools)
+
+            if response.usage:
+                self._runtime.record_usage(
+                    self.id,
+                    prompt_tokens=response.usage.get("prompt_tokens", 0),
+                    completion_tokens=response.usage.get("completion_tokens", 0),
+                    message_count=len(messages),
+                )
 
             if response.tool_calls:
                 assistant_msg: dict[str, Any] = {"role": "assistant", "content": response.content or ""}

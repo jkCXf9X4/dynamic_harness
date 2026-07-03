@@ -1,14 +1,24 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from dotenv import load_dotenv
 
 from ..core.runtime import Runtime
 from ..llm.openai_provider import OpenAIProvider
+
+
+@functools.lru_cache(maxsize=1)
+def workspace_dir() -> Path:
+    ts = datetime.now().strftime("%y%m%d_%H%M%S")
+    tmp_id = uuid4().hex[:4]
+    return Path.cwd() / ".dynamic-harness" / f"{ts}_{tmp_id}"
 
 
 def build_runtime(
@@ -22,9 +32,10 @@ def build_runtime(
         artifact_root = Path(args.artifact_dir) if args.artifact_dir else Path(tempfile.mkdtemp())
         repo_root = Path(args.repo_dir) if args.repo_dir else Path(tempfile.mkdtemp())
     else:
-        base = Path.home() / ".dynamic-harness"
+        base = workspace_dir()
         artifact_root = Path(args.artifact_dir) if args.artifact_dir else base / "artifacts"
         repo_root = Path(args.repo_dir) if args.repo_dir else base / "repo"
+        base.mkdir(parents=True, exist_ok=True)
         artifact_root.mkdir(parents=True, exist_ok=True)
         repo_root.mkdir(parents=True, exist_ok=True)
     rt = Runtime(artifact_root=artifact_root, repo_root=repo_root)

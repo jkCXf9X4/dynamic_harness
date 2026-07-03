@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import glob as _glob
 import json as _json
+import re as _re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
@@ -190,6 +191,33 @@ TOOL_FAIL_DEF = ToolDef(
     },
 )
 
+TOOL_GREP_DEF = ToolDef(
+    name="grep",
+    description="Search file contents using a regular expression pattern. Returns matching file paths and line numbers.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Regex pattern to search for"},
+            "include": {"type": "string", "description": "Glob pattern to filter files (e.g. *.py)"},
+            "path": {"type": "string", "description": "Directory to search in (default: current)"},
+        },
+        "required": ["pattern"],
+    },
+)
+
+TOOL_BASH_DEF = ToolDef(
+    name="bash",
+    description="Execute a shell command and return its output. Use for building, running tests, git operations, or any CLI task.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "command": {"type": "string", "description": "Shell command to execute"},
+            "timeout": {"type": "integer", "description": "Timeout in milliseconds (default 30000)"},
+        },
+        "required": ["command"],
+    },
+)
+
 TOOL_ASK_DEF = ToolDef(
     name="ask",
     description="Ask the user a question and get their response. Use when you need input, clarification, or confirmation.",
@@ -268,10 +296,51 @@ async def _tool_ask(*, agent: Agent, question: str) -> str:
     return answer.strip()
 
 
+async def _tool_grep(*, agent: Agent, pattern: str, include: str | None = None, path: str | None = None) -> str:
+    search_path = Path(path or ".")
+    if not search_path.is_dir():
+        return f"Error: {search_path} is not a directory"
+    matches: list[str] = []
+    for f in search_path.rglob(include or "*"):
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+            for i, line in enumerate(text.splitlines(), 1):
+                if _re.search(pattern, line):
+                    matches.append(f"{f}:{i}: {line.rstrip()[:200]}")
+        except Exception:
+            pass
+    if not matches:
+        return "No matches found"
+    return _json.dumps(matches[:200], indent=2) + (f"\n... ({len(matches) - 200} more)" if len(matches) > 200 else "")
+
+
+async def _tool_bash(*, agent: Agent, command: str, timeout: int = 30000) -> str:
+    proc = await asyncio.create_subprocess_shell(
+        command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
+    except TimeoutError:
+        proc.kill()
+        return f"Error: command timed out after {timeout}ms"
+    result = ""
+    if stdout:
+        result += stdout.decode(errors="replace")
+    if stderr:
+        result += f"\n(STDERR)\n{stderr.decode(errors='replace')}"
+    return result.strip() or "(no output)"
+
+
 def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_READ_DEF, _tool_read)
     registry.register(TOOL_WRITE_DEF, _tool_write)
     registry.register(TOOL_GLOB_DEF, _tool_glob)
+    registry.register(TOOL_GREP_DEF, _tool_grep)
+    registry.register(TOOL_BASH_DEF, _tool_bash)
     registry.register(TOOL_WEBFETCH_DEF, _tool_webfetch)
     registry.register(TOOL_EDIT_DEF, _tool_edit)
     registry.register(TOOL_SPAWN_DEF, _tool_spawn)

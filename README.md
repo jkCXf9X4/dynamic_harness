@@ -7,7 +7,7 @@ Based on the architectural principles from [starting_point.md](starting_point.md
 - **Agent hierarchy** (actor model) — agents know only parent, children, and task; no sibling/global visibility
 - **Artifact-based communication** — agents produce disk artifacts + short summaries; raw context is never forwarded
 - **Progressive disclosure** — each artifact has multiple views (headline → summary → full report)
-- **Tool-calling loop** — agents read, write, glob, webfetch, edit, spawn subagents, report, escalate, and fail via structured tool calls
+- **Tool-calling loop** — agents read, write, glob, grep, bash, webfetch, edit, spawn subagents, report, escalate, and fail via structured tool calls
 - **Spawning = decomposition** — `spawn()` creates a sub-agent that runs the same tool loop with a focused task
 - **Disposable workers** — state lives in artifacts, not agent memory
 - **Git-like provenance** — every completed task creates a commit with summary, artifact refs, parent/child links
@@ -17,7 +17,7 @@ Based on the architectural principles from [starting_point.md](starting_point.md
 
 There is **one agent loop** that every agent uses:
 
-1. Receive a task description + a set of available tools (read, write, glob, webfetch, edit, spawn, report, escalate, fail)
+1. Receive a task description + a set of available tools (read, write, glob, grep, bash, webfetch, edit, spawn, report, escalate, fail)
 2. The LLM decides whether to call a tool or return a final answer
 3. Tool results are fed back into the conversation
 4. When the agent calls `report()`, its work is committed and the result flows to the parent
@@ -62,10 +62,12 @@ src/dynamic_harness/
 ## Available tools
 
 | Tool | Description |
-|---|---|
+|---|---|---|
 | `read(path)` | Read a file from disk |
 | `write(path, content)` | Write content to a file |
 | `glob(pattern)` | List files matching a glob pattern |
+| `grep(pattern, include, path)` | Search file contents using a regex pattern |
+| `bash(command, timeout)` | Execute a shell command and return its output |
 | `webfetch(url)` | Fetch content from a URL |
 | `edit(path, old_string, new_string)` | Find and replace text in a file |
 | `spawn(description)` | Create a sub-agent to handle a subtask |

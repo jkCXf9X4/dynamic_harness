@@ -30,6 +30,7 @@ class Runtime:
         self._agents: dict[str, Agent] = {}
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
+        self._agent_usage: dict[str, dict] = {}
         self._llm: LLMProvider | None = None
 
         self._report_handlers: list[Callable[[str, ReportPayload], None]] = []
@@ -130,9 +131,29 @@ class Runtime:
     def agent_count(self) -> int:
         return len(self._agents)
 
+    def record_usage(self, agent_id: str, *, prompt_tokens: int = 0, completion_tokens: int = 0, message_count: int = 0) -> None:
+        prev = self._agent_usage.get(agent_id, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "message_count": 0})
+        prev["prompt_tokens"] += prompt_tokens
+        prev["completion_tokens"] += completion_tokens
+        prev["total_tokens"] += prompt_tokens + completion_tokens
+        prev["message_count"] = message_count
+        self._agent_usage[agent_id] = prev
+
+    def get_usage(self, agent_id: str) -> dict:
+        return self._agent_usage.get(agent_id, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "message_count": 0})
+
+    def total_usage(self) -> dict:
+        total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        for u in self._agent_usage.values():
+            total["prompt_tokens"] += u.get("prompt_tokens", 0)
+            total["completion_tokens"] += u.get("completion_tokens", 0)
+            total["total_tokens"] += u.get("total_tokens", 0)
+        return total
+
     def reset(self) -> None:
         self._agents.clear()
         self._task_graph.clear()
+        self._agent_usage.clear()
         self.repository.clear()
         self.artifact_store.clear()
         self._report_handlers.clear()

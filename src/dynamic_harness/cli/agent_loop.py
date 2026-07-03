@@ -53,6 +53,14 @@ class AgentLoop:
         g = self.runtime.task_graph()
         agents = self.runtime._agents
 
+        def usage_label(agent_id: str) -> str:
+            u = self.runtime.get_usage(agent_id)
+            t = u.get("total_tokens", 0)
+            m = u.get("message_count", 0)
+            if t or m:
+                return f" [dim]({t}t, {m}msgs)[/]"
+            return ""
+
         def add_node(parent_id: str, parent_node: Tree) -> None:
             for child_id in g.get(parent_id, []):
                 agent = agents.get(child_id)
@@ -60,6 +68,7 @@ class AgentLoop:
                 if agent:
                     label += f" \u2014 {agent.task.description[:task_description_limit]}"
                     label += f"  [{agent.task.status.value}]"
+                    label += usage_label(child_id)
                 child_node = parent_node.add(label)
                 add_node(child_id, child_node)
 
@@ -69,6 +78,7 @@ class AgentLoop:
                 label = f"[bold]{aid[:8]}[/]"
                 label += f" \u2014 {agent.task.description[:task_description_limit]}"
                 label += f"  [{agent.task.status.value}]"
+                label += usage_label(aid)
                 node = tree.add(label)
                 add_node(aid, node)
 
@@ -77,8 +87,10 @@ class AgentLoop:
     def _make_status(self) -> Table:
         table = Table.grid(padding=(0, 1))
         table.add_column()
+        usage = self.runtime.total_usage()
         table.add_row(f"Agents: [bold]{self.runtime.agent_count()}[/]")
         table.add_row(f"Commits: [bold]{self.runtime.repository.count()}[/]")
+        table.add_row(f"Tokens: [bold]{usage['total_tokens']}[/]")
         return table
 
     def _make_events(self) -> Panel:
@@ -97,18 +109,29 @@ class AgentLoop:
         layout.add_row(self._make_events())
         return layout
 
-    async def run(self, description: str, *, clear_events: bool = True, task_description_limit: int = 50) -> None:
+    async def run(self, description: str, *, clear_events: bool = True, task_description_limit: int = 50, shutdown_event: asyncio.Event | None = None, live_display: bool = True) -> None:
         if clear_events:
             self.events.clear()
 
         root = self.runtime.spawn_agent(Task(description=description))
 
-        with Live(self._render(), refresh_per_second=4, console=self.console) as live:
-            root_task = asyncio.create_task(root.run())
+        if live_display:
+            with Live(self._render(), refresh_per_second=4, console=self.console) as live:
+                await self._run_root(root, live, shutdown_event=shutdown_event)
+        else:
+            await self._run_root(root, None, shutdown_event=shutdown_event)
 
-            while not root_task.done():
+    async def _run_root(self, root: Agent, live: Live | None, *, shutdown_event: asyncio.Event | None = None) -> None:
+        root_task = asyncio.create_task(root.run())
+
+        while not root_task.done():
+            if shutdown_event and shutdown_event.is_set():
+                root_task.cancel()
+                break
+            if live:
                 live.update(self._render())
-                await asyncio.sleep(0.25)
+            await asyncio.sleep(0.25)
 
-            await root_task
+        await root_task
+        if live:
             live.update(self._render())
