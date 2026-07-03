@@ -45,11 +45,42 @@ structured function calls in the format your LLM API supports.
 
 ## How to work
 
-1. Analyze your task description carefully.
-2. If the task is complex, break it down by spawning sub-agents.
-3. Use read/write/glob/grep/bash/webfetch/edit to gather information and produce output.
-4. When your task is complete, call report() with a summary of findings.
-5. If you encounter a problem you cannot solve, escalate() to your parent.
+1. **Analyze your task.** Identify separable sub-tasks immediately.
+2. **Delegate aggressively.** If a sub-task requires more than one tool
+   call, spawn a sub-agent. Spawn multiple sub-agents in parallel so they
+   explore independently. Each extra turn you take yourself adds more
+   context history, which costs money and — more importantly — dilutes
+   your focus. Over many turns, earlier context grows stale and you lose
+   sight of your original purpose.
+3. **Keep your own context shallow.** Your role is to decompose, delegate,
+   and synthesize. If you read more than 1-2 files directly, you have
+   already accumulated too much noise. The sub-agents you spawn start
+   fresh — they see only their own focused task, not the baggage of your
+   earlier turns. Use summaries and artifacts, not raw source, to
+   understand what they found.
+4. **Each sub-agent writes its findings to disk and reports a short
+   summary.** Read those summaries and artifacts rather than re-reading
+   the source the sub-agent already processed.
+5. When your task is complete, call report() with a summary of findings.
+6. If you encounter a problem you cannot solve, escalate() to your parent.
+
+## Context awareness
+
+Before each turn you will receive a **Context Observation** showing:
+- **Turn** — how many LLM calls you have made so far
+- **Messages** — total messages in your context window
+- **Estimated tokens** — approximate prompt tokens consumed
+- **Task** — your original task description
+
+Use this to judge whether your context is still healthy:
+- Low turns, few messages → you are still focused, keep going or delegate
+- Many turns, growing messages → your context is accumulating. Ask yourself:
+  *Am I still making progress proportional to the growing cost?* If not,
+  spawn sub-agents to offload remaining work into fresh contexts, or
+  escalate if you have lost the thread.
+- Repeated similar tool calls → your context may have degraded. Spawn a
+  sub-agent with a clear description rather than grinding through more
+  turns yourself.
 
 ## Rules
 
@@ -69,15 +100,15 @@ class Agent:
         runtime: Runtime,
         parent: Agent | None = None,
         *,
-        max_iterations: int = 50,
-        repeated_call_limit: int = 3,
+        safety_max_iterations: int = 500,
+        repeated_call_limit: int = 5,
     ) -> None:
         self.id = agent_id
         self.task = task
         self._runtime = runtime
         self.parent = parent
         self.children: list[Agent] = []
-        self.max_iterations = max_iterations
+        self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
 
     @property
@@ -104,13 +135,27 @@ class Agent:
         ]
 
         iteration = 0
-        recent_batches: deque[list[tuple[str, frozenset[tuple[str, object]]]]] = deque(maxlen=self.repeated_call_limit)
+        recent_batches: deque[
+            list[tuple[str, frozenset[tuple[str, object]]]]
+        ] = deque(maxlen=self.repeated_call_limit)
 
         while True:
             iteration += 1
-            if iteration > self.max_iterations:
-                self.fail(f"Exceeded maximum iterations ({self.max_iterations})")
+            if iteration > self._safety_max_iterations:
+                self.fail(f"Safety limit reached ({self._safety_max_iterations} iterations)")
                 return
+
+            usage = self._runtime._agent_usage.get(self.id, {})
+            prompt_tokens = usage.get("prompt_tokens", 0)
+
+            context_obs = (
+                f"[Context Observation]\n"
+                f"Turn: {iteration}\n"
+                f"Messages in context: {len(messages)}\n"
+                f"Estimated prompt tokens this agent: {prompt_tokens}\n"
+                f"Your task: {self.task.description}\n"
+            )
+            messages.append({"role": "system", "content": context_obs})
 
             response = await llm.generate_with_tools(messages, tools)
 
@@ -184,7 +229,7 @@ class Agent:
                 ):
                     self.fail(
                         f"Repeated identical tool calls {self.repeated_call_limit} times in a row "
-                        f"(tool: {response.tool_calls[0].name}). The agent is stuck in a loop."
+                        f"(tool: {response.tool_calls[0].name}). The provider may be stuck."
                     )
                     return
             else:

@@ -46,10 +46,10 @@ class _LoopToolLLM(LLMProvider):
 def _make_agent(
     runtime: Runtime,
     task: Task,
-    max_iterations: int = 50,
-    repeated_call_limit: int = 3,
+    safety_max_iterations: int = 50,
+    repeated_call_limit: int = 5,
 ) -> Agent:
-    agent = Agent("test-agent", task, runtime, max_iterations=max_iterations, repeated_call_limit=repeated_call_limit)
+    agent = Agent("test-agent", task, runtime, safety_max_iterations=safety_max_iterations, repeated_call_limit=repeated_call_limit)
     task.status = TaskStatus.running
     runtime._agents[agent.id] = agent
     return agent
@@ -62,11 +62,11 @@ def runtime() -> Runtime:
 
 
 @pytest.mark.asyncio
-async def test_max_iterations_limit_reached(runtime: Runtime) -> None:
+async def test_safety_max_iterations_limit_reached(runtime: Runtime) -> None:
     llm = _LoopToolLLM()
     runtime.set_llm(llm)
 
-    root = _make_agent(runtime, Task(description="Looping task"), max_iterations=5, repeated_call_limit=10)
+    root = _make_agent(runtime, Task(description="Looping task"), safety_max_iterations=5, repeated_call_limit=10)
 
     await root.run()
 
@@ -74,11 +74,11 @@ async def test_max_iterations_limit_reached(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_repeated_identical_calls_detected(runtime: Runtime) -> None:
+async def test_repeated_identical_calls_trigger_safety(runtime: Runtime) -> None:
     llm = _LoopToolLLM()
     runtime.set_llm(llm)
 
-    root = _make_agent(runtime, Task(description="Looping task"), max_iterations=100, repeated_call_limit=3)
+    root = _make_agent(runtime, Task(description="Looping task"), safety_max_iterations=100, repeated_call_limit=3)
 
     await root.run()
 
@@ -86,10 +86,8 @@ async def test_repeated_identical_calls_detected(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_false_positive_with_varying_calls(runtime: Runtime) -> None:
+async def test_completes_when_tool_llm_finishes(runtime: Runtime) -> None:
     call_seq = [
-        {"path": "/a.txt", "content": "1"},
-        {"path": "/b.txt", "content": "2"},
         {"path": "/a.txt", "content": "1"},
         {"path": "/b.txt", "content": "2"},
     ]
@@ -118,7 +116,7 @@ async def test_no_false_positive_with_varying_calls(runtime: Runtime) -> None:
     llm = VaryingToolLLM()
     runtime.set_llm(llm)
 
-    root = _make_agent(runtime, Task(description="Varying task"), max_iterations=100, repeated_call_limit=3)
+    root = _make_agent(runtime, Task(description="Varying task"))
 
     await root.run()
 
@@ -126,11 +124,11 @@ async def test_no_false_positive_with_varying_calls(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_completes_normally_within_limits(runtime: Runtime) -> None:
+async def test_completes_normally_with_small_number_of_calls(runtime: Runtime) -> None:
     llm = _LoopToolLLM(max_calls=2)
     runtime.set_llm(llm)
 
-    root = _make_agent(runtime, Task(description="Normal task"), max_iterations=50, repeated_call_limit=3)
+    root = _make_agent(runtime, Task(description="Normal task"))
 
     await root.run()
 

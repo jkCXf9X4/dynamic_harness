@@ -16,7 +16,6 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
@@ -346,7 +345,7 @@ class TUI:
         runner = AgentRunner(self.runtime)
         runner.connect()
 
-        self.runtime.on_report(lambda aid, p: self._write_output("class:output-event", f"\u2713 {aid[:8]} report done\n"))
+        self.runtime.on_report(lambda aid, p: self._write_output("class:output-event", f"\u2713 {aid[:8]} report done\n\n{p.summary}\n\n"))
         self.runtime.on_failure(lambda aid, f: self._write_output("class:output-error", f"\u2717 {aid[:8]} fail: {f.error}\n"))
 
         self._shutdown.clear()
@@ -364,9 +363,6 @@ class TUI:
         finally:
             self._current_agent_task = None
 
-        for tag, summary in runner.last_reports:
-            if summary:
-                self.console.print(Panel(summary, title=f"[bold green]Report from {tag}[/]", border_style="green"))
         msg = f"\u2713 {self.runtime.repository.count()} commits, {self.runtime.agent_count()} agents"
         self._write_output("class:output-label", msg + "\n")
 
