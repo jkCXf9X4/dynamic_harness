@@ -7,12 +7,21 @@ Evaluate if compact returns the summation and then can the agent choose with ano
 ---
 
 Ensure role of top level orchestrator for higher quallity
+- The next one helps with this!
 
 ---
 
 Enable overwriting system prompt for setting specialized context if needed
 -> enable specifying a smaller context for leaf nodes with special tools and directions
+->all orchestration should have one default prompt
+-> soecialization should be set from parent
+
+-> this means that the orchestrator do not need to have branching in the prompt, only limit the contect for children
+
+
+
 -> nessesary for the task below
+
 
 ---
 
