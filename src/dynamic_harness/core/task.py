@@ -19,6 +19,7 @@ class TaskStatus(str, Enum):
 class Task(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex[:12])
     description: str
+    role: str | None = None
     parent_id: str | None = None
     status: TaskStatus = TaskStatus.pending
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

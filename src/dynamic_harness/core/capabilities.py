@@ -147,6 +147,7 @@ TOOL_SPAWN_DEF = ToolDef(
         "type": "object",
         "properties": {
             "description": {"type": "string", "description": "Description of subtask for the sub-agent"},
+            "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.')"},
         },
         "required": ["description"],
     },
@@ -340,8 +341,8 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
     return f"Replaced in {path}"
 
 
-async def _tool_spawn(*, agent: Agent, description: str) -> str:
-    child = agent.spawn(description)
+async def _tool_spawn(*, agent: Agent, description: str, role: str | None = None) -> str:
+    child = agent.spawn(description, role=role)
     await child.run()
 
     status = child.task.status.value

@@ -1,12 +1,14 @@
 # Agent Methodology: Guidelines & Priorities
 
-Based on analysis of `AGENT_SYSTEM_PROMPT` in `src/dynamic_harness/core/agent.py`.
+Based on the architectural vision in [VISION.md](../VISION.md) and analysis of `AGENT_SYSTEM_PROMPT` in `src/dynamic_harness/core/agent.py`.
 
 ## Core Philosophy
 
-The harness implements a **recursive decomposition** methodology. An agent's job is not to do work directly, but to break work into pieces and delegate. Deep context = degraded focus = wasted cost.
+Dynamic Harness maximizes LLM output quality while minimizing cost by enforcing disciplined task decomposition, strict context encapsulation, and a mandatory **analyze → implement → verify loop**. An agent's job is not to do work directly, but to break work into pieces and delegate. Deep context = degraded focus = wasted cost.
 
 > **Golden rule:** If a sub-task requires more than 1–2 tool calls, spawn a sub-agent. Never accumulate turn debt.
+
+> **Vision alignment:** Every principle below serves the core insight — fresh context is cheaper and higher-quality than accumulated context. A 3-turn sub-agent with a clean slate outperforms a 20-turn monolithic agent.
 
 ---
 
@@ -29,8 +31,8 @@ Every agent invocation must follow this sequence. Deviation is a methodology vio
 
 | Step | Action | Exit condition |
 |------|--------|---------------|
-| **ANALYZE** | Read your task description. List what you need to find, change, or produce. | You have a bullet-point decomposition. |
-| **DECOMPOSE** | Group bullets into units. Each unit = one independent sub-agent. If a unit has sequential dependencies, it's still one sub-agent. Only independent units get separate spawns. | You have N spawn descriptions ready. |
+| **ANALYZE** | Read your task description and role (if assigned). List what you need to find, change, or produce. Restrict scope to what your role permits. | You have a bullet-point decomposition. |
+| **DECOMPOSE** | Group bullets into units. Each unit = one independent sub-agent. If a unit has sequential dependencies, it's still one sub-agent. Only independent units get separate spawns. Assign a **role** to each sub-agent that scopes its focus. | You have N spawn descriptions with roles assigned. |
 | **DELEGATE** | Call `spawn()` for each unit. All spawns in one turn for maximum parallelism. | All sub-agents return `Status: completed`. |
 | **VERIFY** | For each child: read its artifact file, confirm the output matches the spawn description. If a child returned `Status: failed`, spawn a replacement or escalate. | Every child's output is confirmed. |
 | **SYNTHESIZE** | Combine verified results. Your report must reference each child's artifact IDs. | Ready to terminate. |
@@ -124,13 +126,14 @@ A vague description produces a wandering sub-agent. Follow these rules:
 
 1. **Be specific** — include exact file paths, function names, expected behavior
 2. **State what, not how** — describe the desired outcome, not implementation steps
-3. **Specify work type** — tell the sub-agent whether to write code, search, or just report
-4. **Include verification** — e.g., "Run `pytest tests/test_auth.py` after making changes and confirm all tests pass"
-5. **Keep focused** — one task per spawn, not a list of unrelated chores
-6. **Specify conventions** — framework, naming, imports, neighboring files as examples
-7. **Provide context** — include any task-level knowledge the sub-agent needs (it sees ONLY your spawn description, nothing from your parent)
-8. **Clear acceptance criteria** — tell the sub-agent exactly what "done" looks like
-9. **Required output format** — specify what artifacts to write and what `report()` should contain
+3. **Assign a role** — prepend a role tag that scopes the sub-agent's focus (see P8)
+4. **Specify work type** — tell the sub-agent whether to write code, search, or just report
+5. **Include verification** — e.g., "Run `pytest tests/test_auth.py` after making changes and confirm all tests pass"
+6. **Keep focused** — one task per spawn, not a list of unrelated chores
+7. **Specify conventions** — framework, naming, imports, neighboring files as examples
+8. **Provide context** — include any task-level knowledge the sub-agent needs (it sees ONLY your spawn description, nothing from your parent)
+9. **Clear acceptance criteria** — tell the sub-agent exactly what "done" looks like
+10. **Required output format** — specify what artifacts to write and what `report()` should contain
 
 ### P7 — Terminate Clearly
 
@@ -139,6 +142,35 @@ A vague description produces a wandering sub-agent. Follow these rules:
 | Success | `report(summary, artifact_ids=[...])` | All sub-agents verified, synthesis complete |
 | Blocked | `escalate(issue)` | Cannot proceed without parent intervention |
 | Irrecoverable | `fail(error)` | Cannot proceed at all |
+
+### P8 — Assign Roles to Scoped Focus
+
+A role is a lightweight scope tag that **narrows the agent's solution space**. It pre-answers decisions the agent would otherwise burn tokens figuring out, reducing turns and context bloat.
+
+**Role format:** A single sentence defining stance, scope, and boundaries.
+
+```
+"You are a Security Auditor. Your only concern is vulnerabilities — ignore style, performance, and architecture. Flag issues, do not fix them."
+"You are a Test Writer. Your only concern is test coverage for the specified module. Do not modify implementation code."
+"You are a Code Reviewer. Your only concern is correctness and readability. Do not run or write code."
+```
+
+**When to assign roles:**
+
+| Situation | Role needed? |
+|---|---|
+| Sub-task has a clear, narrow domain (security, testing, docs) | **Yes** — role prevents scope creep |
+| Sub-task crosses multiple domains | **No** — role would constrain needed flexibility |
+| Leaf agent doing a single read/report | **No** — task description is sufficient |
+| Agent needs to decide its own approach | Light role only (e.g., "You are an Analyst") |
+
+**Role anti-patterns to avoid:**
+
+- **Persona bloat:** `"You are a world-class senior engineer with 20 years of experience who..."` — this adds tokens without narrowing scope. A role is a scope constraint, not a backstory.
+- **Conflict with task:** `"You are a Documentation Writer. Fix the login bug."` — role and task contradict. The agent will be torn.
+- **Overly restrictive:** `"You are a Python 3.11 type checker."` when the agent also needs to read YAML configs — the role should not block necessary tools.
+
+**Role propagation:** When a parent spawns a child, the child inherits the role **only if the parent explicitly passes it**. Children do not automatically inherit the parent's role — the parent decides what each child needs to know.
 
 ---
 
@@ -210,6 +242,18 @@ These are the most common failure modes observed in agent behavior. **All of the
 
 **Fix:** Context observation triggers (see P5). At 50+ messages, call `compress()`. Do not wait.
 
+### AP-9: Missing or conflicting roles
+
+**What it looks like:** Spawning sub-agents without role specifications, or assigning roles that contradict the task description.
+
+Examples:
+- `spawn(description="Analyze the repo")` — no role, agent has no scope boundaries
+- `spawn(description="You are a Documentation Writer. Fix the login bug.")` — role says docs, task says code fix
+
+**Why it fails:** Without a role, the agent treats every concern as its responsibility — leading to scope creep, context bloat, and unfocused output. With a conflicting role, the agent is torn between its role constraints and the task requirements.
+
+**Fix:** Always assign a role that aligns with the task, following P8 guidelines. If a task genuinely crosses domains, either split it into multiple role-scoped sub-agents or use a light coordinator role (e.g., "You are an Orchestrator. Decompose and delegate, do not implement.").
+
 ---
 
 ## Verification Protocol
@@ -254,9 +298,9 @@ Before calling `report()`, confirm:
 > "Check the repo for security issues and fix them."
 
 **GOOD:**
-> "Run `bandit -r src/ -f json` to scan for security issues. Parse the output and for each finding with severity HIGH, identify the file and line. Write the findings to `/tmp/security_findings.json`. Do NOT make code changes — this is a read-only scan. Call `report()` with a summary of HIGH-severity issues found and the artifact path."
+> "You are a Security Auditor. Your only concern is vulnerabilities — flag issues, do not fix them. Run `bandit -r src/ -f json` to scan for security issues. Parse the output and for each finding with severity HIGH, identify the file and line. Write the findings to `/tmp/security_findings.json`. Do NOT make code changes — this is a read-only scan. Call `report()` with a summary of HIGH-severity issues found and the artifact path."
 
-**Why it's good:** Specific tool, specific output file, clear scope (read-only, HIGH only), clear acceptance criteria.
+**Why it's good:** Role scopes the agent to auditing only, specific tool, specific output file, clear scope (read-only, HIGH only), clear acceptance criteria.
 
 ---
 
@@ -264,9 +308,9 @@ Before calling `report()`, confirm:
 > "Improve the test coverage."
 
 **GOOD:**
-> "Run `pytest --cov=src/dynamic_harness/core --cov-report=term-missing` to find untested lines. Focus on `runtime.py`. Identify the top 3 functions with the most uncovered lines. For each, write a test in `tests/test_runtime.py` following the existing test patterns (use the same fixtures and assert style). Run the new tests to confirm they pass. Write a summary of what you added to `/tmp/coverage_improvements.txt` and call `report()` with that file as an artifact."
+> "You are a Test Writer. Your only concern is test coverage — do not modify implementation code. Run `pytest --cov=src/dynamic_harness/core --cov-report=term-missing` to find untested lines. Focus on `runtime.py`. Identify the top 3 functions with the most uncovered lines. For each, write a test in `tests/test_runtime.py` following the existing test patterns (use the same fixtures and assert style). Run the new tests to confirm they pass. Write a summary of what you added to `/tmp/coverage_improvements.txt` and call `report()` with that file as an artifact."
 
-**Why it's good:** Bounded scope (one file, top 3), existing conventions referenced, verification step included, output artifact specified.
+**Why it's good:** Role prevents implementation changes, bounded scope (one file, top 3), existing conventions referenced, verification step included, output artifact specified.
 
 ---
 
@@ -375,6 +419,7 @@ The quality of the root task description directly determines the entire tree's b
 | Write artifacts | Findings → disk, not in-memory |
 | Monitor context | Compress or escalate when context grows heavy |
 | Describe well | Specific, focused, verifiable spawn descriptions |
+| Scope with roles | Assign a role to every sub-agent to narrow focus and prevent scope creep |
 | Recover | Handle failures structurally, never ignore them |
 | Terminate cleanly | report / escalate / fail — never hang |
 
@@ -389,3 +434,6 @@ The quality of the root task description directly determines the entire tree's b
 - Never synthesize from assumed results. Verification is not optional.
 - A child returning `Status: failed` means the task is incomplete. Retry or escalate.
 - If you can't verify a child's output, the task is not complete.
+- Every sub-agent spawn must include a role. A role-less agent is an unfocused agent.
+- A role is a scope constraint, not a backstory. One sentence, no fluff.
+- If a role conflicts with the task description, the decomposition is wrong — re-decompose.
