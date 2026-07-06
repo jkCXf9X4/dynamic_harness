@@ -16,7 +16,7 @@ Enable overwriting system prompt for setting specialized context if needed
 ->all orchestration should have one default prompt
 -> soecialization should be set from parent
 
--> this means that the orchestrator do not need to have branching in the prompt, only limit the contect for children
+-> this means that the orchestrator do not need to have branching in the prompt, only customize the contect for children
 
 
 
@@ -36,3 +36,7 @@ The real top level orchesrator can then evaluate which agent/ system prompt came
 Running multiple tasks will enable optimization against a certain model, it migh not generalize against 
 
 To do this it might be nessesary to have an optional override of the default system prompt
+
+--- 
+
+rephrase spaw to delegate 
