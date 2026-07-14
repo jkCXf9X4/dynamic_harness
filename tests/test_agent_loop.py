@@ -39,7 +39,7 @@ async def test_runner_tracks_events_and_reports(runtime: Runtime) -> None:
     runtime.register_agent_class("LeafAgent", LeafAgent)
     runner = AgentRunner(runtime)
     runner.connect()
-    root = runtime.spawn_agent(Task(description="test"), agent_type="LeafAgent")
+    root = runtime.delegate(Task(description="test"), agent_type="LeafAgent")
     await runner.run_root(root)
 
     assert any("report done" in e for e in runner.events)
@@ -55,7 +55,7 @@ async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
     runtime.register_agent_class("FailingAgent", FailingAgent)
     runner = AgentRunner(runtime)
     runner.connect()
-    root = runtime.spawn_agent(Task(description="fail"), agent_type="FailingAgent")
+    root = runtime.delegate(Task(description="fail"), agent_type="FailingAgent")
     await runner.run_root(root)
 
     assert any("fail: oops" in e for e in runner.events)
@@ -107,7 +107,7 @@ async def test_runner_shutdown_event_stops_execution(runtime: Runtime) -> None:
     runner.connect()
 
     shutdown = asyncio.Event()
-    root = runtime.spawn_agent(Task(description="slow"), agent_type="SlowAgent")
+    root = runtime.delegate(Task(description="slow"), agent_type="SlowAgent")
 
     async def trigger_shutdown() -> None:
         await asyncio.sleep(0.05)

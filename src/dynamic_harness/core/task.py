@@ -26,7 +26,7 @@ class Task(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class SpawnRequest(BaseModel):
+class DelegateRequest(BaseModel):
     task: Task
     budget: int | None = None
 

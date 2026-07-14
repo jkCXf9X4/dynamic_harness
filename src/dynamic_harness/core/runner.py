@@ -11,7 +11,7 @@ from .task import Failure, ReportPayload, Task
 class AgentRunner:
     """Pure agent lifecycle orchestrator with no rendering or I/O dependencies.
 
-    Spawns, runs, and tracks agents. Emits lifecycle events via callbacks
+    Delegates, runs, and tracks agents. Emits lifecycle events via callbacks
     so that any UI layer (TUI, CLI, test harness) can observe progress
     without coupling to Rich, Textual, or any particular presentation
     library.
@@ -48,7 +48,7 @@ class AgentRunner:
             self.events.clear()
 
         if root_agent is None:
-            root = self.runtime.spawn_agent(Task(description=description))
+            root = self.runtime.delegate(Task(description=description))
             root_task = asyncio.create_task(root.run())
         else:
             root_task = asyncio.create_task(root_agent.continue_with_input(description))

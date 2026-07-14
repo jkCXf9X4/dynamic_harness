@@ -138,15 +138,17 @@ TOOL_EDIT_DEF = ToolDef(
     },
 )
 
-TOOL_SPAWN_DEF = ToolDef(
-    name="spawn",
-    description="Spawn a sub-agent to handle a subtask autonomously. Returns the "
-                "child's status, ID, report summary, artifact IDs, and confidence "
-                "(if set). For failed children, returns the failure reason.",
+TOOL_DELEGATE_DEF = ToolDef(
+    name="delegate",
+    description="Delegate a task to a sub-agent that handles it autonomously. "
+                "The sub-agent sees ONLY your description and role — nothing from "
+                "your parent. Returns the child's status, ID, report summary, "
+                "artifact IDs, and confidence (if set). For failed children, "
+                "returns the failure reason.",
     input_schema={
         "type": "object",
         "properties": {
-            "description": {"type": "string", "description": "Description of subtask for the sub-agent"},
+            "description": {"type": "string", "description": "Description of the task for the sub-agent"},
             "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.')"},
         },
         "required": ["description"],
@@ -258,7 +260,7 @@ TOOL_CONVERSE_DEF = ToolDef(
                 "response. The target agent resumes with this new message "
                 "appended to its existing context. Use this to continue a "
                 "conversation with a child agent after it has reported, or "
-                "to delegate follow-up work without spawning a fresh agent.",
+                "to request follow-up work from a completed child agent.",
     input_schema={
         "type": "object",
         "properties": {
@@ -341,12 +343,12 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
     return f"Replaced in {path}"
 
 
-async def _tool_spawn(*, agent: Agent, description: str, role: str | None = None) -> str:
-    child = agent.spawn(description, role=role)
+async def _tool_delegate(*, agent: Agent, description: str, role: str | None = None) -> str:
+    child = agent.delegate(description, role=role)
     await child.run()
 
     status = child.task.status.value
-    lines = [f"Spawned agent {child.id}. Status: {status}"]
+    lines = [f"Delegated to agent {child.id}. Status: {status}"]
 
     if child._last_report:
         r = child._last_report
@@ -503,7 +505,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_BASH_DEF, _tool_bash)
     registry.register(TOOL_WEBFETCH_DEF, _tool_webfetch)
     registry.register(TOOL_EDIT_DEF, _tool_edit)
-    registry.register(TOOL_SPAWN_DEF, _tool_spawn)
+    registry.register(TOOL_DELEGATE_DEF, _tool_delegate)
     registry.register(TOOL_REPORT_DEF, _tool_report)
     registry.register(TOOL_ESCALATE_DEF, _tool_escalate)
     registry.register(TOOL_FAIL_DEF, _tool_fail)

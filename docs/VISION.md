@@ -18,7 +18,7 @@ LLM agents degrade under long-running tasks: context grows unbounded, focus drif
 
 ### 1. Recursive Task Decomposition
 
-Parent agents spawn specialized child agents for each independent sub-task. Parents orchestrate — they do not do the work directly. This keeps every agent's context shallow and focused.
+Parent agents delegate to specialized child agents for each independent sub-task. Parents orchestrate — they do not do the work directly. This keeps every agent's context shallow and focused.
 
 ### 2. Analyze → Implement → Verify Loop
 
@@ -26,7 +26,7 @@ Every task flows through a mandatory pipeline:
 ```
 ANALYZE     — Identify separable sub-tasks
 DECOMPOSE   — Group into independent units of work
-DELEGATE    — Spawn sub-agents in parallel (one turn)
+DELEGATE    — Delegate sub-agents in parallel (one turn)
 VERIFY      — Read each child's artifacts, confirm non-empty and relevant
 SYNTHESIZE  — Combine verified results into a coherent output
 TERMINATE   — report() / escalate() / fail()
@@ -57,9 +57,9 @@ This is a retrieval problem, not a communication problem.
 | Approach | Cost | Quality |
 |---|---|---|
 | Single agent, 20+ turns | Context bloat → degraded output, high token burn | Low — early context is stale |
-| Decompose → 3 sub-agents × 3 turns each | 3× spawn overhead + fresh contexts | High — each agent is focused |
+| Decompose → 3 sub-agents × 3 turns each | 3× delegation overhead + fresh contexts | High — each agent is focused |
 
-A spawn costs ~3K tokens overhead. Doing it yourself for 3+ turns at 2K+ tokens/turn is both more expensive **and** produces lower quality.
+A delegation costs ~3K tokens overhead. Doing it yourself for 3+ turns at 2K+ tokens/turn is both more expensive **and** produces lower quality.
 
 ### 6. Disposable Workers
 

@@ -19,7 +19,7 @@ def runtime() -> Runtime:
 @pytest.mark.asyncio
 async def test_default_agent_runtime(runtime: Runtime) -> None:
     root_task = Task(description="Default agent test")
-    root = runtime.spawn_agent(root_task)
+    root = runtime.delegate(root_task)
     await root.run()
 
     assert root.task.status.value == "completed"
@@ -37,9 +37,9 @@ async def test_runtime_tracks_task_graph(runtime: Runtime) -> None:
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
 
-    root = runtime.spawn_agent(Task(description="Root"), agent_type="LeafAgent")
-    a = root.spawn("A", agent_type="LeafAgent")
-    b = root.spawn("B", agent_type="LeafAgent")
+    root = runtime.delegate(Task(description="Root"), agent_type="LeafAgent")
+    a = root.delegate("A", agent_type="LeafAgent")
+    b = root.delegate("B", agent_type="LeafAgent")
 
     graph = runtime.task_graph()
     assert a.id in graph[root.id]
@@ -57,7 +57,7 @@ async def test_artifact_store_populated_on_report(runtime: Runtime) -> None:
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
 
-    root = runtime.spawn_agent(Task(description="Populate"), agent_type="LeafAgent")
+    root = runtime.delegate(Task(description="Populate"), agent_type="LeafAgent")
     await root.run()
 
     commits = runtime.repository.log()
@@ -82,7 +82,7 @@ async def test_runtime_event_handlers(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
-    root = runtime.spawn_agent(Task(description="Events"), agent_type="LeafAgent")
+    root = runtime.delegate(Task(description="Events"), agent_type="LeafAgent")
     await root.run()
 
     assert any("report:" in e for e in events)
@@ -90,7 +90,7 @@ async def test_runtime_event_handlers(runtime: Runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_agent_type_uses_default(runtime: Runtime) -> None:
-    root = runtime.spawn_agent(Task(description="Unknown type"), agent_type="Anything")
+    root = runtime.delegate(Task(description="Unknown type"), agent_type="Anything")
     await root.run()
     assert root.task.status.value == "completed"
     assert runtime.agent_count() >= 1

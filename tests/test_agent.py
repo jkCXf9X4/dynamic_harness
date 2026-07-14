@@ -19,7 +19,7 @@ def runtime() -> Runtime:
 @pytest.mark.asyncio
 async def test_default_agent_completes(runtime: Runtime) -> None:
     root_task = Task(description="Test task")
-    root = runtime.spawn_agent(root_task)
+    root = runtime.delegate(root_task)
     await root.run()
 
     assert root.task.status.value == "completed"
@@ -38,8 +38,8 @@ async def test_agent_hierarchy_via_registry(runtime: Runtime) -> None:
     class BranchAgent(Agent):
         async def run(self) -> None:
             children = [
-                self.spawn("Leaf A", agent_type="LeafAgent"),
-                self.spawn("Leaf B", agent_type="LeafAgent"),
+                self.delegate("Leaf A", agent_type="LeafAgent"),
+                self.delegate("Leaf B", agent_type="LeafAgent"),
             ]
             for c in children:
                 await c.run()
@@ -52,7 +52,7 @@ async def test_agent_hierarchy_via_registry(runtime: Runtime) -> None:
     runtime.register_agent_class("BranchAgent", BranchAgent)
 
     root_task = Task(description="Root")
-    root = runtime.spawn_agent(root_task, agent_type="BranchAgent")
+    root = runtime.delegate(root_task, agent_type="BranchAgent")
     await root.run()
 
     assert root.task.status.value == "completed"
@@ -72,7 +72,7 @@ async def test_agent_failure(runtime: Runtime) -> None:
                 self.fail(str(e))
 
     runtime.register_agent_class("FailingAgent", FailingAgent)
-    root = runtime.spawn_agent(Task(description="Fail"), agent_type="FailingAgent")
+    root = runtime.delegate(Task(description="Fail"), agent_type="FailingAgent")
     await root.run()
 
     assert root.task.status.value == "failed"
@@ -89,9 +89,9 @@ async def test_agent_has_no_sibling_visibility(runtime: Runtime) -> None:
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
 
-    root = runtime.spawn_agent(Task(description="Root"), agent_type="LeafAgent")
-    child_a = root.spawn("Task A", agent_type="LeafAgent")
-    child_b = root.spawn("Task B", agent_type="LeafAgent")
+    root = runtime.delegate(Task(description="Root"), agent_type="LeafAgent")
+    child_a = root.delegate("Task A", agent_type="LeafAgent")
+    child_b = root.delegate("Task B", agent_type="LeafAgent")
 
     assert not hasattr(child_a, "siblings")
     assert not hasattr(child_b, "siblings")
@@ -111,7 +111,7 @@ async def test_report_creates_artifact_and_commit(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
-    root = runtime.spawn_agent(Task(description="Report"), agent_type="LeafAgent")
+    root = runtime.delegate(Task(description="Report"), agent_type="LeafAgent")
     await root.run()
 
     assert runtime.repository.count() >= 1
@@ -124,7 +124,7 @@ async def test_agent_guidelines_property(runtime: Runtime) -> None:
     class TestAgent(Agent):
         async def run(self) -> None:
             assert "read" in self.guidelines
-            assert "spawn" in self.guidelines
+            assert "delegate" in self.guidelines
             assert "report" in self.guidelines
             self.report(ReportPayload(
                 task_id=self.task.id,
@@ -132,6 +132,6 @@ async def test_agent_guidelines_property(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("TestAgent", TestAgent)
-    root = runtime.spawn_agent(Task(description="Check"), agent_type="TestAgent")
+    root = runtime.delegate(Task(description="Check"), agent_type="TestAgent")
     await root.run()
     assert root.task.status.value == "completed"

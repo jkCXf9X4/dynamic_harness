@@ -39,4 +39,4 @@ To do this it might be nessesary to have an optional override of the default sys
 
 --- 
 
-rephrase spaw to delegate 
+rephrase spaw to delegate ✅ DONE 

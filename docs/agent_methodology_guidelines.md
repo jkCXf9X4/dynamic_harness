@@ -6,7 +6,7 @@ Based on the architectural vision in [VISION.md](../VISION.md) and analysis of `
 
 Dynamic Harness maximizes LLM output quality while minimizing cost by enforcing disciplined task decomposition, strict context encapsulation, and a mandatory **analyze → implement → verify loop**. An agent's job is not to do work directly, but to break work into pieces and delegate. Deep context = degraded focus = wasted cost.
 
-> **Golden rule:** If a sub-task requires more than 1–2 tool calls, spawn a sub-agent. Never accumulate turn debt.
+> **Golden rule:** If a sub-task requires more than 1–2 tool calls, delegate to a sub-agent. Never accumulate turn debt.
 
 > **Vision alignment:** Every principle below serves the core insight — fresh context is cheaper and higher-quality than accumulated context. A 3-turn sub-agent with a clean slate outperforms a 20-turn monolithic agent.
 
@@ -20,7 +20,7 @@ Every agent invocation must follow this sequence. Deviation is a methodology vio
 ┌─────────────────────────────────────────────────────────────────────┐
 │  1. ANALYZE   →  Identify separable sub-tasks from your description │
 │  2. DECOMPOSE  →  Group into independent units of work              │
-│  3. DELEGATE   →  Spawn sub-agents in parallel for each unit        │
+│  3. DELEGATE   → Delegate sub-agents in parallel for each unit        │
 │  4. VERIFY     →  Confirm each sub-agent's artifact exists & valid  │
 │  5. SYNTHESIZE →  Combine verified results into your report         │
 │  6. TERMINATE  →  report() / escalate() / fail()                    │
@@ -32,9 +32,9 @@ Every agent invocation must follow this sequence. Deviation is a methodology vio
 | Step | Action | Exit condition |
 |------|--------|---------------|
 | **ANALYZE** | Read your task description and role (if assigned). List what you need to find, change, or produce. Restrict scope to what your role permits. | You have a bullet-point decomposition. |
-| **DECOMPOSE** | Group bullets into units. Each unit = one independent sub-agent. If a unit has sequential dependencies, it's still one sub-agent. Only independent units get separate spawns. Assign a **role** to each sub-agent that scopes its focus. | You have N spawn descriptions with roles assigned. |
-| **DELEGATE** | Call `spawn()` for each unit. All spawns in one turn for maximum parallelism. | All sub-agents return `Status: completed`. |
-| **VERIFY** | For each child: read its artifact file, confirm the output matches the spawn description. If a child returned `Status: failed`, spawn a replacement or escalate. | Every child's output is confirmed. |
+| **DECOMPOSE** | Group bullets into units. Each unit = one independent sub-agent. If a unit has sequential dependencies, it's still one sub-agent. Only independent units get separate delegations. Assign a **role** to each sub-agent that scopes its focus. | You have N delegation descriptions with roles assigned. |
+| **DELEGATE** | Call `delegate()` for each unit. All delegations in one turn for maximum parallelism. | All sub-agents return `Status: completed`. |
+| **VERIFY** | For each child: read its artifact file, confirm the output matches the delegation description. If a child returned `Status: failed`, re-delegate or escalate. | Every child's output is confirmed. |
 | **SYNTHESIZE** | Combine verified results. Your report must reference each child's artifact IDs. | Ready to terminate. |
 | **TERMINATE** | Call `report(summary, artifact_ids=[...])`. | Task status is `completed`. |
 
@@ -49,7 +49,7 @@ Is this a standalone unit of work?
 ├── NO  → Keep it in your own context (but beware accumulation)
 └── YES → How many tool calls will it need?
           ├── 0–1 calls → Do it yourself (read a file, run one command)
-          └── 2+ calls  → SPAWN A SUB-AGENT
+          └── 2+ calls  → DELEGATE TO A SUB-AGENT
 ```
 
 **Exceptions where direct action is acceptable even with 2+ calls:**
@@ -57,7 +57,7 @@ Is this a standalone unit of work?
 - You have already been given file paths and just need to read them
 - A single bash command with a follow-up read (2 calls total, tightly coupled)
 
-**Delegation anti-signals — stop and spawn if:**
+**Delegation anti-signals — stop and delegate if:**
 - You are about to call `grep` followed by `read` on multiple results
 - You are about to chain `glob` → multiple `read`s
 - You are about to run a test, see it fail, and open files to fix
@@ -75,10 +75,10 @@ Before making any tool call, output the decomposition plan. Do not touch a tool 
 
 ### P1 — Delegate Aggressively & In Parallel
 
-- Spawn multiple sub-agents **in the same turn** so they explore independently.
+- Delegate multiple sub-agents **in the same turn** so they explore independently.
 - Each sub-agent should do **one thing well**.
 - Prefer two parallel sub-agents over one agent with a two-part sequential task.
-- The spawn description is the sub-agent's **entire world** — it knows nothing else.
+- The delegation description is the sub-agent's **entire world** — it knows nothing else.
 
 ### P2 — Keep Your Own Context Shallow
 
@@ -92,8 +92,8 @@ Before making any tool call, output the decomposition plan. Do not touch a tool 
 **This is the most frequently violated principle.** After a sub-agent reports:
 
 1. Read the artifact file(s) it wrote (use `read()` with the paths it reported).
-2. Confirm the content is non-empty and matches the spawn description.
-3. If verification fails — spawn a replacement or escalate. Never synthesize from assumed results.
+2. Confirm the content is non-empty and matches the delegation description.
+3. If verification fails — re-delegate or escalate. Never synthesize from assumed results.
 4. When a child returns `Status: failed`, do not proceed — the task is incomplete.
 
 ### P4 — Use Artifact-Driven Communication
@@ -101,7 +101,7 @@ Before making any tool call, output the decomposition plan. Do not touch a tool 
 - Sub-agents **must** write findings to disk via `write()`.
 - Reference files by path; do not pass large raw data in-memory.
 - Sub-agents call `report(summary, artifact_ids=[...])`. The parent reads the artifact file.
-- The spawn tool returns only `"Spawned agent completed. Status: X. ID: abc123"` — you will **not** see the child's report contents automatically. You **must** read its artifacts.
+- The delegate tool returns only `"Delegated to agent completed. Status: X. ID: abc123"` — you will **not** see the child's report contents automatically. You **must** read its artifacts.
 
 ### P5 — Monitor Context Health
 
@@ -115,12 +115,12 @@ Decision rules:
 | Condition | Action |
 |---|---|
 | Low turns (<5), few messages (<15) | Continue or delegate |
-| Medium turns (5–15), growing messages | Spawn sub-agents for remaining work |
+| Medium turns (5–15), growing messages | Delegate sub-agents for remaining work |
 | Many turns (>15) | Call `compress()` **immediately** |
 | Context > ~50 messages | Call `compress()`, then re-evaluate |
-| Repeated similar tool calls (3+) | Stop. Spawn sub-agent. Do not grind. |
+| Repeated similar tool calls (3+) | Stop. Delegate to sub-agent. Do not grind. |
 
-### P6 — Quality of Spawn Descriptions
+### P6 — Quality of Delegation Descriptions
 
 A vague description produces a wandering sub-agent. Follow these rules:
 
@@ -129,9 +129,9 @@ A vague description produces a wandering sub-agent. Follow these rules:
 3. **Assign a role** — prepend a role tag that scopes the sub-agent's focus (see P8)
 4. **Specify work type** — tell the sub-agent whether to write code, search, or just report
 5. **Include verification** — e.g., "Run `pytest tests/test_auth.py` after making changes and confirm all tests pass"
-6. **Keep focused** — one task per spawn, not a list of unrelated chores
+6. **Keep focused** — one task per delegation, not a list of unrelated chores
 7. **Specify conventions** — framework, naming, imports, neighboring files as examples
-8. **Provide context** — include any task-level knowledge the sub-agent needs (it sees ONLY your spawn description, nothing from your parent)
+8. **Provide context** — include any task-level knowledge the sub-agent needs (it sees ONLY your delegation description, nothing from your parent)
 9. **Clear acceptance criteria** — tell the sub-agent exactly what "done" looks like
 10. **Required output format** — specify what artifacts to write and what `report()` should contain
 
@@ -170,7 +170,7 @@ A role is a lightweight scope tag that **narrows the agent's solution space**. I
 - **Conflict with task:** `"You are a Documentation Writer. Fix the login bug."` — role and task contradict. The agent will be torn.
 - **Overly restrictive:** `"You are a Python 3.11 type checker."` when the agent also needs to read YAML configs — the role should not block necessary tools.
 
-**Role propagation:** When a parent spawns a child, the child inherits the role **only if the parent explicitly passes it**. Children do not automatically inherit the parent's role — the parent decides what each child needs to know.
+**Role propagation:** When a parent delegates to a child, the child inherits the role **only if the parent explicitly passes it**. Children do not automatically inherit the parent's role — the parent decides what each child needs to know.
 
 ---
 
@@ -184,51 +184,51 @@ These are the most common failure modes observed in agent behavior. **All of the
 
 **Why it fails:** Without a plan, the agent grinds through search results turn-by-turn, accumulating context bloat without clear direction. By turn 15, the original task is diluted.
 
-**Fix:** Output a decomposition plan as the first action. List sub-tasks, then spawn sub-agents. If the LLM won't output a plan, the task description may be too vague.
+**Fix:** Output a decomposition plan as the first action. List sub-tasks, then delegate to sub-agents. If the LLM won't output a plan, the task description may be too vague.
 
 ### AP-2: Doing it all yourself
 
-**What it looks like:** Agent makes 5, 10, 20+ tool calls itself without spawning.
+**What it looks like:** Agent makes 5, 10, 20+ tool calls itself without delegating.
 
 **Why it fails:** Context accumulates. Turn 20 sees the task description buried under 18 system observations. Focus degrades. Cost scales with context length unnecessarily.
 
-**Fix:** After 3 tool calls without a spawn, ask: "Could a sub-agent do this?" The answer is almost always yes.
+**Fix:** After 3 tool calls without a delegation, ask: "Could a sub-agent do this?" The answer is almost always yes.
 
 ### AP-3: Blind synthesis
 
-**What it looks like:** Parent spawns children → receives `"Status: completed"` → calls `report()` with a synthesis based on the spawn description, not the child's actual output.
+**What it looks like:** Parent delegates to children → receives `"Status: completed"` → calls `report()` with a synthesis based on the delegation description, not the child's actual output.
 
 **Why it fails:** The parent synthesizes what it *asked for*, not what the child actually *found*. The child's results are ignored. This produces correct-looking but factually wrong output.
 
-**Fix:** After spawn returns, read the child's artifact file. Confirm it exists and its content is relevant. Only then synthesize.
+**Fix:** After delegation returns, read the child's artifact file. Confirm it exists and its content is relevant. Only then synthesize.
 
-### AP-4: Mega-spawn
+### AP-4: Mega-delegation
 
-**What it looks like:** `spawn(description="First, do X. Then check Y. After that, modify Z. Finally, run tests and report.")`
+**What it looks like:** `delegate(description="First, do X. Then check Y. After that, modify Z. Finally, run tests and report.")`
 
 **Why it fails:** The sub-agent has a multi-step sequential task with no clear focus. It's essentially a root-level task masquerading as a sub-task. The sub-agent's context grows, it loses focus, and the parent can't verify intermediate steps.
 
-**Fix:** Split into independent spawns. `spawn("Do X")` and `spawn("Check Y")` are better than one mega-spawn. If X and Y are sequential, Y should be spawned after X completes and its artifact is verified.
+**Fix:** Split into independent delegations. `delegate("Do X")` and `delegate("Check Y")` are better than one mega-delegation. If X and Y are sequential, Y should be delegated after X completes and its artifact is verified.
 
 ### AP-5: Abandoning failed children
 
-**What it looks like:** Parent spawns children → one returns `"Status: failed"` → parent ignores it and synthesizes from the successful children.
+**What it looks like:** Parent delegates to children → one returns `"Status: failed"` → parent ignores it and synthesizes from the successful children.
 
 **Why it fails:** The parent produces a partial result, missing critical information. The task's original goal is not met, but the parent reports success.
 
-**Fix:** When a child fails, evaluate: can another child be spawned with a better description? If yes, retry. If no, escalate with the failure context. Never report success with missing pieces.
+**Fix:** When a child fails, evaluate: can another child be delegated with a better description? If yes, retry. If no, escalate with the failure context. Never report success with missing pieces.
 
-### AP-6: Vague spawn descriptions
+### AP-6: Vague delegation descriptions
 
-**What it looks like:** `spawn(description="Look at the auth code and fix issues")`
+**What it looks like:** `delegate(description="Look at the auth code and fix issues")`
 
 **Why it fails:** The sub-agent wanders. "Look at" is directionless. "Fix issues" has no acceptance criteria. The sub-agent has no way to know when it's done.
 
-**Fix:** `spawn(description="Read src/auth/login.py and find the function that validates JWT expiry. If the expiry check is missing or incorrect (should reject tokens older than 3600 seconds), add the check. Run `pytest tests/test_auth.py` to verify. Write a summary of changes to /tmp/auth_fix_summary.txt and call report() with that file path as an artifact.")`
+**Fix:** `delegate(description="Read src/auth/login.py and find the function that validates JWT expiry. If the expiry check is missing or incorrect (should reject tokens older than 3600 seconds), add the check. Run `pytest tests/test_auth.py` to verify. Write a summary of changes to /tmp/auth_fix_summary.txt and call report() with that file path as an artifact.")`
 
 ### AP-7: Hallucinating sub-agent output
 
-**What it looks like:** Parent spawns children → receives status strings → in the `report()` summary, the parent describes detailed findings that the children never actually produced. The parent invents plausible content.
+**What it looks like:** Parent delegates to children → receives status strings → in the `report()` summary, the parent describes detailed findings that the children never actually produced. The parent invents plausible content.
 
 **Why it fails:** The parent's LLM fills in gaps with fabricated detail because it wasn't given the actual child results. The output sounds authoritative but is fiction.
 
@@ -244,11 +244,11 @@ These are the most common failure modes observed in agent behavior. **All of the
 
 ### AP-9: Missing or conflicting roles
 
-**What it looks like:** Spawning sub-agents without role specifications, or assigning roles that contradict the task description.
+**What it looks like:** Delegating to sub-agents without role specifications, or assigning roles that contradict the task description.
 
 Examples:
-- `spawn(description="Analyze the repo")` — no role, agent has no scope boundaries
-- `spawn(description="You are a Documentation Writer. Fix the login bug.")` — role says docs, task says code fix
+- `delegate(description="Analyze the repo")` — no role, agent has no scope boundaries
+- `delegate(description="You are a Documentation Writer. Fix the login bug.")` — role says docs, task says code fix
 
 **Why it fails:** Without a role, the agent treats every concern as its responsibility — leading to scope creep, context bloat, and unfocused output. With a conflicting role, the agent is torn between its role constraints and the task requirements.
 
@@ -258,10 +258,10 @@ Examples:
 
 ## Verification Protocol
 
-After each `spawn()` call returns, follow this protocol **for each child** before proceeding:
+After each `delegate()` call returns, follow this protocol **for each child** before proceeding:
 
 ```
-Child spawned: X
+Child delegated to: X
   ├── Status is "completed"?
   │     ├── YES → Continue to verification
   │     └── NO  → Log the failure. Decide: retry with better description, or escalate?
@@ -282,7 +282,7 @@ Child spawned: X
 ### Verification checklist
 
 Before calling `report()`, confirm:
-- [ ] Every spawned child has `Status: completed`
+- [ ] Every delegated child has `Status: completed`
 - [ ] Every child's artifact file has been read and its content confirmed
 - [ ] The synthesis accurately reflects (not fabricates) the artifact contents
 - [ ] Any child that failed has been retried or escalated
@@ -292,7 +292,7 @@ Before calling `report()`, confirm:
 
 ## Good vs Bad: Concrete Examples
 
-### Spawn descriptions
+### Delegation descriptions
 
 **BAD:**
 > "Check the repo for security issues and fix them."
@@ -332,7 +332,7 @@ Turn 20: report("I analyzed the codebase...")  ← synthesis from stale/buried c
 **GOOD execution:**
 ```
 Turn 1: [Analysis] "I see 3 sub-tasks: (A) find auth logic, (B) check error handling, (C) review tests"
-         spawn(A), spawn(B), spawn(C)  ← all in one turn
+         delegate(A), delegate(B), delegate(C)  ← all in one turn
 Turn 2: [Verification] read("/tmp/auth_findings.txt") ✓
          read("/tmp/error_handling.txt") ✓
          read("/tmp/test_review.txt") ✓
@@ -346,9 +346,9 @@ Turn 3: [Synthesis + Termination] report("...", artifact_ids=[artA, artB, artC])
 
 | Failure | Recovery |
 |---|---|
-| Sub-agent returns `Status: failed` | Read its last messages via `converse(child_id, "What went wrong?")`. If the issue is clearable (e.g., missing file, typo in the description), spawn a replacement with a corrected description. If the issue is structural (e.g., tool limitation), escalate. |
-| Sub-agent reports success but artifact is empty/missing | `converse(child_id, "Your artifact at path X is empty. Did you write your findings?")`. If the child confirms it wrote to a different path, read that. Otherwise, respawn. |
-| Sub-agent hit safety limits | It ran 500 iterations or 5 repeated calls. The task was too broad or ambiguous. Respawn with a narrower, more specific description. |
+| Sub-agent returns `Status: failed` | Read its last messages via `converse(child_id, "What went wrong?")`. If the issue is clearable (e.g., missing file, typo in the description), delegate again with a corrected description. If the issue is structural (e.g., tool limitation), escalate. |
+| Sub-agent reports success but artifact is empty/missing | `converse(child_id, "Your artifact at path X is empty. Did you write your findings?")`. If the child confirms it wrote to a different path, read that. Otherwise, re-delegate. |
+| Sub-agent hit safety limits | It ran 500 iterations or 5 repeated calls. The task was too broad or ambiguous. Re-delegate with a narrower, more specific description. |
 | Sub-agent returns `Status: escalated` | Its issue is now your issue. Read its escalation context, decide if you can resolve it or must pass it up via your own `escalate()`. |
 | Multiple children all fail | The task decomposition is likely wrong. Escalate with a summary of what each child was asked to do and why they failed. |
 
@@ -359,11 +359,11 @@ Turn 3: [Synthesis + Termination] report("...", artifact_ids=[artA, artB, artC])
 | Action | Approx. tokens | When to use |
 |---|---|---|
 | Read a known file path | ~500–2000 | File is small, path is specific |
-| Spawn a sub-agent | ~2000–5000 overhead | Sub-task needs 2+ calls |
+| Delegate to a sub-agent | ~2000–5000 overhead | Sub-task needs 2+ calls |
 | Compress context | ~5000–15000 | Context > ~50 messages |
 | Grind through many reads yourself | 0 + turn cost × N | **Never** — this is delegation failure |
 
-**Rule of thumb:** A spawn costs ~3000 tokens overhead (system prompt + spawn description). If doing it yourself would take 3+ turns at 2000+ tokens/turn, spawning is cheaper **and** produces better quality (fresh context for each sub-task).
+**Rule of thumb:** A delegation costs ~3000 tokens overhead (system prompt + delegation description). If doing it yourself would take 3+ turns at 2000+ tokens/turn, delegating is cheaper **and** produces better quality (fresh context for each sub-task).
 
 ---
 
@@ -412,13 +412,13 @@ The quality of the root task description directly determines the entire tree's b
 | Principle | Essence |
 |---|---|
 | Decompose | Split work into independent sub-tasks first |
-| Delegate | Spawn sub-agents, don't do it yourself |
+| Delegate | Delegate sub-agents, don't do it yourself |
 | Verify | Confirm every child's output before synthesizing |
 | Parallelize | Run sub-agents concurrently in one turn |
 | Stay shallow | Keep your context lean; read summaries, not raw source |
 | Write artifacts | Findings → disk, not in-memory |
 | Monitor context | Compress or escalate when context grows heavy |
-| Describe well | Specific, focused, verifiable spawn descriptions |
+| Describe well | Specific, focused, verifiable delegation descriptions |
 | Scope with roles | Assign a role to every sub-agent to narrow focus and prevent scope creep |
 | Recover | Handle failures structurally, never ignore them |
 | Terminate cleanly | report / escalate / fail — never hang |
@@ -434,6 +434,6 @@ The quality of the root task description directly determines the entire tree's b
 - Never synthesize from assumed results. Verification is not optional.
 - A child returning `Status: failed` means the task is incomplete. Retry or escalate.
 - If you can't verify a child's output, the task is not complete.
-- Every sub-agent spawn must include a role. A role-less agent is an unfocused agent.
+- Every sub-agent delegation must include a role. A role-less agent is an unfocused agent.
 - A role is a scope constraint, not a backstory. One sentence, no fluff.
 - If a role conflicts with the task description, the decomposition is wrong — re-decompose.

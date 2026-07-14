@@ -54,7 +54,7 @@ class Runtime:
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
 
-    def spawn_agent(self, task: Task, parent: Agent | None = None, agent_type: str | None = None) -> Agent:
+    def delegate(self, task: Task, parent: Agent | None = None, agent_type: str | None = None) -> Agent:
         agent_id = uuid4().hex[:12]
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
