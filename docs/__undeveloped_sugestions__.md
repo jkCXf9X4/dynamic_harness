@@ -4,23 +4,6 @@
 Verify compact return before switching the new context in
 Evaluate if compact returns the summation and then can the agent choose with another tool, switch_content() whether to use the new context or not
 
----
-
-Ensure role of top level orchestrator for higher quallity
-- The next one helps with this!
-
----
-
-Enable overwriting system prompt for setting specialized context if needed
--> enable specifying a smaller context for leaf nodes with special tools and directions
-->all orchestration should have one default prompt
--> soecialization should be set from parent
-
--> this means that the orchestrator do not need to have branching in the prompt, only customize the contect for children
-
-
-
--> nessesary for the task below
 
 
 ---
@@ -37,6 +20,29 @@ Running multiple tasks will enable optimization against a certain model, it migh
 
 To do this it might be nessesary to have an optional override of the default system prompt
 
+---
+
+Enable overwriting system prompt for setting specialized context if needed
+-> all orchestration should have one default prompt
+-> specialization should be set from parent
+
+-> this means that the orchestrator do not need to have branching in the prompt, only customize the contect for children
+
+-> nessesary for the task below
+
+
 --- 
 
-rephrase spaw to delegate ✅ DONE 
+lets encurage delegation further
+lets take inspiration from the linux motto of doing one thing and doing it well
+
+can we improve the
+
+
+--- 
+
+simplify call chain,
+
+all tasks, even the top one should use the simple delegate function
+
+evaluate if this is possible and how this can lead to a shorter and simpler call chain

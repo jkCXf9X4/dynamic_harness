@@ -220,6 +220,7 @@ class Agent:
         runtime: Runtime,
         parent: Agent | None = None,
         *,
+        system_prompt: str | None = None,
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
     ) -> None:
@@ -228,6 +229,7 @@ class Agent:
         self._runtime = runtime
         self.parent = parent
         self.children: list[Agent] = []
+        self._system_prompt = system_prompt or task.system_prompt
         self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
         self._messages: list[dict[str, Any]] | None = None
@@ -257,7 +259,7 @@ class Agent:
         if self.task.role:
             user_message = f"[ROLE] {self.task.role}\n\n[TASK] {self.task.description}"
         self._messages = [
-            {"role": "system", "content": AGENT_SYSTEM_PROMPT},
+            {"role": "system", "content": self._system_prompt or AGENT_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ]
         self._iteration = 0
@@ -383,8 +385,8 @@ class Agent:
                 ))
                 return
 
-    def delegate(self, description: str, agent_type: str | None = None, role: str | None = None, **metadata: object) -> Agent:
-        child_task = Task(description=description, role=role, parent_id=self.task.id, metadata=metadata)
+    def delegate(self, description: str, agent_type: str | None = None, role: str | None = None, system_prompt: str | None = None, **metadata: object) -> Agent:
+        child_task = Task(description=description, role=role, system_prompt=system_prompt, parent_id=self.task.id, metadata=metadata)
         child = self._runtime.delegate(child_task, parent=self, agent_type=agent_type)
         self.children.append(child)
         return child

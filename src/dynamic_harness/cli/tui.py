@@ -361,6 +361,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="dynamic-harness",
         description="Interactive TUI for the recursive agent harness.",
     )
+    parser.add_argument("-m", metavar="FILE", help="Read task prompt from file (bypasses TUI)")
     parser.add_argument("--no-llm", action="store_true", help="Run without an LLM")
     parser.add_argument("--temp", action="store_true", help="Use temporary directories (data lost between sessions)")
     parser.add_argument("--model", help="LLM model name")
@@ -374,6 +375,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     runtime = _build_runtime(args)
+
+    if args.m:
+        prompt = Path(args.m).read_text()
+        runner = AgentRunner(runtime)
+        runner.connect()
+        asyncio.run(runner.run(prompt))
+
+        for tag, summary in runner.last_reports:
+            print(f"\n=== Agent {tag} ===\n{summary}\n")
+
+        usage = runtime.total_usage()
+        print(f"Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}")
+        return
+
     app = TUI(runtime=runtime)
     app.run()
 

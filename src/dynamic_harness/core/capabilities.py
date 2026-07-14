@@ -141,8 +141,10 @@ TOOL_EDIT_DEF = ToolDef(
 TOOL_DELEGATE_DEF = ToolDef(
     name="delegate",
     description="Delegate a task to a sub-agent that handles it autonomously. "
-                "The sub-agent sees ONLY your description and role — nothing from "
-                "your parent. Returns the child's status, ID, report summary, "
+                "The sub-agent sees ONLY your description, role, and optional "
+                "system_prompt — nothing from your parent. "
+                "Use system_prompt to override the sub-agent's default behavior. "
+                "Returns the child's status, ID, report summary, "
                 "artifact IDs, and confidence (if set). For failed children, "
                 "returns the failure reason.",
     input_schema={
@@ -150,6 +152,7 @@ TOOL_DELEGATE_DEF = ToolDef(
         "properties": {
             "description": {"type": "string", "description": "Description of the task for the sub-agent"},
             "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.')"},
+            "system_prompt": {"type": "string", "description": "Optional custom system prompt for the sub-agent. Overrides the default agent behavior. Use for A/B testing different prompt strategies."},
         },
         "required": ["description"],
     },
@@ -343,8 +346,8 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
     return f"Replaced in {path}"
 
 
-async def _tool_delegate(*, agent: Agent, description: str, role: str | None = None) -> str:
-    child = agent.delegate(description, role=role)
+async def _tool_delegate(*, agent: Agent, description: str, role: str | None = None, system_prompt: str | None = None) -> str:
+    child = agent.delegate(description, role=role, system_prompt=system_prompt)
     await child.run()
 
     status = child.task.status.value
