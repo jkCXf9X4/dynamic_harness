@@ -65,7 +65,6 @@ class Runtime:
         self._task_graph[agent_id] = []
         if parent:
             self._task_graph.setdefault(parent.id, []).append(agent_id)
-            task.parent_id = parent.task.id
         task.status = TaskStatus.running
         return agent
 

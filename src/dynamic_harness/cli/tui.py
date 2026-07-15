@@ -112,7 +112,6 @@ class TUI(App[None]):
         self.runtime = runtime
         self._run_log: list[dict] = []
         self._current_agent_task: asyncio.Task | None = None
-        self._shutdown = asyncio.Event()
         self._root_agent: Agent | None = None
 
     def compose(self) -> ComposeResult:
@@ -219,7 +218,6 @@ class TUI(App[None]):
     async def _run_agent(self, description: str) -> None:
         agent_count_before = self.runtime.agent_count()
         runner = AgentRunner(self.runtime)
-        runner.connect()
 
         self.runtime.on_report(
             lambda aid, p: self.write_output(
@@ -232,13 +230,10 @@ class TUI(App[None]):
             )
         )
 
-        self._shutdown.clear()
         loop_task = asyncio.create_task(
             runner.run(
                 description,
                 root_agent=self._root_agent,
-                shutdown_event=self._shutdown,
-                on_update=lambda: None,
             )
         )
         self._current_agent_task = loop_task
@@ -337,7 +332,6 @@ class TUI(App[None]):
     def action_exit(self) -> None:
         if self._current_agent_task and not self._current_agent_task.done():
             self._current_agent_task.cancel()
-        self._shutdown.set()
         self.exit()
 
     def action_cancel(self) -> None:
@@ -379,7 +373,6 @@ def main() -> None:
     if args.m:
         prompt = Path(args.m).read_text()
         runner = AgentRunner(runtime)
-        runner.connect()
         asyncio.run(runner.run(prompt))
 
         for tag, summary in runner.last_reports:

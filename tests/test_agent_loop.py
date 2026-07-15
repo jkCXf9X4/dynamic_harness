@@ -21,7 +21,6 @@ def runtime() -> Runtime:
 @pytest.mark.asyncio
 async def test_runner_runs_agent_to_completion(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
-    runner.connect()
     await runner.run("test task")
     assert any("report done" in e for e in runner.events)
     assert len(runner.last_reports) >= 1
@@ -37,13 +36,12 @@ async def test_runner_tracks_events_and_reports(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
-    runner = AgentRunner(runtime)
-    runner.connect()
-    root = runtime.delegate(Task(description="test"), agent_type="LeafAgent")
-    await runner.run_root(root)
+    task = Task(description="test")
+    root = runtime.delegate(task, agent_type="LeafAgent")
+    await root.run()
 
-    assert any("report done" in e for e in runner.events)
-    assert any("Leaf" in summary for _, summary in runner.last_reports)
+    assert root._last_report is not None
+    assert "Leaf" in root._last_report.summary
 
 
 @pytest.mark.asyncio
@@ -53,12 +51,12 @@ async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
             self.fail("oops")
 
     runtime.register_agent_class("FailingAgent", FailingAgent)
-    runner = AgentRunner(runtime)
-    runner.connect()
-    root = runtime.delegate(Task(description="fail"), agent_type="FailingAgent")
-    await runner.run_root(root)
+    task = Task(description="fail")
+    root = runtime.delegate(task, agent_type="FailingAgent")
+    await root.run()
 
-    assert any("fail: oops" in e for e in runner.events)
+    assert root._last_failure is not None
+    assert "oops" in root._last_failure.error
     assert root.task.status.value == "failed"
 
 
@@ -66,7 +64,6 @@ async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
 async def test_runner_clear_events(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
     runner.events.append("stale event")
-    runner.connect()
     await runner.run("test", clear_events=True)
     assert "stale event" not in runner.events
     assert any("report done" in e for e in runner.events)
@@ -76,54 +73,34 @@ async def test_runner_clear_events(runtime: Runtime) -> None:
 async def test_runner_does_not_clear_events_when_false(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
     runner.events.append("stale event")
-    runner.connect()
     await runner.run("test", clear_events=False)
     assert "stale event" in runner.events
 
 
 @pytest.mark.asyncio
-async def test_runner_on_update_callback(runtime: Runtime) -> None:
-    call_count = 0
-
-    def on_update() -> None:
-        nonlocal call_count
-        call_count += 1
-
-    runner = AgentRunner(runtime)
-    runner.connect()
-    await runner.run("quick task", on_update=on_update)
-    assert call_count > 0
-
-
-@pytest.mark.asyncio
-async def test_runner_shutdown_event_stops_execution(runtime: Runtime) -> None:
+async def test_runner_cancel_via_task_cancellation(runtime: Runtime) -> None:
     class SlowAgent(Agent):
         async def run(self) -> None:
             for _ in range(100):
                 await asyncio.sleep(0.01)
 
     runtime.register_agent_class("SlowAgent", SlowAgent)
-    runner = AgentRunner(runtime)
-    runner.connect()
+    task = Task(description="slow")
+    root = runtime.delegate(task, agent_type="SlowAgent")
 
-    shutdown = asyncio.Event()
-    root = runtime.delegate(Task(description="slow"), agent_type="SlowAgent")
+    run_task = asyncio.ensure_future(root.run())
+    await asyncio.sleep(0.05)
+    run_task.cancel()
 
-    async def trigger_shutdown() -> None:
-        await asyncio.sleep(0.05)
-        shutdown.set()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
 
-    t1 = asyncio.ensure_future(trigger_shutdown())
-    t2 = asyncio.ensure_future(runner.run_root(root, shutdown_event=shutdown))
-    await asyncio.wait([t1, t2])
-
-    assert root.task.status.value == "running"  # was cancelled mid-execution
+    assert root.task.status.value == "running"
 
 
 @pytest.mark.asyncio
 async def test_runner_reuse_across_multiple_runs(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
-    runner.connect()
     await runner.run("first task")
 
     await runner.run("second task")

@@ -96,9 +96,37 @@ class AgentLoop(AgentRunner):
         layout.add_row(self._make_events())
         return layout
 
-    async def run(self, description: str, *, clear_events: bool = True, task_description_limit: int = 50, shutdown_event: asyncio.Event | None = None, live_display: bool = True) -> None:
+    async def run(
+        self,
+        description: str,
+        *,
+        clear_events: bool = True,
+        task_description_limit: int = 50,
+        shutdown_event: asyncio.Event | None = None,
+        live_display: bool = True,
+    ) -> None:
+        async def _run_inner() -> None:
+            await super().run(description, clear_events=clear_events)
+
         if live_display:
             with Live(self._render, refresh_per_second=4, console=self.console) as live:
-                await super().run(description, clear_events=clear_events, shutdown_event=shutdown_event, on_update=lambda: live.update(self._render()))
+                run_task = asyncio.create_task(_run_inner())
+                while not run_task.done():
+                    if shutdown_event and shutdown_event.is_set():
+                        run_task.cancel()
+                        break
+                    live.update(self._render())
+                    await asyncio.sleep(0.25)
+                await run_task
+        elif shutdown_event:
+            run_task = asyncio.create_task(_run_inner())
+            shutdown_task = asyncio.create_task(shutdown_event.wait())
+            done, pending = await asyncio.wait(
+                [run_task, shutdown_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if shutdown_task in done:
+                run_task.cancel()
+            await run_task
         else:
-            await super().run(description, clear_events=clear_events, shutdown_event=shutdown_event)
+            await _run_inner()
