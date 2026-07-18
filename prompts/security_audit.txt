@@ -1,0 +1,6 @@
+Perform a security audit of the authentication module.
+Decompose into three sub-tasks:
+1. Audit JWT token validation
+2. Audit password hashing
+3. Audit session management
+After all children report, synthesize findings into a single report with technical details.

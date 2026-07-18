@@ -1,0 +1,3 @@
+Produce an inventory of all Python files in the current directory tree.
+Count them, categorize them into source files and test files, and report your findings.
+Since this is a narrow task, execute it directly without delegation.

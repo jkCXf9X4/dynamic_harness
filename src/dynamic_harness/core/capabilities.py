@@ -162,7 +162,8 @@ TOOL_REPORT_DEF = ToolDef(
     name="report",
     description="Report final results to parent agent and complete this agent's work. "
                 "Include a concrete summary of findings, artifact_ids referencing any "
-                "files written, and optionally a confidence score (0.0–1.0).",
+                "files written, optionally a technical analysis and full report, and "
+                "optionally a confidence score (0.0–1.0).",
     input_schema={
         "type": "object",
         "properties": {
@@ -171,6 +172,14 @@ TOOL_REPORT_DEF = ToolDef(
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Artifact IDs to attach",
+            },
+            "technical_summary": {
+                "type": "string",
+                "description": "Optional detailed technical analysis of findings",
+            },
+            "full_report": {
+                "type": "string",
+                "description": "Optional complete report with full detail",
             },
             "confidence": {
                 "type": "number",
@@ -367,12 +376,14 @@ async def _tool_delegate(*, agent: Agent, description: str, role: str | None = N
     return "\n".join(lines)
 
 
-async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, confidence: float | None = None) -> str:
+async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
     agent.report(ReportPayload(
         task_id=agent.task.id,
         summary=summary,
         artifact_ids=artifact_ids or [],
         confidence=confidence,
+        technical_summary=technical_summary,
+        full_report=full_report,
     ))
     return f"Reported: {summary[:100]}"
 

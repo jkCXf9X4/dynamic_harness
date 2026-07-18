@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -45,6 +46,16 @@ class ArtifactStore:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self._artifacts: dict[str, Artifact] = {}
+        self._load_existing()
+
+    def _load_existing(self) -> None:
+        for p in self.root.glob("*/artifact.json"):
+            try:
+                data = p.read_text()
+                art = Artifact.model_validate_json(data)
+                self._artifacts[art.id] = art
+            except Exception:
+                pass
 
     def _artifact_dir(self, artifact_id: str) -> Path:
         d = self.root / artifact_id
@@ -74,3 +85,6 @@ class ArtifactStore:
 
     def clear(self) -> None:
         self._artifacts.clear()
+        for child in self.root.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)

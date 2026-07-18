@@ -35,6 +35,8 @@ class DelegateRequest(BaseModel):
 class ReportPayload(BaseModel):
     task_id: str
     summary: str
+    technical_summary: str | None = None
+    full_report: str | None = None
     confidence: float | None = None
     claims: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)

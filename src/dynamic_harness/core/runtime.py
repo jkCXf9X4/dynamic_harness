@@ -74,10 +74,17 @@ class Runtime:
             return
         agent.task.status = TaskStatus.completed
 
+        summary = payload.summary or ""
+        lines = summary.split("\n", 1)
+        headline = lines[0].strip()[:200]
+        headline = headline.strip()[:200]
+
         view = ArtifactView(
-            headline=payload.summary[:200] if payload.summary else "",
-            summary_200=payload.summary[:200],
-            summary_1000=payload.summary[:1000],
+            headline=headline,
+            summary_200=summary[:200],
+            summary_1000=summary[:1000] if len(summary) > 200 else "",
+            technical=payload.technical_summary or "",
+            full_report=payload.full_report or "",
         )
         artifact = Artifact(task_id=agent.task.id, agent_id=agent_id, views=view)
         self.artifact_store.save(artifact)

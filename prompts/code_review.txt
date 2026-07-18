@@ -1,0 +1,7 @@
+Review the codebase for best practices and anti-patterns.
+Delegate sub-agents for:
+1. Type safety review
+2. Error handling review
+3. Performance analysis
+Each sub-agent should write findings to disk and include file paths in their report.
+Verify all child outputs before synthesizing your final report.

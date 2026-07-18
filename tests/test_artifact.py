@@ -64,3 +64,27 @@ def test_list_files(store: ArtifactStore) -> None:
     names = {f.name for f in files}
     assert "report.md" in names
     assert "data.json" in names
+
+
+def test_persistence_across_instances() -> None:
+    tmp = Path(tempfile.mkdtemp())
+    store1 = ArtifactStore(tmp)
+    art = Artifact(task_id="task1", agent_id="agent1", views=ArtifactView(headline="Persisted"))
+    store1.save(art)
+
+    store2 = ArtifactStore(tmp)
+    loaded = store2.get(art.id)
+    assert loaded is not None
+    assert loaded.views.headline == "Persisted"
+
+
+def test_clear_removes_disk_artifacts(store: ArtifactStore) -> None:
+    art = Artifact(task_id="task1", agent_id="agent1")
+    store.save(art)
+    artifact_dir = store._artifact_dir(art.id)
+    assert artifact_dir.exists()
+
+    store.clear()
+
+    assert not artifact_dir.exists()
+    assert store.get(art.id) is None
