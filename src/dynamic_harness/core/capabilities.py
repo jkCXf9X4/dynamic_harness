@@ -13,7 +13,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from .agent import Agent
 
-from .task import Failure, ReportPayload, TaskStatus
+from .task import Failure, ReportPayload, TaskStatus, ActivityEvent, ActivityEventType
 
 
 ToolFunc = Callable[..., Awaitable[str]]
@@ -357,9 +357,26 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
 
 async def _tool_delegate(*, agent: Agent, description: str, role: str | None = None, system_prompt: str | None = None) -> str:
     child = agent.delegate(description, role=role, system_prompt=system_prompt)
+    agent._runtime.emit_activity(ActivityEvent(
+        agent_id=agent.id,
+        event_type=ActivityEventType.DELEGATION_START,
+        data={
+            "child_id": child.id,
+            "description": description[:200],
+            "role": role,
+        },
+    ))
     await child.run()
 
     status = child.task.status.value
+    agent._runtime.emit_activity(ActivityEvent(
+        agent_id=agent.id,
+        event_type=ActivityEventType.DELEGATION_END,
+        data={
+            "child_id": child.id,
+            "status": status,
+        },
+    ))
     lines = [f"Delegated to agent {child.id}. Status: {status}"]
 
     if child._last_report:
@@ -490,6 +507,15 @@ async def _tool_compress(*, agent: Agent) -> str:
     ]
     after = len(agent._messages)
     saved = before - after
+    agent._runtime.emit_activity(ActivityEvent(
+        agent_id=agent.id,
+        event_type=ActivityEventType.COMPRESSION,
+        data={
+            "before": before,
+            "after": after,
+            "saved": saved,
+        },
+    ))
     return f"Compressed: {before} messages -> {after} messages ({saved} removed).\nSummary: {summary[:200]}..."
 
 

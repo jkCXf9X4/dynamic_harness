@@ -9,7 +9,7 @@ from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
 from .agent import Agent
 from .capabilities import ToolRegistry, register_default_tools
-from .task import BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
+from .task import BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus, ActivityEvent
 from .trace import TraceStore
 
 if TYPE_CHECKING:
@@ -40,6 +40,7 @@ class Runtime:
         self._budget_handlers: list[Callable[[str, BudgetRequest], None]] = []
         self._escalation_handlers: list[Callable[[str, Escalation], None]] = []
         self._failure_handlers: list[Callable[[str, Failure], None]] = []
+        self._activity_handlers: list[Callable[[ActivityEvent], None]] = []
 
         self.tool_registry = ToolRegistry()
         register_default_tools(self.tool_registry)
@@ -131,6 +132,13 @@ class Runtime:
     def on_failure(self, handler: Callable[[str, Failure], None]) -> None:
         self._failure_handlers.append(handler)
 
+    def on_activity(self, handler: Callable[[ActivityEvent], None]) -> None:
+        self._activity_handlers.append(handler)
+
+    def emit_activity(self, event: ActivityEvent) -> None:
+        for h in self._activity_handlers:
+            h(event)
+
     def get_agent(self, agent_id: str) -> Agent | None:
         return self._agents.get(agent_id)
 
@@ -171,3 +179,4 @@ class Runtime:
         self._budget_handlers.clear()
         self._escalation_handlers.clear()
         self._failure_handlers.clear()
+        self._activity_handlers.clear()

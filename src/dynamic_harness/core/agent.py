@@ -5,6 +5,8 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from .task import (
+    ActivityEvent,
+    ActivityEventType,
     BudgetRequest,
     Escalation,
     Failure,
@@ -284,6 +286,15 @@ class Agent:
         while True:
             self._iteration += 1
             if self._iteration > self._safety_max_iterations:
+                self._runtime.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.SAFETY_WARNING,
+                    data={
+                        "warning_type": "max_iterations",
+                        "iteration": self._iteration,
+                        "limit": self._safety_max_iterations,
+                    },
+                ))
                 self.fail(f"Safety limit reached ({self._safety_max_iterations} iterations)")
                 return
 
@@ -298,6 +309,16 @@ class Agent:
                 f"Your task: {self.task.description}\n"
             )
             self._messages.append({"role": "system", "content": context_obs})
+
+            self._runtime.emit_activity(ActivityEvent(
+                agent_id=self.id,
+                event_type=ActivityEventType.ITERATION,
+                data={
+                    "turn": self._iteration,
+                    "messages": len(self._messages),
+                    "prompt_tokens": prompt_tokens,
+                },
+            ))
 
             response = await llm.generate_with_tools(self._messages, tools)
 
@@ -314,6 +335,16 @@ class Agent:
                 ts.record_llm_request(self.id, list(self._messages))
 
             if response.tool_calls:
+                self._runtime.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.LLM_CALL_END,
+                    data={
+                        "model": response.model,
+                        "prompt_tokens": response.usage.get("prompt_tokens", 0) if response.usage else 0,
+                        "completion_tokens": response.usage.get("completion_tokens", 0) if response.usage else 0,
+                        "tool_calls": [tc.name for tc in response.tool_calls],
+                    },
+                ))
                 assistant_msg: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
                 assistant_msg["tool_calls"] = []
                 results: list[dict[str, Any]] = []
@@ -338,6 +369,14 @@ class Agent:
                     ts.record_llm_response(self.id, response.content, response.model, response.usage, tc_info)
 
                 for tc in response.tool_calls:
+                    self._runtime.emit_activity(ActivityEvent(
+                        agent_id=self.id,
+                        event_type=ActivityEventType.TOOL_CALL_START,
+                        data={
+                            "tool_name": tc.name,
+                            "arguments": tc.arguments,
+                        },
+                    ))
                     if ts:
                         ts.record_tool_call(self.id, tc.id, tc.name, tc.arguments)
                     result = await self._runtime.tool_registry.execute(
@@ -345,6 +384,15 @@ class Agent:
                     )
                     if ts:
                         ts.record_tool_result(self.id, tc.id, tc.name, result.content)
+                    self._runtime.emit_activity(ActivityEvent(
+                        agent_id=self.id,
+                        event_type=ActivityEventType.TOOL_CALL_END,
+                        data={
+                            "tool_name": tc.name,
+                            "result_length": len(result.content),
+                            "result_preview": result.content[:200],
+                        },
+                    ))
                     results.append({
                         "role": "tool",
                         "tool_call_id": result.tool_call_id,
@@ -370,12 +418,31 @@ class Agent:
                     len(self._recent_batches) == self.repeated_call_limit
                     and all(sig == batch_sig for sig in self._recent_batches)
                 ):
+                    self._runtime.emit_activity(ActivityEvent(
+                        agent_id=self.id,
+                        event_type=ActivityEventType.SAFETY_WARNING,
+                        data={
+                            "warning_type": "repeated_calls",
+                            "tool_name": response.tool_calls[0].name,
+                            "repeated_count": self.repeated_call_limit,
+                        },
+                    ))
                     self.fail(
                         f"Repeated identical tool calls {self.repeated_call_limit} times in a row "
                         f"(tool: {response.tool_calls[0].name}). The provider may be stuck."
                     )
                     return
             else:
+                self._runtime.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.LLM_CALL_END,
+                    data={
+                        "model": response.model,
+                        "prompt_tokens": response.usage.get("prompt_tokens", 0) if response.usage else 0,
+                        "completion_tokens": response.usage.get("completion_tokens", 0) if response.usage else 0,
+                        "tool_calls": [],
+                    },
+                ))
                 if ts:
                     ts.record_llm_response(self.id, response.content, response.model, response.usage)
                 content = response.content or ""

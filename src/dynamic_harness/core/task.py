@@ -61,3 +61,22 @@ class Failure(BaseModel):
     task_id: str
     error: str
     trace: str | None = None
+
+
+class ActivityEventType(str, Enum):
+    TOOL_CALL_START = "tool_call_start"
+    TOOL_CALL_END = "tool_call_end"
+    LLM_CALL_START = "llm_call_start"
+    LLM_CALL_END = "llm_call_end"
+    DELEGATION_START = "delegation_start"
+    DELEGATION_END = "delegation_end"
+    COMPRESSION = "compression"
+    SAFETY_WARNING = "safety_warning"
+    ITERATION = "iteration"
+
+
+class ActivityEvent(BaseModel):
+    agent_id: str
+    event_type: ActivityEventType
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    data: dict[str, Any] = Field(default_factory=dict)

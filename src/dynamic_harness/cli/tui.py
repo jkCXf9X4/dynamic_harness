@@ -15,6 +15,7 @@ from textual.widgets import Input, RichLog, Tree
 from ..core.agent import Agent
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
+from ..core.task import ActivityEvent, ActivityEventType
 from .common import build_runtime, workspace_dir
 
 COMMANDS = {
@@ -25,6 +26,8 @@ COMMANDS = {
     "/reset": "Reset runtime (clear agents and task graph)",
     "/kill": "Kill the currently running agent immediately",
     "/new": "Start a fresh conversation (new root agent, preserves history)",
+    "/verbose": "Show activity events (tool calls, delegations, LLM calls)",
+    "/quiet": "Hide activity events — only show reports and failures",
     "exit": "Exit the TUI",
     "quit": "Exit the TUI",
 }
@@ -35,6 +38,7 @@ STYLES: dict[str, Style] = {
     "output-error": Style(color="#ff5555"),
     "output-event": Style(color="#55bbff"),
     "output-prompt": Style(bold=True, color="#ffffff"),
+    "output-activity": Style(color="#8888aa", dim=True),
 }
 
 STATUS_COLORS = {
@@ -110,6 +114,7 @@ class TUI(App[None]):
     def __init__(self, runtime: Runtime, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.runtime = runtime
+        self._verbose: bool = True
         self._run_log: list[dict] = []
         self._current_agent_task: asyncio.Task | None = None
         self._root_agent: Agent | None = None
@@ -127,6 +132,54 @@ class TUI(App[None]):
     def write_output(self, style_name: str, text: str) -> None:
         style = STYLES.get(style_name, Style())
         self.query_one("#output", RichLog).write(RichText(text, style=style))
+
+    def _format_activity(self, event: ActivityEvent) -> str | None:
+        eid = event.agent_id[:8]
+        d = event.data
+        et = event.event_type
+
+        if et == ActivityEventType.TOOL_CALL_START:
+            name = d.get("tool_name", "?")
+            args = d.get("arguments", {})
+            arg_str = ", ".join(f"{k}={str(v)[:30]}" for k, v in args.items())
+            return f"  [{eid}] 🔧 {name}({arg_str})\n"
+        elif et == ActivityEventType.TOOL_CALL_END:
+            name = d.get("tool_name", "?")
+            rlen = d.get("result_length", 0)
+            return f"  [{eid}] ✅ {name} → {rlen} bytes\n"
+        elif et == ActivityEventType.LLM_CALL_END:
+            tc = d.get("tool_calls", [])
+            pt = d.get("prompt_tokens", 0)
+            ct = d.get("completion_tokens", 0)
+            tc_str = ", ".join(tc) if tc else "text-only"
+            return f"  [{eid}] 💬 LLM → {tc_str} ({pt}+{ct} tokens)\n"
+        elif et == ActivityEventType.DELEGATION_START:
+            child = d.get("child_id", "?")[:8]
+            desc = (d.get("description", "") or "")[:60]
+            return f"  [{eid}] 👶 delegate → {child} \"{desc}\"\n"
+        elif et == ActivityEventType.DELEGATION_END:
+            child = d.get("child_id", "?")[:8]
+            status = d.get("status", "?")
+            return f"  [{eid}] 👶 {child} → {status}\n"
+        elif et == ActivityEventType.COMPRESSION:
+            before = d.get("before", 0)
+            after = d.get("after", 0)
+            saved = d.get("saved", 0)
+            return f"  [{eid}] 🔄 compressed {before}→{after} msgs (-{saved})\n"
+        elif et == ActivityEventType.SAFETY_WARNING:
+            wtype = d.get("warning_type", "")
+            if wtype == "max_iterations":
+                return f"  [{eid}] ⚠️ max iterations ({d.get('iteration', 0)}/{d.get('limit', 0)})\n"
+            return f"  [{eid}] ⚠️ repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})\n"
+        elif et == ActivityEventType.ITERATION:
+            return None
+
+    def _on_activity(self, event: ActivityEvent) -> None:
+        if not self._verbose:
+            return
+        text = self._format_activity(event)
+        if text:
+            self.write_output("output-activity", text)
 
     @on(Input.Submitted, "#input")
     async def on_input(self, event: Input.Submitted) -> None:
@@ -187,6 +240,14 @@ class TUI(App[None]):
             else:
                 self.write_output("output-label", "No agent running.\n")
 
+        elif cmd == "/verbose":
+            self._verbose = True
+            self.write_output("output-label", "Activity events shown.\n")
+
+        elif cmd == "/quiet":
+            self._verbose = False
+            self.write_output("output-label", "Activity events hidden. Use /verbose to show.\n")
+
         elif cmd == "/tree":
             g = self.runtime.task_graph()
             agents = self.runtime._agents
@@ -228,6 +289,10 @@ class TUI(App[None]):
             lambda aid, f: self.write_output(
                 "output-error", f"\u2717 {aid[:8]} fail: {f.error}\n"
             )
+        )
+
+        self.runtime.on_activity(
+            lambda e: self._on_activity(e)
         )
 
         loop_task = asyncio.create_task(

@@ -15,6 +15,7 @@ from ..core.agent import Agent
 from ..core.runner import AgentRunner
 from ..core.capabilities import TOOL_ASK_DEF
 from ..core.runtime import Runtime
+from ..core.task import ActivityEvent, ActivityEventType
 
 if TYPE_CHECKING:
     from ..core.task import Failure, ReportPayload
@@ -34,6 +35,44 @@ class AgentLoop(AgentRunner):
     def __init__(self, console: Console, runtime: Runtime) -> None:
         super().__init__(runtime)
         self.console = console
+
+        runtime.on_activity(lambda e: self._on_activity(e))
+
+    def _format_activity(self, event: ActivityEvent) -> str | None:
+        eid = event.agent_id[:8]
+        d = event.data
+        et = event.event_type
+
+        if et == ActivityEventType.TOOL_CALL_START:
+            name = d.get("tool_name", "?")
+            return f"  [{eid}] {name}()"
+        elif et == ActivityEventType.TOOL_CALL_END:
+            name = d.get("tool_name", "?")
+            return f"  [{eid}] {name}() done"
+        elif et == ActivityEventType.LLM_CALL_END:
+            tc = d.get("tool_calls", [])
+            return f"  [{eid}] LLM → {', '.join(tc) if tc else 'text'}"
+        elif et == ActivityEventType.DELEGATION_START:
+            child = d.get("child_id", "?")[:8]
+            return f"  [{eid}] delegate → {child}"
+        elif et == ActivityEventType.DELEGATION_END:
+            child = d.get("child_id", "?")[:8]
+            status = d.get("status", "?")
+            return f"  [{eid}] {child} → {status}"
+        elif et == ActivityEventType.COMPRESSION:
+            saved = d.get("saved", 0)
+            return f"  [{eid}] compressed (-{saved} msgs)"
+        elif et == ActivityEventType.SAFETY_WARNING:
+            wtype = d.get("warning_type", "")
+            return f"  [{eid}] ⚠ {wtype}"
+        elif et == ActivityEventType.ITERATION:
+            return None
+        return None
+
+    def _on_activity(self, event: ActivityEvent) -> None:
+        text = self._format_activity(event)
+        if text:
+            self.events.append(text)
 
     def _make_tree(self, task_description_limit: int = 50) -> Tree:
         tree = Tree(":robot: [bold]Agent Tree[/]")
