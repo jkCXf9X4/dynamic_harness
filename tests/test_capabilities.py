@@ -100,3 +100,69 @@ def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
 def test_default_tools_all_fifteen(runtime: Runtime) -> None:
     expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "converse", "read_artifact"}
     assert set(runtime.tool_registry.list_tools()) == expected
+
+
+@pytest.mark.asyncio
+async def test_glob_skips_hidden_files(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    (tmp_path / "visible.txt").write_text("visible")
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "secret.txt").write_text("secret")
+    result = await runtime.tool_registry.execute("glob", "tc1", agent=agent, pattern=str(tmp_path / "**/*"))
+    assert "visible.txt" in result.content
+    assert ".hidden" not in result.content
+    assert "secret.txt" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_glob_skips_dotfiles(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    (tmp_path / "visible.txt").write_text("visible")
+    (tmp_path / ".dotfile").write_text("dot")
+    result = await runtime.tool_registry.execute("glob", "tc1", agent=agent, pattern=str(tmp_path / "*"))
+    assert "visible.txt" in result.content
+    assert ".dotfile" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_glob_skips_deeply_nested_hidden(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    nested_dir = tmp_path / "a" / "b" / ".hidden" / "c"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "deep.txt").write_text("deep")
+    (tmp_path / "a" / "visible.txt").write_text("visible")
+    result = await runtime.tool_registry.execute("glob", "tc1", agent=agent, pattern=str(tmp_path / "**/*"))
+    assert "visible.txt" in result.content
+    assert ".hidden" not in result.content
+    assert "deep.txt" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_grep_skips_hidden_files(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    (tmp_path / "visible.txt").write_text("needle")
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "secret.txt").write_text("needle")
+    result = await runtime.tool_registry.execute("grep", "tc1", agent=agent, pattern="needle", path=str(tmp_path))
+    assert "visible.txt" in result.content
+    assert ".hidden" not in result.content
+    assert "secret.txt" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_grep_skips_dotfiles(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    (tmp_path / "visible.txt").write_text("needle")
+    (tmp_path / ".dotfile").write_text("needle")
+    result = await runtime.tool_registry.execute("grep", "tc1", agent=agent, pattern="needle", path=str(tmp_path))
+    assert "visible.txt" in result.content
+    assert ".dotfile" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_grep_finds_nothing_in_all_hidden(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "secret.txt").write_text("needle")
+    result = await runtime.tool_registry.execute("grep", "tc1", agent=agent, pattern="needle", path=str(tmp_path))
+    assert result.content == "No matches found"

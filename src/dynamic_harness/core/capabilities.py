@@ -311,6 +311,14 @@ async def _tool_write(*, agent: Agent, path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {path}"
 
 
+def _is_hidden(path: str | Path) -> bool:
+    p = Path(path)
+    for part in p.parts:
+        if part.startswith("."):
+            return True
+    return False
+
+
 def _build_gitignore_filter() -> Callable[[str], bool]:
     gitignore = Path.cwd() / ".gitignore"
     if not gitignore.exists():
@@ -333,10 +341,11 @@ def _build_gitignore_filter() -> Callable[[str], bool]:
 async def _tool_glob(*, agent: Agent, pattern: str) -> str:
     matches = _glob.glob(pattern, recursive=True)
     _filter = _build_gitignore_filter()
-    filtered = [m for m in matches if not _filter(m)]
+    filtered = [m for m in matches if not _filter(m) and not _is_hidden(m)]
     if filtered:
         return _json.dumps(sorted(filtered), indent=2)
-    return _json.dumps(sorted(matches), indent=2)
+    visible = [m for m in matches if not _is_hidden(m)]
+    return _json.dumps(sorted(visible), indent=2)
 
 
 async def _tool_webfetch(*, agent: Agent, url: str) -> str:
@@ -441,6 +450,8 @@ async def _tool_grep(*, agent: Agent, pattern: str, include: str | None = None, 
     matches: list[str] = []
     for f in search_path.rglob(include or "*"):
         if not f.is_file():
+            continue
+        if _is_hidden(f):
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
