@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 
+from ..config import HarnessConfig, load_harness_config, merge_api_key
 from ..core.runtime import Runtime
 from ..llm.openai_provider import OpenAIProvider
 
@@ -40,7 +41,14 @@ def build_runtime(
         base.mkdir(parents=True, exist_ok=True)
         artifact_root.mkdir(parents=True, exist_ok=True)
         repo_root.mkdir(parents=True, exist_ok=True)
-    rt = Runtime(artifact_root=artifact_root, repo_root=repo_root, trace_root=trace_root)
+
+    config = load_harness_config(getattr(args, "config", None))
+    rt = Runtime(
+        artifact_root=artifact_root,
+        repo_root=repo_root,
+        trace_root=trace_root,
+        config=config,
+    )
 
     if register_handlers:
         if on_report:
@@ -50,10 +58,17 @@ def build_runtime(
 
     if not args.no_llm:
         load_dotenv()
-        api_key = args.api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        api_key = args.api_key or merge_api_key()
         if api_key:
-            model = args.model or os.environ.get("LLM_MODEL", "deepseek/deepseek-v4-flash")
-            base_url = args.base_url or os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
-            llm = OpenAIProvider(model=model, base_url=base_url, api_key=api_key, verify_ssl=False)
+            model = args.model or config.llm.model
+            base_url = args.base_url or config.llm.base_url
+            llm = OpenAIProvider(
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+                verify_ssl=False,
+                provider_ignore=config.llm.provider_ignore or None,
+                provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
+            )
             rt.set_llm(llm)
     return rt

@@ -24,6 +24,8 @@ class OpenAIProvider(LLMProvider):
         base_url: str | None = None,
         api_key: str | None = None,
         verify_ssl: bool = True,
+        provider_ignore: list[str] | None = None,
+        provider_allow_fallbacks: bool = True,
     ) -> None:
         http_client = httpx.AsyncClient(verify=verify_ssl)
         self.client = AsyncOpenAI(
@@ -32,6 +34,21 @@ class OpenAIProvider(LLMProvider):
             http_client=http_client,
         )
         self.default_model = model
+        self._provider_ignore = provider_ignore or []
+        self._provider_allow_fallbacks = provider_allow_fallbacks
+
+    def _build_extra_body(self, cfg: LLMConfig) -> dict | None:
+        ignore = cfg.provider_ignore or self._provider_ignore
+        if not ignore:
+            return None
+        return {
+            "provider": {
+                "ignore": ignore,
+                "allow_fallbacks": cfg.provider_allow_fallbacks
+                if cfg.provider_ignore
+                else self._provider_allow_fallbacks,
+            }
+        }
 
     async def generate(self, system: str, user: str, config: LLMConfig | None = None) -> LLMResponse:
         cfg = config or LLMConfig(model=self.default_model)
@@ -43,6 +60,9 @@ class OpenAIProvider(LLMProvider):
                 {"role": "user", "content": user},
             ],
         )
+        extra = self._build_extra_body(cfg)
+        if extra:
+            kwargs["extra_body"] = extra
         if cfg.max_tokens is not None:
             kwargs["max_tokens"] = cfg.max_tokens
         resp = await self.client.chat.completions.create(**kwargs)
@@ -65,6 +85,9 @@ class OpenAIProvider(LLMProvider):
             temperature=cfg.temperature,
             messages=messages,
         )
+        extra = self._build_extra_body(cfg)
+        if extra:
+            kwargs["extra_body"] = extra
         if cfg.max_tokens is not None:
             kwargs["max_tokens"] = cfg.max_tokens
         if tools:
@@ -117,6 +140,9 @@ class OpenAIProvider(LLMProvider):
             ],
             response_format=response_model,
         )
+        extra = self._build_extra_body(cfg)
+        if extra:
+            kwargs["extra_body"] = extra
         if cfg.max_tokens is not None:
             kwargs["max_tokens"] = cfg.max_tokens
         try:

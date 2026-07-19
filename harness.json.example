@@ -1,0 +1,12 @@
+{
+  "llm": {
+    "model": "deepseek/deepseek-v4-flash",
+    "base_url": "https://openrouter.ai/api/v1",
+    "provider_ignore": [],
+    "provider_allow_fallbacks": true
+  },
+  "safety": {
+    "max_iterations": 500,
+    "repeated_call_limit": 5
+  }
+}

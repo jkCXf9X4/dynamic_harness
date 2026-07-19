@@ -31,6 +31,7 @@ Runtime(
     repo_root: Path,              # Directory for commit repository
     trace_root: Path | None = None,     # Optional: directory for JSONL traces
     generated_root: Path | None = None,  # Optional: directory for generated outputs
+    config: HarnessConfig | None = None, # Optional: safety + LLM configuration
 )
 ```
 

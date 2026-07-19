@@ -13,6 +13,7 @@ from .task import BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskS
 from .trace import TraceStore
 
 if TYPE_CHECKING:
+    from ..config import HarnessConfig
     from ..llm.provider import LLMProvider
 
 
@@ -23,6 +24,7 @@ class Runtime:
         repo_root: Path,
         trace_root: Path | None = None,
         generated_root: Path | None = None,
+        config: HarnessConfig | None = None,
     ) -> None:
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
@@ -35,6 +37,8 @@ class Runtime:
         self._agent_registry: dict[str, type[Agent]] = {}
         self._agent_usage: dict[str, dict] = {}
         self._llm: LLMProvider | None = None
+        self._safety_max_iterations = config.safety.max_iterations if config else 500
+        self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
 
         self._report_handlers: list[Callable[[str, ReportPayload], None]] = []
         self._budget_handlers: list[Callable[[str, BudgetRequest], None]] = []
@@ -59,9 +63,9 @@ class Runtime:
         agent_id = uuid4().hex[:12]
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
-            agent = cls(agent_id, task, self, parent)
+            agent = cls(agent_id, task, self, parent, safety_max_iterations=self._safety_max_iterations, repeated_call_limit=self._repeated_call_limit)
         else:
-            agent = Agent(agent_id, task, self, parent)
+            agent = Agent(agent_id, task, self, parent, safety_max_iterations=self._safety_max_iterations, repeated_call_limit=self._repeated_call_limit)
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:

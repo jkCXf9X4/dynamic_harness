@@ -35,19 +35,48 @@ pip install -e .
 
 ## Environment Setup
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (secrets only):
 
 ```bash
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
-LLM_MODEL=deepseek/deepseek-v4-flash
-LLM_BASE_URL=https://openrouter.ai/api/v1
 ```
+
+Configurable settings (model, base URL, provider blacklist, safety limits) are managed
+in a separate `harness.json` file. Copy the template:
+
+```bash
+cp harness.json.example harness.json
+```
+
+Edit as needed:
+
+```json
+{
+  "llm": {
+    "model": "deepseek/deepseek-v4-pro",
+    "base_url": "https://openrouter.ai/api/v1",
+    "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
+    "provider_allow_fallbacks": false
+  },
+  "safety": {
+    "max_iterations": 500,
+    "repeated_call_limit": 5
+  }
+}
+```
+
+The config file is discovered automatically from `./harness.json` (CWD),
+`~/.config/dynamic-harness/harness.json` (XDG user-global), or explicitly via
+`--config path/to/harness.json`. If no file is found, defaults are used.
 
 For OpenAI directly:
 
 ```bash
+# .env
 OPENAI_API_KEY=sk-your-key-here
-LLM_MODEL=gpt-4o
+
+# harness.json
+{"llm": {"model": "gpt-4o", "base_url": "https://api.openai.com/v1"}}
 ```
 
 ## Your First Task
@@ -131,6 +160,9 @@ Root (analyze codebase)
 
 ### "No API key" error
 Ensure `.env` has `OPENROUTER_API_KEY` or `OPENAI_API_KEY`, or pass `--api-key` on the command line.
+
+### Missing harness.json
+Copy `harness.json.example` to `harness.json` and edit to your needs. Without it, sensible defaults are used (deepseek-v4-flash on OpenRouter).
 
 ### Agent runs forever
 If an agent exceeds 500 turns or makes 5 identical tool calls, it's force-failed. The task was likely too broad — try decomposing it into smaller pieces.

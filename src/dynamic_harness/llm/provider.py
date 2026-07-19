@@ -10,6 +10,8 @@ class LLMConfig:
     model: str = "gpt-4o"
     temperature: float = 0.0
     max_tokens: int | None = None
+    provider_ignore: list[str] = field(default_factory=list)
+    provider_allow_fallbacks: bool = True
 
 
 @dataclass

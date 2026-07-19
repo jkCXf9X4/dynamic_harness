@@ -161,6 +161,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Config (secrets/nuanced settings — use harness.json.example as template)
+harness.json
+
 # Spyder project settings
 .spyderproject
 .spyproject

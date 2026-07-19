@@ -421,6 +421,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Interactive TUI for the recursive agent harness.",
     )
     parser.add_argument("-m", metavar="FILE", help="Read task prompt from file (bypasses TUI)")
+    parser.add_argument("--config", help="Path to harness.json config file")
     parser.add_argument("--no-llm", action="store_true", help="Run without an LLM")
     parser.add_argument("--temp", action="store_true", help="Use temporary directories (data lost between sessions)")
     parser.add_argument("--model", help="LLM model name")

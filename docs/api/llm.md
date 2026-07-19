@@ -37,6 +37,8 @@ class LLMConfig:
     model: str = "gpt-4o"
     temperature: float = 0.0
     max_tokens: int | None = None
+    provider_ignore: list[str] = field(default_factory=list)
+    provider_allow_fallbacks: bool = True
 ```
 
 ### `LLMResponse` (simple generation)
@@ -132,28 +134,43 @@ OpenAIProvider(
     base_url: str | None = None,           # Default: https://api.openai.com/v1
     temperature: float = 0.0,
     max_tokens: int | None = None,
-    config: LLMConfig | None = None,       # Override with config object
+    verify_ssl: bool = True,
+    provider_ignore: list[str] | None = None,    # OpenRouter providers to exclude
+    provider_allow_fallbacks: bool = True,       # Allow OpenRouter fallback routing
 )
 ```
 
 Supports both OpenAI and OpenRouter endpoints. For OpenRouter, set `base_url="https://openrouter.ai/api/v1"`.
 
-### Configuration Precedence
+### Configuration
 
-```
-Constructor args > config object > defaults
-```
+Configuration is split into two files:
 
-### Environment Variables
-
-The CLI loads these via `python-dotenv`:
-
+**`.env`** — secrets only:
 ```bash
 OPENROUTER_API_KEY=sk-or-v1-your-key    # Primary key
 OPENAI_API_KEY=sk-...                   # Fallback key
-LLM_MODEL=deepseek/deepseek-v4-flash    # Model override
-LLM_BASE_URL=https://openrouter.ai/api/v1  # Base URL override
 ```
+
+**`harness.json`** — structured settings:
+```json
+{
+  "llm": {
+    "model": "deepseek/deepseek-v4-pro",
+    "base_url": "https://openrouter.ai/api/v1",
+    "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
+    "provider_allow_fallbacks": false
+  },
+  "safety": {
+    "max_iterations": 500,
+    "repeated_call_limit": 5
+  }
+}
+```
+
+**Discovery order**: `--config` flag → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults.
+
+**Precedence**: CLI args (`--model`, `--base-url`, `--api-key`) → `harness.json` → built-in defaults.
 
 ## Creating a Custom Provider
 
