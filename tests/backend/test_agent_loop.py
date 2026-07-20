@@ -14,8 +14,8 @@ from dynamic_harness.core.task import ReportPayload, Task
 async def test_runner_runs_agent_to_completion(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
     await runner.run("test task")
-    assert any("report done" in e for e in runner.events)
-    assert len(runner.last_reports) >= 1
+    assert any("fail:" in e for e in runner.events)
+    assert len(runner.events) >= 1
 
 
 @pytest.mark.asyncio
@@ -58,7 +58,7 @@ async def test_runner_clear_events(runtime: Runtime) -> None:
     runner.events.append("stale event")
     await runner.run("test", clear_events=True)
     assert "stale event" not in runner.events
-    assert any("report done" in e for e in runner.events)
+    assert any("fail:" in e for e in runner.events)
 
 
 @pytest.mark.asyncio
@@ -94,6 +94,6 @@ async def test_runner_cancel_via_task_cancellation(runtime: Runtime) -> None:
 async def test_runner_reuse_across_multiple_runs(runtime: Runtime) -> None:
     runner = AgentRunner(runtime)
     await runner.run("first task")
-
-    await runner.run("second task")
-    assert len(runner.last_reports) >= 2
+    await runner.run("second task", clear_events=False)
+    assert len(runner.events) == 2
+    assert all("fail:" in e for e in runner.events)

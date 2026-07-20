@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import glob as _glob
+import ipaddress as _ipaddress
 import json as _json
 import re as _re
+import shlex as _shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from urllib.parse import urlparse as _urlparse
 
 import httpx as _httpx
 from pydantic import BaseModel
@@ -126,7 +129,9 @@ TOOL_WEBFETCH_DEF = ToolDef(
 
 TOOL_EDIT_DEF = ToolDef(
     name="edit",
-    description="Replace old_string with new_string in a file",
+    description="Replace the first occurrence of old_string with new_string in a file. "
+                "Only the first match is replaced. Provide enough surrounding context "
+                "in old_string to uniquely identify the target location.",
     input_schema={
         "type": "object",
         "properties": {
@@ -230,11 +235,13 @@ TOOL_GREP_DEF = ToolDef(
 
 TOOL_BASH_DEF = ToolDef(
     name="bash",
-    description="Execute a shell command and return its output. Use for building, running tests, git operations, or any CLI task.",
+    description="Execute a command and return its output. The command is split into arguments "
+                "by shell quoting rules — no shell operators (pipes, redirects, &&, ||, etc.) "
+                "are supported. Use for building, running tests, git operations, or any CLI task.",
     input_schema={
         "type": "object",
         "properties": {
-            "command": {"type": "string", "description": "Shell command to execute"},
+            "command": {"type": "string", "description": "Command with arguments to execute (shell operators like | > && are NOT supported)"},
             "timeout": {"type": "integer", "description": "Timeout in milliseconds (default 30000)"},
         },
         "required": ["command"],
@@ -302,12 +309,33 @@ TOOL_READ_ARTIFACT_DEF = ToolDef(
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+def _resolve_safe_path(path: str, agent: Agent) -> Path:
+    sandbox = agent._runtime.generated_root or Path.cwd()
+    p = Path(path)
+    if p.is_absolute():
+        resolved = p.resolve()
+    else:
+        resolved = (sandbox / p).resolve()
+    if sandbox not in resolved.parents and resolved != sandbox:
+        raise ValueError(f"Path '{path}' is outside the workspace")
+    return resolved
+
+
 async def _tool_read(*, agent: Agent, path: str) -> str:
-    return Path(path).read_text()
+    try:
+        safe = _resolve_safe_path(path, agent)
+    except ValueError as e:
+        return f"Error: {e}"
+    return safe.read_text()
 
 
 async def _tool_write(*, agent: Agent, path: str, content: str) -> str:
-    Path(path).write_text(content)
+    try:
+        safe = _resolve_safe_path(path, agent)
+    except ValueError as e:
+        return f"Error: {e}"
+    safe.parent.mkdir(parents=True, exist_ok=True)
+    safe.write_text(content)
     return f"Wrote {len(content)} bytes to {path}"
 
 
@@ -340,7 +368,7 @@ def _build_gitignore_filter() -> Callable[[str], bool]:
 
 async def _tool_glob(*, agent: Agent, pattern: str) -> str:
     matches = _glob.glob(pattern, recursive=True)
-    _filter = _build_gitignore_filter()
+    _filter = agent._runtime.get_gitignore_filter()
     filtered = [m for m in matches if not _filter(m) and not _is_hidden(m)]
     if filtered:
         return _json.dumps(sorted(filtered), indent=2)
@@ -349,6 +377,26 @@ async def _tool_glob(*, agent: Agent, pattern: str) -> str:
 
 
 async def _tool_webfetch(*, agent: Agent, url: str) -> str:
+    try:
+        parsed = _urlparse(url)
+    except Exception:
+        return f"Error: invalid URL '{url}'"
+
+    if parsed.scheme not in ("http", "https"):
+        return f"Error: unsupported URL scheme '{parsed.scheme}'. Only http and https are allowed."
+
+    hostname = parsed.hostname
+    if not hostname:
+        return f"Error: no hostname in URL '{url}'"
+
+    try:
+        addr = _ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        if addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_multicast:
+            return f"Error: URL resolves to a restricted address ({hostname})."
+
     async with _httpx.AsyncClient() as client:
         resp = await client.get(url, timeout=30)
         resp.raise_for_status()
@@ -356,11 +404,15 @@ async def _tool_webfetch(*, agent: Agent, url: str) -> str:
 
 
 async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: str) -> str:
-    content = Path(path).read_text()
+    try:
+        safe = _resolve_safe_path(path, agent)
+    except ValueError as e:
+        return f"Error: {e}"
+    content = safe.read_text()
     if old_string not in content:
         return f"Error: old_string not found in {path}"
     new_content = content.replace(old_string, new_string, 1)
-    Path(path).write_text(new_content)
+    safe.write_text(new_content)
     return f"Replaced in {path}"
 
 
@@ -375,7 +427,18 @@ async def _tool_delegate(*, agent: Agent, description: str, role: str | None = N
             "role": role,
         },
     ))
-    await child.run()
+    agent._pending_child_task = asyncio.create_task(child.run())
+    try:
+        await agent._pending_child_task
+    except asyncio.CancelledError:
+        agent._pending_child_task.cancel()
+        try:
+            await agent._pending_child_task
+        except asyncio.CancelledError:
+            pass
+        raise
+    finally:
+        agent._pending_child_task = None
 
     status = child.task.status.value
     agent._runtime.emit_activity(ActivityEvent(
@@ -386,20 +449,23 @@ async def _tool_delegate(*, agent: Agent, description: str, role: str | None = N
             "status": status,
         },
     ))
-    lines = [f"Delegated to agent {child.id}. Status: {status}"]
+    result: dict[str, Any] = {
+        "child_id": child.id,
+        "status": status,
+    }
 
     if child._last_report:
         r = child._last_report
-        lines.append(f"Summary: {r.summary[:500]}")
+        result["summary"] = r.summary[:500]
         if r.artifact_ids:
-            lines.append(f"Artifact IDs: {', '.join(r.artifact_ids)}")
+            result["artifact_ids"] = r.artifact_ids
         if r.confidence is not None:
-            lines.append(f"Confidence: {r.confidence:.2f}")
+            result["confidence"] = r.confidence
 
     if child._last_failure:
-        lines.append(f"Failure: {child._last_failure.error[:500]}")
+        result["failure"] = child._last_failure.error[:500]
 
-    return "\n".join(lines)
+    return _json.dumps(result, indent=2)
 
 
 async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
@@ -448,6 +514,7 @@ async def _tool_grep(*, agent: Agent, pattern: str, include: str | None = None, 
     if not search_path.is_dir():
         return f"Error: {search_path} is not a directory"
     matches: list[str] = []
+    errors: int = 0
     for f in search_path.rglob(include or "*"):
         if not f.is_file():
             continue
@@ -459,22 +526,41 @@ async def _tool_grep(*, agent: Agent, pattern: str, include: str | None = None, 
                 if _re.search(pattern, line):
                     matches.append(f"{f}:{i}: {line.rstrip()[:200]}")
         except Exception:
-            pass
+            errors += 1
+    result_parts: list[str] = []
     if not matches:
-        return "No matches found"
-    return _json.dumps(matches[:200], indent=2) + (f"\n... ({len(matches) - 200} more)" if len(matches) > 200 else "")
+        result_parts.append("No matches found")
+    else:
+        result_parts.append(_json.dumps(matches[:200], indent=2))
+        if len(matches) > 200:
+            result_parts.append(f"... ({len(matches) - 200} more)")
+    if errors:
+        result_parts.append(f"({errors} file(s) could not be read)")
+    return "\n".join(result_parts)
 
 
 async def _tool_bash(*, agent: Agent, command: str, timeout: int = 30000) -> str:
-    proc = await asyncio.create_subprocess_shell(
-        command,
+    try:
+        args = _shlex.split(command)
+    except ValueError as e:
+        return f"Error: invalid command syntax: {e}"
+
+    cwd = agent._runtime.generated_root
+
+    proc = await asyncio.create_subprocess_exec(
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
     except TimeoutError:
         proc.kill()
+        try:
+            await proc.wait()
+        except Exception:
+            pass
         return f"Error: command timed out after {timeout}ms"
     result = ""
     if stdout:
@@ -506,7 +592,20 @@ async def _tool_compress(*, agent: Agent) -> str:
         {"role": "system", "content": COMPRESSION_PROMPT},
     ] + agent._messages[1:]
 
-    response = await llm.generate_with_tools(compression_input, tools=[])
+    response = None
+    last_error = None
+    for attempt in range(2):
+        try:
+            response = await llm.generate_with_tools(compression_input, tools=[])
+            break
+        except Exception as e:
+            last_error = e
+            if attempt == 0:
+                continue
+
+    if response is None:
+        return f"Compression failed after 2 attempts: {last_error}"
+
     summary = (response.content or "").strip()
     if not summary:
         return "Compression produced empty summary."
@@ -531,7 +630,7 @@ async def _tool_compress(*, agent: Agent) -> str:
 
 
 async def _tool_converse(*, agent: Agent, agent_id: str, message: str) -> str:
-    target = agent._runtime._agents.get(agent_id)
+    target = agent._runtime.get_agent(agent_id)
     if not target:
         return f"Error: no agent found with ID {agent_id}"
     if target.task.status not in (TaskStatus.completed, TaskStatus.running):

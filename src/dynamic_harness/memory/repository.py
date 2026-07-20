@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -84,3 +85,6 @@ class Repository:
 
     def clear(self) -> None:
         self._commits.clear()
+        if self.root.exists():
+            shutil.rmtree(self.root)
+            self.root.mkdir(parents=True, exist_ok=True)

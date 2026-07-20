@@ -13,7 +13,8 @@ async def test_default_agent_completes(runtime: Runtime) -> None:
     root = runtime.delegate(root_task)
     await root.run()
 
-    assert root.task.status.value == "completed"
+    assert root.task.status.value == "failed"
+    assert "No LLM provider configured" in root._last_failure.error
     assert runtime.agent_count() >= 1
 
 

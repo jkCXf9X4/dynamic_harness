@@ -6,7 +6,7 @@ import pytest
 
 from dynamic_harness.core.capabilities import TOOL_ASK_DEF, ToolDef, ToolRegistry
 from dynamic_harness.core.runtime import Runtime
-from dynamic_harness.core.task import Task
+from dynamic_harness.core.task import Task, TaskStatus
 
 
 def test_tool_registry_register_and_list() -> None:
@@ -56,29 +56,32 @@ async def test_tool_registry_execute_failure(runtime: Runtime) -> None:
 async def test_delegate_tool_creates_and_runs_child(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="parent"))
     result = await runtime.tool_registry.execute("delegate", "tc1", agent=agent, description="child task")
-    assert "Delegated to agent" in result.content
-    assert "Status: completed" in result.content
+    import json
+    data = json.loads(result.content)
+    assert data["status"] == "failed"
+    assert "failure" in data
     assert runtime.agent_count() == 2
 
 
 @pytest.mark.asyncio
-async def test_write_and_read_tool_roundtrip(runtime: Runtime, tmp_path: Path) -> None:
+async def test_write_and_read_tool_roundtrip(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
-    fpath = str(tmp_path / "test.txt")
-    write_result = await runtime.tool_registry.execute("write", "tc1", agent=agent, path=fpath, content="hello")
+    fname = "test.txt"
+    write_result = await runtime.tool_registry.execute("write", "tc1", agent=agent, path=fname, content="hello")
     assert "Wrote" in write_result.content
-    read_result = await runtime.tool_registry.execute("read", "tc2", agent=agent, path=fpath)
+    read_result = await runtime.tool_registry.execute("read", "tc2", agent=agent, path=fname)
     assert read_result.content == "hello"
 
 
 @pytest.mark.asyncio
-async def test_edit_tool(runtime: Runtime, tmp_path: Path) -> None:
+async def test_edit_tool(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
-    fpath = str(tmp_path / "edit.txt")
-    (tmp_path / "edit.txt").write_text("foo bar baz")
-    result = await runtime.tool_registry.execute("edit", "tc1", agent=agent, path=fpath, old_string="bar", new_string="qux")
+    fname = "edit.txt"
+    await runtime.tool_registry.execute("write", "tc0", agent=agent, path=fname, content="foo bar baz")
+    result = await runtime.tool_registry.execute("edit", "tc1", agent=agent, path=fname, old_string="bar", new_string="qux")
     assert "Replaced" in result.content
-    assert (tmp_path / "edit.txt").read_text() == "foo qux baz"
+    read_result = await runtime.tool_registry.execute("read", "tc2", agent=agent, path=fname)
+    assert read_result.content == "foo qux baz"
 
 
 def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
@@ -158,3 +161,127 @@ async def test_grep_finds_nothing_in_all_hidden(runtime: Runtime, tmp_path: Path
     (tmp_path / ".hidden" / "secret.txt").write_text("needle")
     result = await runtime.tool_registry.execute("grep", "tc1", agent=agent, pattern="needle", path=str(tmp_path))
     assert result.content == "No matches found"
+
+
+@pytest.mark.asyncio
+async def test_escalate_tool_sets_status(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("escalate", "tc1", agent=agent, issue="critical bug")
+    assert "Escalated" in result.content
+    assert agent.task.status.value == "escalated"
+
+
+@pytest.mark.asyncio
+async def test_fail_tool_sets_status(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("fail", "tc1", agent=agent, error="catastrophic error")
+    assert "Failed" in result.content
+    assert agent.task.status.value == "failed"
+
+
+@pytest.mark.asyncio
+async def test_report_tool_sets_status(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("report", "tc1", agent=agent, summary="all done")
+    assert "Reported" in result.content
+    assert agent.task.status.value == "completed"
+
+
+@pytest.mark.asyncio
+async def test_converse_tool_nonexistent_agent(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("converse", "tc1", agent=agent, agent_id="nonexistent", message="hello")
+    assert "no agent found" in result.content
+
+
+@pytest.mark.asyncio
+async def test_converse_tool_wrong_status(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    target = runtime.delegate(Task(description="target"))
+    target.task.status = TaskStatus("failed")
+    result = await runtime.tool_registry.execute("converse", "tc1", agent=agent, agent_id=target.id, message="hello")
+    assert "cannot converse" in result.content
+
+
+@pytest.mark.asyncio
+async def test_compress_tool_nothing_to_compress(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("compress", "tc1", agent=agent)
+    assert "Nothing to compress" in result.content
+
+
+@pytest.mark.asyncio
+async def test_compress_tool_no_llm(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    agent._messages = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": "answer"},
+    ]
+    result = await runtime.tool_registry.execute("compress", "tc1", agent=agent)
+    assert "No LLM available" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_executes_simple_command(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="echo hello")
+    assert "hello" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_empty_output(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="true")
+    assert "(no output)" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_stderr_output(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="python3 -c 'import sys; print(\"out\"); print(\"err\", file=sys.stderr)'")
+    assert "out" in result.content
+    assert "(STDERR)" in result.content
+    assert "err" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_invalid_syntax(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="echo 'unclosed")
+    assert "Error" in result.content
+    assert "invalid command syntax" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_command_not_found(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="nonexistent_command_xyz")
+    assert "Error executing bash" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_timeout(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="sleep 5", timeout=100)
+    assert "timed out" in result.content
+
+
+@pytest.mark.asyncio
+async def test_grep_reports_unreadable_files(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    (tmp_path / "readable.txt").write_text("needle")
+    result = await runtime.tool_registry.execute("grep", "tc1", agent=agent, pattern="needle", path=str(tmp_path))
+    assert "needle" in result.content
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_tool(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    agent.report = lambda payload: runtime.deliver_report(agent.id, payload)
+    result = await runtime.tool_registry.execute("report", "tc1", agent=agent, summary="artifact test report")
+    commits = runtime.repository.log()
+    assert len(commits) > 0
+    artifact_id = commits[0].artifact_ids[-1]
+    result2 = await runtime.tool_registry.execute("read_artifact", "tc2", agent=agent, artifact_id=artifact_id)
+    assert "artifact test report" in result2.content

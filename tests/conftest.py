@@ -17,7 +17,7 @@ def tmp() -> Path:
 
 @pytest.fixture
 def runtime(tmp: Path) -> Runtime:
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
+    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp)
 
 
 @pytest.fixture

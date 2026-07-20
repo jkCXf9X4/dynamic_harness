@@ -38,7 +38,7 @@ class TraceStore:
                 {"role": "user", "content": "<same as trace-entry #1>"},
             ] + list(messages[2:])
 
-        self._prefix_seen.setdefault(agent_id, prefix_hash)
+        self._prefix_seen[agent_id] = prefix_hash
 
         self._append(agent_id, {
             "timestamp": datetime.now(timezone.utc).isoformat(),

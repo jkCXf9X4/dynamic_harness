@@ -23,7 +23,7 @@ class Task(BaseModel):
     system_prompt: str | None = None
     parent_id: str | None = None
     status: TaskStatus = TaskStatus.pending
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), validate_default=True)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

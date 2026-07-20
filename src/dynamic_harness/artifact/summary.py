@@ -18,7 +18,7 @@ def hierarchical_summary(
     max_items: int = 10,
 ) -> str:
     lines: list[str] = []
-    lines.append(f"# {level_name.title()} Summary")
+    lines.append(f"# {level_name.replace('_', ' ').title()} Summary")
     lines.append("")
 
     for art in artifacts[:max_items]:

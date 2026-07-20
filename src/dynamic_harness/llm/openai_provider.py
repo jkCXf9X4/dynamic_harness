@@ -151,4 +151,8 @@ class OpenAIProvider(LLMProvider):
         except Exception:
             text = await self.generate(system, user, cfg)
             data = _extract_json(text.content)
+            if not isinstance(data, dict):
+                raise TypeError(
+                    f"generate_structured fallback expected a JSON object, got {type(data).__name__}"
+                )
             return response_model(**data)

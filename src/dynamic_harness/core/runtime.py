@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -36,7 +37,10 @@ class Runtime:
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
         self._agent_usage: dict[str, dict] = {}
+        self._usage_locks: dict[str, asyncio.Lock] = {}
         self._llm: LLMProvider | None = None
+        self._gitignore_filter: Callable[[str], bool] | None = None
+        self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
 
@@ -52,6 +56,27 @@ class Runtime:
     @property
     def generated_root(self) -> Path | None:
         return self._generated_root
+
+    def get_gitignore_filter(self) -> Callable[[str], bool]:
+        gitignore = Path.cwd() / ".gitignore"
+        mtime = gitignore.stat().st_mtime if gitignore.exists() else None
+        if mtime and mtime == self._gitignore_mtime and self._gitignore_filter is not None:
+            return self._gitignore_filter
+        self._gitignore_mtime = mtime
+
+        if not gitignore.exists():
+            self._gitignore_filter = lambda p: False
+            return self._gitignore_filter
+
+        try:
+            import pathspec
+            spec = pathspec.PathSpec.from_lines(
+                "gitignore", gitignore.read_text().splitlines()
+            )
+            self._gitignore_filter = spec.match_file
+        except ImportError:
+            self._gitignore_filter = lambda p: False
+        return self._gitignore_filter
 
     def register_agent_class(self, name: str, cls: type[Agent]) -> None:
         self._agent_registry[name] = cls
@@ -82,7 +107,6 @@ class Runtime:
         summary = payload.summary or ""
         lines = summary.split("\n", 1)
         headline = lines[0].strip()[:200]
-        headline = headline.strip()[:200]
 
         view = ArtifactView(
             headline=headline,
@@ -152,13 +176,15 @@ class Runtime:
     def agent_count(self) -> int:
         return len(self._agents)
 
-    def record_usage(self, agent_id: str, *, prompt_tokens: int = 0, completion_tokens: int = 0, message_count: int = 0) -> None:
-        prev = self._agent_usage.get(agent_id, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "message_count": 0})
-        prev["prompt_tokens"] += prompt_tokens
-        prev["completion_tokens"] += completion_tokens
-        prev["total_tokens"] += prompt_tokens + completion_tokens
-        prev["message_count"] = message_count
-        self._agent_usage[agent_id] = prev
+    async def record_usage(self, agent_id: str, *, prompt_tokens: int = 0, completion_tokens: int = 0, message_count: int = 0) -> None:
+        lock = self._usage_locks.setdefault(agent_id, asyncio.Lock())
+        async with lock:
+            prev = self._agent_usage.get(agent_id, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "message_count": 0})
+            prev["prompt_tokens"] += prompt_tokens
+            prev["completion_tokens"] += completion_tokens
+            prev["total_tokens"] += prompt_tokens + completion_tokens
+            prev["message_count"] = message_count
+            self._agent_usage[agent_id] = prev
 
     def get_usage(self, agent_id: str) -> dict:
         return self._agent_usage.get(agent_id, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "message_count": 0})
@@ -171,16 +197,20 @@ class Runtime:
             total["total_tokens"] += u.get("total_tokens", 0)
         return total
 
-    def reset(self) -> None:
+    def reset(self, *, clear_handlers: bool = False) -> None:
         self._agents.clear()
         self._task_graph.clear()
         self._agent_usage.clear()
+        self._usage_locks.clear()
+        self._gitignore_filter = None
+        self._gitignore_mtime = None
         self.repository.clear()
         self.artifact_store.clear()
         if self.trace_store:
             self.trace_store.clear()
-        self._report_handlers.clear()
-        self._budget_handlers.clear()
-        self._escalation_handlers.clear()
-        self._failure_handlers.clear()
-        self._activity_handlers.clear()
+        if clear_handlers:
+            self._report_handlers.clear()
+            self._budget_handlers.clear()
+            self._escalation_handlers.clear()
+            self._failure_handlers.clear()
+            self._activity_handlers.clear()

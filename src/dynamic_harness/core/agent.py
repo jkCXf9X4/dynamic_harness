@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
@@ -225,6 +227,7 @@ class Agent:
         system_prompt: str | None = None,
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
+        safety_timeout_seconds: float | None = None,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -234,11 +237,15 @@ class Agent:
         self._system_prompt = system_prompt or task.system_prompt
         self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
-        self._messages: list[dict[str, Any]] | None = None
+        self._safety_timeout_seconds = safety_timeout_seconds
+        self._started_at: float | None = None
+        self._messages: list[dict[str, Any]] = []
+        self._has_run: bool = False
         self._iteration: int = 0
         self._recent_batches: deque[list[tuple[str, frozenset[tuple[str, object]]]]] | None = None
         self._last_report: ReportPayload | None = None
         self._last_failure: Failure | None = None
+        self._pending_child_task: asyncio.Task[None] | None = None
 
     @property
     def llm(self) -> LLMProvider | None:
@@ -251,10 +258,7 @@ class Agent:
     async def run(self) -> None:
         llm = self.llm
         if not llm:
-            self.report(ReportPayload(
-                task_id=self.task.id,
-                summary=f"Agent {self.id} executed: {self.task.description}",
-            ))
+            self.fail("No LLM provider configured")
             return
 
         user_message = self.task.description
@@ -264,12 +268,25 @@ class Agent:
             {"role": "system", "content": self._system_prompt or AGENT_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ]
+        self._has_run = True
         self._iteration = 0
         self._recent_batches = deque(maxlen=self.repeated_call_limit)
-        await self._run_loop()
+        self._started_at = time.monotonic()
+        try:
+            await self._run_loop()
+        except asyncio.CancelledError:
+            if self._pending_child_task and not self._pending_child_task.done():
+                self._pending_child_task.cancel()
+                try:
+                    await self._pending_child_task
+                except asyncio.CancelledError:
+                    pass
+            if not self._last_report and not self._last_failure:
+                self.fail("Agent cancelled")
+            raise
 
     async def continue_with_input(self, user_message: str) -> None:
-        if self._messages is None:
+        if not self._has_run:
             self.task.description = user_message
             await self.run()
             return
@@ -278,13 +295,28 @@ class Agent:
         await self._run_loop()
 
     async def _run_loop(self) -> None:
-        assert self._messages is not None
         llm = self.llm
         assert llm is not None
         tools = self._runtime.tool_registry.openai_schemas()
 
         while True:
             self._iteration += 1
+            if (
+                self._safety_timeout_seconds is not None
+                and self._started_at is not None
+                and time.monotonic() - self._started_at > self._safety_timeout_seconds
+            ):
+                self._runtime.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.SAFETY_WARNING,
+                    data={
+                        "warning_type": "timeout",
+                        "iteration": self._iteration,
+                        "timeout_seconds": self._safety_timeout_seconds,
+                    },
+                ))
+                self.fail(f"Agent timed out after {self._safety_timeout_seconds}s ({self._iteration} iterations)")
+                return
             if self._iteration > self._safety_max_iterations:
                 self._runtime.emit_activity(ActivityEvent(
                     agent_id=self.id,
@@ -323,7 +355,7 @@ class Agent:
             response = await llm.generate_with_tools(self._messages, tools)
 
             if response.usage:
-                self._runtime.record_usage(
+                await self._runtime.record_usage(
                     self.id,
                     prompt_tokens=response.usage.get("prompt_tokens", 0),
                     completion_tokens=response.usage.get("completion_tokens", 0),
@@ -452,7 +484,7 @@ class Agent:
                 ))
                 return
 
-    def delegate(self, description: str, agent_type: str | None = None, role: str | None = None, system_prompt: str | None = None, **metadata: object) -> Agent:
+    def delegate(self, description: str, agent_type: str | None = None, role: str | None = None, system_prompt: str | None = None, **metadata: Any) -> Agent:
         child_task = Task(description=description, role=role, system_prompt=system_prompt, parent_id=self.task.id, metadata=metadata)
         child = self._runtime.delegate(child_task, parent=self, agent_type=agent_type)
         self.children.append(child)

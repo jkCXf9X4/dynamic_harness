@@ -44,7 +44,10 @@ def load_harness_config(path: str | None = None) -> HarnessConfig:
     cfg_path = _discover_path(path)
     if cfg_path is None:
         return HarnessConfig()
-    raw = json.loads(cfg_path.read_text())
+    try:
+        raw = json.loads(cfg_path.read_text())
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in config file '{cfg_path}': {e}") from e
     return HarnessConfig.model_validate(raw)
 
 

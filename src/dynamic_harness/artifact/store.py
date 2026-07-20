@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Sequence
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class ArtifactView(BaseModel):
@@ -55,7 +58,7 @@ class ArtifactStore:
                 art = Artifact.model_validate_json(data)
                 self._artifacts[art.id] = art
             except Exception:
-                pass
+                logger.warning("Failed to load artifact from %s", p, exc_info=True)
 
     def _artifact_dir(self, artifact_id: str) -> Path:
         d = self.root / artifact_id

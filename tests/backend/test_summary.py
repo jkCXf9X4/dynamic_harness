@@ -94,7 +94,7 @@ class TestHierarchicalSummary:
     def test_level_name_title_cased(self) -> None:
         art = _make_artifact("art-1", headline="Finding")
         result = hierarchical_summary([art], level_name="detailed_technical")
-        assert "# Detailed_Technical Summary" in result
+        assert "# Detailed Technical Summary" in result
 
     def test_multiple_artifacts(self) -> None:
         arts = [

@@ -13,7 +13,8 @@ async def test_default_agent_runtime(runtime: Runtime) -> None:
     root = runtime.delegate(root_task)
     await root.run()
 
-    assert root.task.status.value == "completed"
+    assert root.task.status.value == "failed"
+    assert "No LLM provider configured" in root._last_failure.error
     assert runtime.agent_count() >= 1
 
 
@@ -83,5 +84,5 @@ async def test_runtime_event_handlers(runtime: Runtime) -> None:
 async def test_unknown_agent_type_uses_default(runtime: Runtime) -> None:
     root = runtime.delegate(Task(description="Unknown type"), agent_type="Anything")
     await root.run()
-    assert root.task.status.value == "completed"
+    assert root.task.status.value == "failed"
     assert runtime.agent_count() >= 1
