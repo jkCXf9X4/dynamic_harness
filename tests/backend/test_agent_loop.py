@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -10,12 +8,6 @@ from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.runner import AgentRunner
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
-
-
-@pytest.fixture
-def runtime() -> Runtime:
-    tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
 
 @pytest.mark.asyncio

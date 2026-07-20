@@ -1,17 +1,8 @@
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from dynamic_harness.memory.repository import Commit, Repository
-
-
-@pytest.fixture
-def repo() -> Repository:
-    tmp = Path(tempfile.mkdtemp())
-    return Repository(tmp)
 
 
 def test_commit_and_retrieve(repo: Repository) -> None:

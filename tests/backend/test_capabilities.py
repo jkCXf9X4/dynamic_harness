@@ -1,20 +1,12 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.capabilities import TOOL_ASK_DEF, ToolDef, ToolRegistry
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task
-
-
-@pytest.fixture
-def runtime() -> Runtime:
-    tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
 
 def test_tool_registry_register_and_list() -> None:

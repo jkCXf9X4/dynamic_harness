@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from dynamic_harness.core.agent import Agent
@@ -53,12 +50,6 @@ def _make_agent(
     task.status = TaskStatus.running
     runtime._agents[agent.id] = agent
     return agent
-
-
-@pytest.fixture
-def runtime() -> Runtime:
-    tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
 
 
 @pytest.mark.asyncio

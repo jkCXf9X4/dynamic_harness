@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from dynamic_harness.artifact.store import Artifact, ArtifactStore, ArtifactView
-
-
-@pytest.fixture
-def store() -> ArtifactStore:
-    tmp = Path(tempfile.mkdtemp())
-    return ArtifactStore(tmp)
 
 
 def test_save_and_get_artifact(store: ArtifactStore) -> None:
@@ -66,8 +59,7 @@ def test_list_files(store: ArtifactStore) -> None:
     assert "data.json" in names
 
 
-def test_persistence_across_instances() -> None:
-    tmp = Path(tempfile.mkdtemp())
+def test_persistence_across_instances(tmp: Path) -> None:
     store1 = ArtifactStore(tmp)
     art = Artifact(task_id="task1", agent_id="agent1", views=ArtifactView(headline="Persisted"))
     store1.save(art)

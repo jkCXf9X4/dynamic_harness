@@ -7,10 +7,11 @@ from typing import Any
 
 from rich.style import Style
 from rich.text import Text as RichText
-from textual import on
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Input, RichLog, Tree
+from textual.message import Message
+from textual.widgets import RichLog, TextArea, Tree
 
 from ..core.agent import Agent
 from ..core.runner import AgentRunner
@@ -61,6 +62,26 @@ def _fmt_usage(usage: dict) -> str:
     return f" ({', '.join(parts)})" if parts else ""
 
 
+class PromptTextArea(TextArea):
+    """TextArea where Enter submits and Ctrl+J inserts newlines."""
+
+    class Submitted(Message):
+        def __init__(self, text: str) -> None:
+            self.text = text
+            super().__init__()
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            if self.read_only:
+                return
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self.text))
+            self.clear()
+            return
+        await super()._on_key(event)
+
+
 class TUI(App[None]):
     CSS = """
     Screen {
@@ -89,9 +110,10 @@ class TUI(App[None]):
         overflow-x: hidden;
     }
 
-    Input {
+    TextArea {
         dock: bottom;
-        height: 3;
+        height: auto;
+        max-height: 12;
         margin: 0;
         padding: 0 2;
         border: none;
@@ -99,7 +121,7 @@ class TUI(App[None]):
         color: #ffffff;
     }
 
-    Input:focus {
+    TextArea:focus {
         border: none;
     }
     """
@@ -123,11 +145,11 @@ class TUI(App[None]):
         with Horizontal():
             yield Tree("Agent Tree", id="sidebar")
             yield RichLog(id="output", max_lines=500, wrap=True, highlight=True)
-        yield Input(id="input", placeholder="Enter a task or /help for commands...")
+        yield PromptTextArea(id="input", text="")
 
     def on_mount(self) -> None:
         self.set_interval(0.5, self._refresh)
-        self.query_one("#input", Input).focus()
+        self.query_one("#input", PromptTextArea).focus()
 
     def write_output(self, style_name: str, text: str) -> None:
         style = STYLES.get(style_name, Style())
@@ -181,14 +203,11 @@ class TUI(App[None]):
         if text:
             self.write_output("output-activity", text)
 
-    @on(Input.Submitted, "#input")
-    async def on_input(self, event: Input.Submitted) -> None:
-        text = event.value.strip()
+    @on(PromptTextArea.Submitted)
+    def on_prompt_submitted(self, event: PromptTextArea.Submitted) -> None:
+        text = event.text.strip()
         if not text:
             return
-
-        input_w = self.query_one("#input", Input)
-        input_w.clear()
 
         if text.lower() in ("exit", "quit"):
             self.action_exit()
@@ -403,6 +422,7 @@ class TUI(App[None]):
         if self._current_agent_task and not self._current_agent_task.done():
             self._current_agent_task.cancel()
             self.write_output("output-error", "Agent run cancelled.\n")
+        self.query_one("#input", PromptTextArea).clear()
 
     def action_page_up(self) -> None:
         self.query_one("#output", RichLog).scroll_page_up()

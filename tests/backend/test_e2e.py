@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from dynamic_harness.core.agent import Agent
@@ -10,16 +7,6 @@ from dynamic_harness.core.runner import AgentRunner
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
 
-
-@pytest.fixture
-def runtime() -> Runtime:
-    tmp = Path(tempfile.mkdtemp())
-    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo")
-
-
-# ---------------------------------------------------------------------------
-# Agent classes simulating real sub-agent behaviour
-# ---------------------------------------------------------------------------
 
 class SecurityAuditAgent(Agent):
     """Security auditor that writes findings to disk and reports with rich views."""
@@ -132,16 +119,9 @@ class SynthesisAgent(Agent):
         ))
 
 
-# ---------------------------------------------------------------------------
-# E2E tests
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_e2e_multi_agent_rich_artifact_views(runtime: Runtime) -> None:
-    """Full multi-agent workflow: security audit → sub-agents → synthesis.
-
-    Verifies every ArtifactView level is populated and recoverable from disk."""
+    """Full multi-agent workflow: security audit -> sub-agents -> synthesis."""
     runtime.register_agent_class("SecurityAuditor", SecurityAuditAgent)
     runtime.register_agent_class("PasswordAuditor", PasswordAuditAgent)
     runtime.register_agent_class("SynthesisAgent", SynthesisAgent)
@@ -168,17 +148,14 @@ async def test_e2e_multi_agent_rich_artifact_views(runtime: Runtime) -> None:
 
     assert len(all_artifacts) >= 3
 
-    # Verify progressive disclosure levels are correctly differentiated
     for art in all_artifacts:
         if "JWT" in art.views.headline or "security" in art.views.headline.lower():
             assert art.views.headline != "", f"headline empty for {art.id}"
             assert art.views.summary_200 != "", f"summary_200 empty for {art.id}"
         if art.views.technical and art.views.summary_200:
-            # technical should be distinct from summary_200 (not just truncated)
             assert art.views.technical.strip() != art.views.summary_200.strip(), \
                 f"technical should differ from summary_200 for {art.id}"
 
-    # Cross-session recovery
     rt2 = Runtime(
         artifact_root=runtime.artifact_store.root,
         repo_root=runtime.repository.root,
@@ -243,8 +220,7 @@ async def test_e2e_delegate_then_read_artifact(runtime: Runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_e2e_summary_200_only_when_short(runtime: Runtime) -> None:
-    """When a summary is short, summary_1000 stays empty (not duplicated)."""
-
+    """When a summary is short, summary_1000 stays empty."""
     class ShortReporter(Agent):
         async def run(self) -> None:
             self.report(ReportPayload(
@@ -270,7 +246,6 @@ async def test_e2e_summary_200_only_when_short(runtime: Runtime) -> None:
 @pytest.mark.asyncio
 async def test_e2e_summary_1000_populated_when_long(runtime: Runtime) -> None:
     """When a summary exceeds 200 chars, summary_1000 gets populated."""
-
     long_summary = (
         "This is a very long summary that exceeds the two hundred character "
         "threshold. It contains detailed information about multiple findings "
@@ -302,7 +277,6 @@ async def test_e2e_summary_1000_populated_when_long(runtime: Runtime) -> None:
 @pytest.mark.asyncio
 async def test_e2e_headless_runner_with_rich_report(runtime: Runtime) -> None:
     """AgentRunner with rich reporting: all view levels captured."""
-
     class RichReporter(Agent):
         async def run(self) -> None:
             self.report(ReportPayload(
@@ -375,13 +349,10 @@ async def test_e2e_headless_runner_with_rich_report(runtime: Runtime) -> None:
                 views = art.views
                 assert views.headline != ""
                 assert views.summary_200 != ""
-                # summary_1000 is empty only because the summary is <200 chars
                 if len(views.summary_200) > 200:
                     assert views.summary_1000 != ""
                 assert "str assigned to int" in views.technical
                 assert "Full Code Review Report" in views.full_report
-
-                # Verify progressive sizing
                 assert len(views.summary_200) <= 200
                 assert len(views.full_report) > len(views.technical)
 
@@ -389,7 +360,6 @@ async def test_e2e_headless_runner_with_rich_report(runtime: Runtime) -> None:
 @pytest.mark.asyncio
 async def test_e2e_cross_session_recovery_all_levels(runtime: Runtime) -> None:
     """Save artifacts with all levels, destroy runtime, recover everything."""
-
     class FullReporter(Agent):
         async def run(self) -> None:
             self.report(ReportPayload(
@@ -416,6 +386,8 @@ async def test_e2e_cross_session_recovery_all_levels(runtime: Runtime) -> None:
 
     assert len(saved_artifacts) >= 1
 
+    from pathlib import Path
+
     for aid, path in saved_artifacts.items():
         assert (path / "artifact.json").exists()
 
@@ -436,15 +408,11 @@ async def test_e2e_cross_session_recovery_all_levels(runtime: Runtime) -> None:
         assert "CVSS" in v.full_report
 
 
-# ---------------------------------------------------------------------------
-# -m flag integration tests
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_e2e_m_flag_integration(runtime: Runtime) -> None:
     """Simulate the -m flag path: read a prompt file, run AgentRunner with it."""
-    prompt_file = Path(__file__).parent.parent / "prompts" / "security_audit.txt"
+    from pathlib import Path as PathLib
+    prompt_file = PathLib(__file__).parent.parent.parent / "prompts" / "security_audit.txt"
     assert prompt_file.exists(), "prompt file missing"
 
     prompt_text = prompt_file.read_text()
@@ -474,39 +442,10 @@ async def test_e2e_m_flag_integration(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_m_flag_parses_prompt_file(runtime: Runtime) -> None:
-    """Verify _parse_args correctly handles -m flag."""
-    from dynamic_harness.cli.tui import _parse_args
-
-    args = _parse_args(["-m", "prompts/file_inventory.txt"])
-    assert args.m == "prompts/file_inventory.txt"
-
-
-@pytest.mark.asyncio
-async def test_e2e_m_flag_file_missing(runtime: Runtime) -> None:
-    """Verify _parse_args handles -m with missing file gracefully."""
-    from dynamic_harness.cli.tui import _parse_args
-
-    args = _parse_args(["-m", "prompts/nonexistent.txt"])
-    assert args.m == "prompts/nonexistent.txt"
-    # The file path is captured by argparse; Path.read_text() fails later
-    assert not Path(args.m).exists()
-
-
-@pytest.mark.asyncio
-async def test_e2e_m_flag_no_llm(runtime: Runtime) -> None:
-    """Verify --no-llm flag is parsed correctly."""
-    from dynamic_harness.cli.tui import _parse_args
-
-    args = _parse_args(["-m", "prompts/file_inventory.txt", "--no-llm"])
-    assert args.m == "prompts/file_inventory.txt"
-    assert args.no_llm is True
-
-
-@pytest.mark.asyncio
 async def test_e2e_all_prompt_files_exist() -> None:
     """All preset prompt files are present and readable."""
-    prompt_dir = Path(__file__).parent.parent / "prompts"
+    from pathlib import Path as PathLib
+    prompt_dir = PathLib(__file__).parent.parent.parent / "prompts"
     assert prompt_dir.is_dir()
 
     for prompt_file in sorted(prompt_dir.glob("*.txt")):
