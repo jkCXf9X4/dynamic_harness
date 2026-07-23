@@ -310,7 +310,7 @@ TOOL_READ_ARTIFACT_DEF = ToolDef(
 # ---------------------------------------------------------------------------
 
 def _resolve_safe_path(path: str, agent: Agent) -> Path:
-    sandbox = agent._runtime.generated_root or Path.cwd()
+    sandbox = agent.generated_root or Path.cwd()
     p = Path(path)
     if p.is_absolute():
         resolved = p.resolve()
@@ -368,7 +368,7 @@ def _build_gitignore_filter() -> Callable[[str], bool]:
 
 async def _tool_glob(*, agent: Agent, pattern: str) -> str:
     matches = _glob.glob(pattern, recursive=True)
-    _filter = agent._runtime.get_gitignore_filter()
+    _filter = agent.get_gitignore_filter()
     filtered = [m for m in matches if not _filter(m) and not _is_hidden(m)]
     if filtered:
         return _json.dumps(sorted(filtered), indent=2)
@@ -416,33 +416,10 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
     return f"Replaced in {path}"
 
 
-async def _tool_delegate(*, agent: Agent, description: str, role: str | None = None, system_prompt: str | None = None) -> str:
-    child = agent.delegate(description, role=role, system_prompt=system_prompt)
-    agent._runtime.emit_activity(ActivityEvent(
-        agent_id=agent.id,
-        event_type=ActivityEventType.DELEGATION_START,
-        data={
-            "child_id": child.id,
-            "description": description[:200],
-            "role": role,
-        },
-    ))
-    agent._pending_child_task = asyncio.create_task(child.run())
-    try:
-        await agent._pending_child_task
-    except asyncio.CancelledError:
-        agent._pending_child_task.cancel()
-        try:
-            await agent._pending_child_task
-        except asyncio.CancelledError:
-            pass
-        raise
-    finally:
-        agent._pending_child_task = None
-
+def _format_delegate_result(child: Agent) -> str:
     status = child.task.status.value
-    agent._runtime.emit_activity(ActivityEvent(
-        agent_id=agent.id,
+    child._runtime.emit_activity(ActivityEvent(
+        agent_id=child.parent.id if child.parent else "",
         event_type=ActivityEventType.DELEGATION_END,
         data={
             "child_id": child.id,
@@ -468,6 +445,42 @@ async def _tool_delegate(*, agent: Agent, description: str, role: str | None = N
     return _json.dumps(result, indent=2)
 
 
+async def _tool_delegate(
+    *, agent: Agent, description: str,
+    role: str | None = None, system_prompt: str | None = None,
+    _tool_call_id: str = "",
+) -> str:
+    child = agent.delegate(description, role=role, system_prompt=system_prompt)
+    agent.emit_activity(ActivityEvent(
+        agent_id=agent.id,
+        event_type=ActivityEventType.DELEGATION_START,
+        data={
+            "child_id": child.id,
+            "description": description[:200],
+            "role": role,
+        },
+    ))
+    task = asyncio.create_task(child.run())
+    if agent._deferred_delegates is not None:
+        agent._deferred_delegates.append((_tool_call_id, child, task))
+        return _json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
+
+    agent._pending_child_task = task
+    try:
+        await agent._pending_child_task
+    except asyncio.CancelledError:
+        agent._pending_child_task.cancel()
+        try:
+            await agent._pending_child_task
+        except asyncio.CancelledError:
+            pass
+        raise
+    finally:
+        agent._pending_child_task = None
+
+    return _format_delegate_result(child)
+
+
 async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
     agent.report(ReportPayload(
         task_id=agent.task.id,
@@ -481,7 +494,7 @@ async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | 
 
 
 async def _tool_read_artifact(*, agent: Agent, artifact_id: str) -> str:
-    artifact = agent._runtime.artifact_store.get(artifact_id)
+    artifact = agent._artifact_store.get(artifact_id)
     if not artifact:
         return f"Error: no artifact found with ID '{artifact_id}'"
     views = artifact.views
@@ -545,7 +558,7 @@ async def _tool_bash(*, agent: Agent, command: str, timeout: int = 30000) -> str
     except ValueError as e:
         return f"Error: invalid command syntax: {e}"
 
-    cwd = agent._runtime.generated_root
+    cwd = agent.generated_root
 
     proc = await asyncio.create_subprocess_exec(
         *args,
@@ -584,7 +597,7 @@ Output ONLY the summary paragraph, no preamble."""
 async def _tool_compress(*, agent: Agent) -> str:
     if not agent._messages or len(agent._messages) < 3:
         return "Nothing to compress."
-    llm = agent._runtime._llm
+    llm = agent.llm
     if not llm:
         return "No LLM available for compression."
 
@@ -617,7 +630,7 @@ async def _tool_compress(*, agent: Agent) -> str:
     ]
     after = len(agent._messages)
     saved = before - after
-    agent._runtime.emit_activity(ActivityEvent(
+    agent.emit_activity(ActivityEvent(
         agent_id=agent.id,
         event_type=ActivityEventType.COMPRESSION,
         data={
@@ -630,11 +643,14 @@ async def _tool_compress(*, agent: Agent) -> str:
 
 
 async def _tool_converse(*, agent: Agent, agent_id: str, message: str) -> str:
-    target = agent._runtime.get_agent(agent_id)
+    target = agent.get_other_agent(agent_id)
     if not target:
         return f"Error: no agent found with ID {agent_id}"
     if target.task.status not in (TaskStatus.completed, TaskStatus.running):
-        return f"Error: agent {agent_id} status is '{target.task.status.value}', cannot converse"
+        return (
+            f"Error: agent {agent_id} status is "
+            f"'{target.task.status.value}', cannot converse"
+        )
 
     await target.continue_with_input(message)
 

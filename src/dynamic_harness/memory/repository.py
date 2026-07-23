@@ -43,11 +43,15 @@ class Repository:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(commit.model_dump_json(indent=2))
 
+        parents_to_save: list[Commit] = []
         for pid in commit.parent_ids:
             parent = self._commits.get(pid)
             if parent and commit.id not in parent.child_ids:
                 parent.child_ids.append(commit.id)
-                self._save(parent)
+                parents_to_save.append(parent)
+
+        for parent in parents_to_save:
+            self._save(parent)
 
         return commit
 

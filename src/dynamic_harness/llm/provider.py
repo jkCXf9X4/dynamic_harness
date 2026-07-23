@@ -49,3 +49,6 @@ class LLMProvider(ABC):
     async def generate_structured(
         self, system: str, user: str, response_model: type, config: LLMConfig | None = None
     ) -> object: ...
+
+    async def aclose(self) -> None:
+        """Release any underlying resources (connections, sessions, etc.)."""

@@ -28,6 +28,7 @@ class OpenAIProvider(LLMProvider):
         provider_allow_fallbacks: bool = True,
     ) -> None:
         http_client = httpx.AsyncClient(verify=verify_ssl)
+        self._http_client = http_client
         self.client = AsyncOpenAI(
             base_url=base_url,
             api_key=api_key,
@@ -156,3 +157,6 @@ class OpenAIProvider(LLMProvider):
                     f"generate_structured fallback expected a JSON object, got {type(data).__name__}"
                 )
             return response_model(**data)
+
+    async def aclose(self) -> None:
+        await self._http_client.aclose()
