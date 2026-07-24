@@ -526,12 +526,15 @@ async def _tool_grep(*, agent: Agent, pattern: str, include: str | None = None, 
     search_path = Path(path or ".")
     if not search_path.is_dir():
         return f"Error: {search_path} is not a directory"
+    _filter = agent.get_gitignore_filter()
     matches: list[str] = []
     errors: int = 0
     for f in search_path.rglob(include or "*"):
         if not f.is_file():
             continue
         if _is_hidden(f):
+            continue
+        if _filter(str(f)):
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
