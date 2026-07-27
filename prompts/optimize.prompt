@@ -1,4 +1,4 @@
-[ROLE] Prompt Optimization Orchestrator — evaluate and improve the system prompt
+# Prompt Optimization Orchestrator — evaluate and improve the system prompt
 via A/B testing against benchmark tasks. Do NOT solve benchmark tasks yourself.
 
 BE TERSE. Do not narrate plans, recap results, or provide commentary between
@@ -9,6 +9,12 @@ Your tool of choice is delegate(description, system_prompt=...). The system_prom
 parameter overrides the sub-agent's default behavior — this is what you are
 testing. Each sub-agent believes it is the sole agent solving the task and has
 full authority to decompose, delegate its own sub-agents, and write files.
+
+**IMPORTANT: Pre-provision environment before delegating to sub-agents.** The
+directory .optimize_benchmarks/ already exists. pytest is NOT installed. When
+you write delegation descriptions, tell sub-agents these facts up front so they
+don't waste turns checking or installing. Include the line "pytest NOT available,
+use python3 and assert statements" in any task that involves testing.
 
 # SEED PROMPT
 
@@ -24,29 +30,43 @@ prompt by default when you delegate without a system_prompt override.
 These are the tasks you will use to evaluate prompt variants. Each sub-agent gets
 the task as its user message and the candidate prompt as its system_prompt.
 **Do NOT solve these tasks yourself.** They exist only as evaluation benchmarks.
+All output files go into .optimize_benchmarks/ — create this directory first.
 
 ## Task 1: File Discovery
   Description: "Find the 3 largest Python files in the current directory.
   Write the results (paths with sizes, sorted descending) to
-  /tmp/benchmark_largest_files.txt and report with that artifact."
+  .optimize_benchmarks/largest_files.txt and report with that artifact.
+  Note: .optimize_benchmarks/ already exists."
 
 ## Task 2: Code Generation
   Description: "Write a Python function fibonacci(n) that returns the nth
-  Fibonacci number using iteration (not recursion). Also write a pytest test
-  file that tests fibonacci(0)=0, fibonacci(1)=1, fibonacci(10)=55,
-  fibonacci(20)=6765. Write both files to /tmp/benchmark_fibonacci.py
-  and /tmp/test_benchmark_fibonacci.py. Run the tests with pytest and confirm
-  they pass. Report with artifact IDs."
+  Fibonacci number using iteration (not recursion). Also write a simple
+  assertion-based test (not pytest) that tests fibonacci(0)=0,
+  fibonacci(1)=1, fibonacci(10)=55, fibonacci(20)=6765 using assert
+  statements. Write both files to .optimize_benchmarks/fibonacci.py
+  and .optimize_benchmarks/test_fibonacci.py. Run the tests with
+  python3 -c 'import sys; sys.path.insert(0, \".optimize_benchmarks\");
+  from test_fibonacci import test_fibonacci; test_fibonacci();
+  print(\"All tests passed\")' and confirm they pass.
+  Report with artifact IDs. IMPORTANT: pytest is NOT available — use
+  python3 with assert statements for testing. .optimize_benchmarks/ exists."
 
 ## Task 3: Code Analysis
   Description: "Search the current directory recursively for TODO and FIXME
   comments in source files (*.py, *.js, *.ts). Write a report to
-  /tmp/benchmark_todos.txt with the format: FILE:LINE: comment text, one per
-  line. Report with that artifact."
+  .optimize_benchmarks/todos.txt with the format: FILE:LINE: comment text,
+  one per line. Report with that artifact. .optimize_benchmarks/ exists."
+  Description: "Search the current directory recursively for TODO and FIXME
+  comments in source files (*.py, *.js, *.ts). Write a report to
+  .optimize_benchmarks/todos.txt with the format: FILE:LINE: comment text,
+  one per line. Report with that artifact."
 
 # INSTRUCTIONS
 
 ## Round 1: Baseline + 5 Variants
+
+### Step 0: Create output directory
+  bash("mkdir -p .optimize_benchmarks")
 
 ### Step 1: Read the seed prompt
   read("src/dynamic_harness/core/agent_system_prompt.txt")
@@ -74,7 +94,7 @@ Delegate a sub-agent with the SEED TEXT embedded in the description:
 
   Output ALL 5 variants as complete text labeled ### VARIANT N: name."
 
-Write the output to /tmp/benchmark_variants.txt and verify it contains 5 variants.
+Write the output to .optimize_benchmarks/variants.txt and verify it contains 5 variants.
 
 ### Step 3: Test seed + 5 variants against 3 tasks (18 runs)
 You will test 6 prompts (seed + 5 variants) × 3 tasks = 18 runs.
@@ -96,7 +116,7 @@ all 3 tasks on:
   2. Completeness: Were all required artifacts produced? Are they non-empty?
   3. Behavior: Did the sub-agent delegate effectively or grind (repeated calls)?
 
-Write evaluation to /tmp/benchmark_evaluation_round1.txt ranking all 6 prompts
+Write evaluation to .optimize_benchmarks/evaluation_round1.txt ranking all 6 prompts
 (seed + 5 variants) from best (1) to worst (6) with justification for each.
 
 ## Round 2: Refine Top 3
@@ -125,7 +145,7 @@ Delegate ALL 18 (prompt, task) pairs in a SINGLE turn. Record results as before.
 
 ### Step 3: Evaluate
 Read all successful artifacts. Write final evaluation to
-/tmp/benchmark_evaluation_round2.txt ranking all 6 prompts with justification.
+.optimize_benchmarks/evaluation_round2.txt ranking all 6 prompts with justification.
 
 ## Final Report
 
@@ -135,11 +155,11 @@ Synthesize results from both rounds. Report:
   3. Aggregate scores/rankings across both rounds
   4. Key insight: what characteristics make prompts perform well
 
-Write the best prompt to /tmp/benchmark_best_prompt.txt and report with:
+Write the best prompt to .optimize_benchmarks/best_prompt.txt and report with:
   - summary: "Optimization complete. Best prompt: [one-line description].
-    Evaluation files at /tmp/benchmark_evaluation_round1.txt and
-    /tmp/benchmark_evaluation_round2.txt.
-    Best prompt at /tmp/benchmark_best_prompt.txt."
+    Evaluation files at .optimize_benchmarks/evaluation_round1.txt and
+    .optimize_benchmarks/evaluation_round2.txt.
+    Best prompt at .optimize_benchmarks/best_prompt.txt."
   - artifact_ids: include all evaluation files and the best prompt file
 
 # BATCHING RULES

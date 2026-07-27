@@ -51,25 +51,49 @@ class ToolRegistry:
         return self._tools.get(name)
 
     async def execute(self, name: str, tool_call_id: str, agent: Agent, **kwargs: Any) -> ToolResult:
+        token_limit: int = kwargs.pop("token_limit", 100)
+        token_offset: int = kwargs.pop("token_offset", 0)
         entry = self._tools.get(name)
         if not entry:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error: unknown tool '{name}'")
         _, fn = entry
         try:
             content = await fn(agent=agent, **kwargs)
-            return ToolResult(tool_call_id=tool_call_id, content=content)
         except Exception as e:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error executing {name}: {e}")
+
+        char_limit = max(1, token_limit * 4)
+        char_offset = max(0, token_offset * 4)
+        total_chars = len(content)
+        if char_offset >= total_chars:
+            return ToolResult(tool_call_id=tool_call_id, content="(offset beyond content length)")
+        content = content[char_offset:]
+        if len(content) > char_limit:
+            content = content[:char_limit] + (
+                f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
+                f"Use token_offset={token_offset + token_limit} to see more)"
+            )
+        return ToolResult(tool_call_id=tool_call_id, content=content)
 
     def openai_schemas(self) -> list[dict]:
         result: list[dict] = []
         for td, _ in self._tools.values():
+            schema = dict(td.input_schema)
+            schema["properties"] = dict(schema.get("properties", {}))
+            schema["properties"]["token_limit"] = {
+                "type": "integer",
+                "description": "Max tokens to return (1 token ≈ 4 chars). Default 100.",
+            }
+            schema["properties"]["token_offset"] = {
+                "type": "integer",
+                "description": "Skip this many tokens from the start. Default 0.",
+            }
             result.append({
                 "type": "function",
                 "function": {
                     "name": td.name,
                     "description": td.description,
-                    "parameters": td.input_schema,
+                    "parameters": schema,
                 },
             })
         return result

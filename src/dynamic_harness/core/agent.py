@@ -76,6 +76,18 @@ class Agent:
     def guidelines(self) -> str:
         return AGENT_SYSTEM_PROMPT
 
+    @property
+    def environment_info(self) -> str:
+        return (
+            "[Environment]\n"
+            "Python 3.11 | pip NOT available | pytest NOT installed\n"
+            "Working dir: project root with pyproject.toml\n"
+            "Packages: pydantic, openai, dotenv, pyyaml, httpx, rich, textual, pathspec\n"
+            ".optimize_benchmarks/ exists — do not recreate\n"
+            "Git available | os: linux\n"
+            "Do NOT attempt to install packages — use python3 -c for inline code\n"
+        )
+
     async def run(self) -> None:
         llm = self.llm
         if not llm:
@@ -191,6 +203,7 @@ class Agent:
                 f"Messages in context: {len(self._messages)}\n"
                 f"Estimated prompt tokens this agent: {prompt_tokens}\n"
                 f"Your task: {self.task.description}\n"
+                f"{self.environment_info}"
             )
             self._messages.append({"role": "system", "content": context_obs})
 
