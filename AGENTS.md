@@ -57,7 +57,7 @@ src/dynamic_harness/
 ├── cli/
 │   ├── tui.py               → Textual TUI (main CLI, interactive REPL)
 │   ├── common.py            → workspace_dir(), build_runtime()
-│   └── agent_loop.py        → AgentLoop (Rich Live-rendered loop)
+│   └── terminal.py       → Direct terminal mode (Rich Live-rendered loop)
 ├── artifact/
 │   ├── store.py             → ArtifactView, Artifact, ArtifactStore (progressive disclosure)
 │   └── summary.py           → summarize_artifact(), hierarchical_summary()

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from rich.style import Style
@@ -28,7 +27,7 @@ COMMANDS = {
     "/kill": "Kill the currently running agent immediately",
     "/new": "Start a fresh conversation (new root agent, preserves history)",
     "/verbose": "Show activity events (tool calls, delegations, LLM calls)",
-    "/quiet": "Hide activity events — only show reports and failures",
+    "/quiet": "Hide activity events \u2014 only show reports and failures",
     "exit": "Exit the TUI",
     "quit": "Exit the TUI",
 }
@@ -164,35 +163,35 @@ class TUI(App[None]):
             name = d.get("tool_name", "?")
             args = d.get("arguments", {})
             arg_str = ", ".join(f"{k}={str(v)[:30]}" for k, v in args.items())
-            return f"  [{eid}] 🔧 {name}({arg_str})\n"
+            return f"  [{eid}] \U0001f527 {name}({arg_str})\n"
         elif et == ActivityEventType.TOOL_CALL_END:
             name = d.get("tool_name", "?")
             rlen = d.get("result_length", 0)
-            return f"  [{eid}] ✅ {name} → {rlen} bytes\n"
+            return f"  [{eid}] \u2705 {name} \u2192 {rlen} bytes\n"
         elif et == ActivityEventType.LLM_CALL_END:
             tc = d.get("tool_calls", [])
             pt = d.get("prompt_tokens", 0)
             ct = d.get("completion_tokens", 0)
             tc_str = ", ".join(tc) if tc else "text-only"
-            return f"  [{eid}] 💬 LLM → {tc_str} ({pt}+{ct} tokens)\n"
+            return f"  [{eid}] \U0001f4ac LLM \u2192 {tc_str} ({pt}+{ct} tokens)\n"
         elif et == ActivityEventType.DELEGATION_START:
             child = d.get("child_id", "?")[:8]
             desc = (d.get("description", "") or "")[:60]
-            return f"  [{eid}] 👶 delegate → {child} \"{desc}\"\n"
+            return f"  [{eid}] \U0001f476 delegate \u2192 {child} \"{desc}\"\n"
         elif et == ActivityEventType.DELEGATION_END:
             child = d.get("child_id", "?")[:8]
             status = d.get("status", "?")
-            return f"  [{eid}] 👶 {child} → {status}\n"
+            return f"  [{eid}] \U0001f476 {child} \u2192 {status}\n"
         elif et == ActivityEventType.COMPRESSION:
             before = d.get("before", 0)
             after = d.get("after", 0)
             saved = d.get("saved", 0)
-            return f"  [{eid}] 🔄 compressed {before}→{after} msgs (-{saved})\n"
+            return f"  [{eid}] \U0001f504 compressed {before}\u2192{after} msgs (-{saved})\n"
         elif et == ActivityEventType.SAFETY_WARNING:
             wtype = d.get("warning_type", "")
             if wtype == "max_iterations":
-                return f"  [{eid}] ⚠️ max iterations ({d.get('iteration', 0)}/{d.get('limit', 0)})\n"
-            return f"  [{eid}] ⚠️ repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})\n"
+                return f"  [{eid}] \u26a0\ufe0f max iterations ({d.get('iteration', 0)}/{d.get('limit', 0)})\n"
+            return f"  [{eid}] \u26a0\ufe0f repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})\n"
         elif et == ActivityEventType.ITERATION:
             return None
 
@@ -269,7 +268,7 @@ class TUI(App[None]):
 
         elif cmd == "/tree":
             g = self.runtime.task_graph()
-            agents = self.runtime._agents
+            agents = self.runtime.all_agents()
             if not g:
                 self.write_output("output-label", "No agents yet.\n")
                 return
@@ -298,6 +297,8 @@ class TUI(App[None]):
     async def _run_agent(self, description: str) -> None:
         agent_count_before = self.runtime.agent_count()
         runner = AgentRunner(self.runtime)
+
+        self.runtime.event_bus.clear()
 
         self.runtime.on_report(
             lambda aid, p: self.write_output(
@@ -330,10 +331,11 @@ class TUI(App[None]):
         finally:
             self._current_agent_task = None
             if self._root_agent is None:
+                agents = self.runtime.all_agents()
                 first_id = next(iter(self.runtime.task_graph()), "")
                 self._root_agent = self.runtime.get_agent(first_id) or (
-                    self.runtime._agents.get(next(iter(self.runtime._agents), ""))
-                    if self.runtime._agents
+                    next(iter(agents.values()), None)
+                    if agents
                     else None
                 )
 
@@ -356,7 +358,7 @@ class TUI(App[None]):
         tree.clear()
 
         g = self.runtime.task_graph()
-        agents = self.runtime._agents
+        agents = self.runtime.all_agents()
 
         if not g:
             tree.root.add(RichText(" No agents yet.", style="grey50"))
@@ -431,19 +433,14 @@ class TUI(App[None]):
         self.query_one("#output", RichLog).scroll_page_down()
 
 
-def _build_runtime(args: argparse.Namespace) -> Runtime:
-    return build_runtime(args)
-
-
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="dynamic-harness",
-        description="Interactive TUI for the recursive agent harness.",
+        prog="dynamic-harness-tui",
+        description="Textual TUI for the recursive agent harness (most verbose mode).",
     )
-    parser.add_argument("-m", metavar="FILE", help="Read task prompt from file (bypasses TUI)")
     parser.add_argument("--config", help="Path to harness.json config file")
     parser.add_argument("--no-llm", action="store_true", help="Run without an LLM")
-    parser.add_argument("--temp", action="store_true", help="Use temporary directories (data lost between sessions)")
+    parser.add_argument("--temp", action="store_true", help="Use temporary directories")
     parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--base-url", help="LLM API base URL")
     parser.add_argument("--api-key", help="LLM API key")
@@ -454,23 +451,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    runtime = _build_runtime(args)
-
-    if args.m:
-        prompt = Path(args.m).read_text()
-        runner = AgentRunner(runtime)
-        asyncio.run(runner.run(prompt))
-
-        for tag, summary in runner.last_reports:
-            print(f"\n=== Agent {tag} ===\n{summary}\n")
-
-        usage = runtime.total_usage()
-        print(f"Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}")
-        return
-
+    runtime = build_runtime(args)
     app = TUI(runtime=runtime)
     app.run()
-
-
-if __name__ == "__main__":
-    main()

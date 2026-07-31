@@ -1,4 +1,4 @@
-from .cli.tui import main
+from .cli.terminal import main
 
 if __name__ == "__main__":
     main()

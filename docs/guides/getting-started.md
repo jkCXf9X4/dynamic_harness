@@ -35,11 +35,14 @@ pip install -e .
 
 ## Environment Setup
 
-Create a `.env` file in the project root (secrets only):
+The API key is read from the environment, so add it to your shell config:
 
 ```bash
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
+# ~/.bashrc or ~/.zshrc
+export OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
+
+Then reload: `source ~/.bashrc`.
 
 Configurable settings (model, base URL, provider blacklist, safety limits) are managed
 in a separate `harness.json` file. Copy the template:
@@ -72,8 +75,8 @@ The config file is discovered automatically from `./harness.json` (CWD),
 For OpenAI directly:
 
 ```bash
-# .env
-OPENAI_API_KEY=sk-your-key-here
+# ~/.bashrc or ~/.zshrc
+export OPENAI_API_KEY=sk-your-key-here
 
 # harness.json
 {"llm": {"model": "gpt-4o", "base_url": "https://api.openai.com/v1"}}
@@ -159,7 +162,7 @@ Root (analyze codebase)
 ## Common Issues
 
 ### "No API key" error
-Ensure `.env` has `OPENROUTER_API_KEY` or `OPENAI_API_KEY`, or pass `--api-key` on the command line.
+Ensure `OPENROUTER_API_KEY` or `OPENAI_API_KEY` is set in your shell config (e.g. `~/.bashrc`), or pass `--api-key` on the command line.
 
 ### Missing harness.json
 Copy `harness.json.example` to `harness.json` and edit to your needs. Without it, sensible defaults are used (deepseek-v4-flash on OpenRouter).

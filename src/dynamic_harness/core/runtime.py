@@ -174,6 +174,9 @@ class Runtime:
     def get_agent(self, agent_id: str) -> Agent | None:
         return self._agents.get(agent_id)
 
+    def all_agents(self) -> dict[str, Agent]:
+        return dict(self._agents)
+
     def task_graph(self) -> dict[str, list[str]]:
         return dict(self._task_graph)
 

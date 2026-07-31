@@ -146,10 +146,10 @@ Supports both OpenAI and OpenRouter endpoints. For OpenRouter, set `base_url="ht
 
 Configuration is split into two files:
 
-**`.env`** — secrets only:
+**Shell config** (`~/.bashrc`, `~/.zshrc`, etc.) — secrets only:
 ```bash
-OPENROUTER_API_KEY=sk-or-v1-your-key    # Primary key
-OPENAI_API_KEY=sk-...                   # Fallback key
+export OPENROUTER_API_KEY=sk-or-v1-your-key    # Primary key
+export OPENAI_API_KEY=sk-...                   # Fallback key
 ```
 
 **`harness.json`** — structured settings:

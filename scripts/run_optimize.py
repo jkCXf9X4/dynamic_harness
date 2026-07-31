@@ -58,7 +58,7 @@ async def main() -> None:
     config = load_harness_config()
     api_key = merge_api_key()
     if not api_key:
-        print("Error: no API key found. Set OPENROUTER_API_KEY in .env")
+        print("Error: no API key found. Set OPENROUTER_API_KEY in ~/.bashrc")
         sys.exit(1)
 
     rt = Runtime(

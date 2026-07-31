@@ -22,7 +22,8 @@ dev = [
 ]
 
 [project.scripts]
-dynamic-harness = "dynamic_harness.cli.tui:main"
+dynamic-harness = "dynamic_harness.cli.terminal:main"
+dynamic-harness-tui = "dynamic_harness.cli.tui:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
