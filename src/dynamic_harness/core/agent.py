@@ -53,6 +53,7 @@ class Agent:
         self._messages: list[dict[str, Any]] = []
         self._has_run: bool = False
         self._iteration: int = 0
+        self._llm_retries: int = 0
         self._recent_batches: deque[list[tuple[str, frozenset[tuple[str, object]]]]] | None = None
         self._last_report: ReportPayload | None = None
         self._last_failure: Failure | None = None
@@ -151,6 +152,7 @@ class Agent:
                 )
                 if not is_retryable or attempt >= max_retries:
                     raise
+                self._llm_retries += 1
                 delay = base_delay * (2 ** attempt)
                 await asyncio.sleep(delay)
 

@@ -1,0 +1,21 @@
+Generate 5 variant system prompts for the agent in this repository.
+
+1) Read the current system prompt at src/dynamic_harness/core/agent_system_prompt.txt (this is the SEED).
+2) Create 5 complete, self-contained variant system prompts based on it:
+   1. Speed/parallelism emphasis
+   2. Thoroughness/verification emphasis
+   3. Terse and directive-heavy
+   4. Detailed and explanatory
+   5. Token efficiency
+   Focus on: clarity of delegation rules, emphasis on writing to disk before
+   reporting, and better verification instructions. Each variant should be
+   roughly 1000-1800 characters — but do NOT obsess over an exact count; a
+   correct, complete prompt beats one truncated to hit a limit. Decide the
+   length that best serves each focus.
+3) Write ALL 5 variants to .optimize_benchmarks/variants.json as a JSON object:
+   {"v1": "<full text>", "v2": "<full text>", ..., "v5": "<full text>"}
+4) Verify the JSON parses and contains exactly 5 variants.
+
+Do NOT run any benchmark tasks yourself. Do NOT evaluate or rank anything.
+Only read the seed, generate variants, and write the JSON file.
+Report with artifact .optimize_benchmarks/variants.json.

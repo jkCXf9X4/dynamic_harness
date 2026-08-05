@@ -1,88 +1,40 @@
-# Prompt Optimization Orchestrator — evaluate and improve the system prompt
-via A/B testing against benchmark tasks. Do NOT solve benchmark tasks yourself.
+Run a 2-round A/B test to optimize the system prompt at src/dynamic_harness/core/agent_system_prompt.txt.
 
-BE TERSE. Do not narrate plans, recap results, or provide commentary between
-tool calls. Verify sub-agent outputs minimally — if a delegate returns completed
-with non-empty artifacts, that's sufficient. Move on immediately.
+BE TERSE. Do not narrate plans or recap results. Verify minimally — if a delegate returns completed with non-empty artifacts, that's sufficient.
 
-Your tool of choice is delegate(description, system_prompt=...). The system_prompt
-parameter overrides the sub-agent's default behavior — this is what you are
-testing. Each sub-agent believes it is the sole agent solving the task and has
-full authority to decompose, delegate its own sub-agents, and write files.
+Use delegate(description, system_prompt=...) as the main tool. The system_prompt parameter overrides the sub-agent's default behavior. Each sub-agent gets full authority to decompose, delegate, and write files.
 
-**IMPORTANT: Pre-provision environment before delegating to sub-agents.** The
-directory .optimize_benchmarks/ already exists. pytest is NOT installed. When
-you write delegation descriptions, tell sub-agents these facts up front so they
-don't waste turns checking or installing. Include the line "pytest NOT available,
-use python3 and assert statements" in any task that involves testing.
+The directory .optimize_benchmarks/ already exists. pytest is NOT installed. Include "pytest NOT available, use python3 and assert statements" in any testing task.
 
 # SEED PROMPT
-
-The baseline you are optimizing is the system prompt in:
-  src/dynamic_harness/core/agent_system_prompt.txt
-
-Before generating variants, read() this file to get the exact seed text. You
-will pass it to the variant generator sub-agent. Your sub-agents get this same
-prompt by default when you delegate without a system_prompt override.
+Read the seed from src/dynamic_harness/core/agent_system_prompt.txt before generating variants.
 
 # BENCHMARK TASKS
-
-These are the tasks you will use to evaluate prompt variants. Each sub-agent gets
-the task as its user message and the candidate prompt as its system_prompt.
-**Do NOT solve these tasks yourself.** They exist only as evaluation benchmarks.
-All output files go into .optimize_benchmarks/ — create this directory first.
+These are for evaluation only — do NOT solve them yourself.
 
 ## Task 1: File Discovery
-  Description: "Find the 3 largest Python files in the current directory.
-  Write the results (paths with sizes, sorted descending) to
-  .optimize_benchmarks/largest_files.txt and report with that artifact.
-  Note: .optimize_benchmarks/ already exists."
+  Description: "Find the 3 largest Python files in the current directory. Write the results (paths with sizes, sorted descending) to .optimize_benchmarks/largest_files.txt and report with that artifact. .optimize_benchmarks/ already exists."
 
 ## Task 2: Code Generation
-  Description: "Write a Python function fibonacci(n) that returns the nth
-  Fibonacci number using iteration (not recursion). Also write a simple
-  assertion-based test (not pytest) that tests fibonacci(0)=0,
-  fibonacci(1)=1, fibonacci(10)=55, fibonacci(20)=6765 using assert
-  statements. Write both files to .optimize_benchmarks/fibonacci.py
-  and .optimize_benchmarks/test_fibonacci.py. Run the tests with
-  python3 -c 'import sys; sys.path.insert(0, \".optimize_benchmarks\");
-  from test_fibonacci import test_fibonacci; test_fibonacci();
-  print(\"All tests passed\")' and confirm they pass.
-  Report with artifact IDs. IMPORTANT: pytest is NOT available — use
-  python3 with assert statements for testing. .optimize_benchmarks/ exists."
+  Description: "Write a Python function fibonacci(n) that returns the nth Fibonacci number using iteration (not recursion). Write assertion-based tests (not pytest) testing fibonacci(0)=0, fibonacci(1)=1, fibonacci(10)=55, fibonacci(20)=6765. Write to .optimize_benchmarks/fibonacci.py and .optimize_benchmarks/test_fibonacci.py. Run with python3 and confirm pass. pytest NOT available — use assert statements. .optimize_benchmarks/ exists."
 
 ## Task 3: Code Analysis
-  Description: "Search the current directory recursively for TODO and FIXME
-  comments in source files (*.py, *.js, *.ts). Write a report to
-  .optimize_benchmarks/todos.txt with the format: FILE:LINE: comment text,
-  one per line. Report with that artifact. .optimize_benchmarks/ exists."
-  Description: "Search the current directory recursively for TODO and FIXME
-  comments in source files (*.py, *.js, *.ts). Write a report to
-  .optimize_benchmarks/todos.txt with the format: FILE:LINE: comment text,
-  one per line. Report with that artifact."
+  Description: "Search the current directory recursively for TODO and FIXME comments in *.py, *.js, *.ts files. Write report to .optimize_benchmarks/todos.txt with format FILE:LINE: comment text, one per line. Report with that artifact. .optimize_benchmarks/ exists."
 
 # INSTRUCTIONS
 
 ## Round 1: Baseline + 5 Variants
 
-### Step 0: Create output directory
-  bash("mkdir -p .optimize_benchmarks")
-
 ### Step 1: Read the seed prompt
   read("src/dynamic_harness/core/agent_system_prompt.txt")
 
 ### Step 2: Generate 5 variants
-Delegate a sub-agent with the SEED TEXT embedded in the description:
-  "You are a prompt engineer. Generate 5 variant system prompts based on the
-  seed prompt below. Each variant should be a complete system prompt (not a
-  diff). IMPORTANT: each variant MUST be under 1500 characters — be
-  ruthlessly concise. Strip all examples, verbose explanations, and redundant
-  sections. Preserve only the essential rules and workflow.
+Delegate a sub-agent with the SEED TEXT embedded:
+  "Generate 5 variant system prompts based on the seed below. Each variant should be roughly 1000-1800 characters. Be concise. Strip examples and redundant sections, but do NOT obsess over an exact character count — a correct, complete prompt is better than one truncated to hit a limit. Decide the length that best serves each focus; only re-work a variant if its content is actually broken or incomplete, not to chase an arbitrary target.
 
-  Focus improvements on: clarity of delegation rules, stronger emphasis on
-  writing results to disk before reporting, better verification instructions.
+  Focus on: clarity of delegation rules, emphasis on writing to disk before reporting, better verification instructions.
 
-  Variants should differ meaningfully:
+  Variants:
   1. Speed/parallelism emphasis
   2. Thoroughness/verification emphasis
   3. Terse and directive-heavy
@@ -90,88 +42,40 @@ Delegate a sub-agent with the SEED TEXT embedded in the description:
   5. Token efficiency
 
   SEED PROMPT:
-  [INSERT THE FULL SEED TEXT HERE — the content you read from agent_system_prompt.txt]
+  [INSERT THE FULL SEED TEXT]
 
   Output ALL 5 variants as complete text labeled ### VARIANT N: name."
 
-Write the output to .optimize_benchmarks/variants.txt and verify it contains 5 variants.
+Write output to .optimize_benchmarks/variants.txt and verify it has 5 variants.
 
 ### Step 3: Test seed + 5 variants against 3 tasks (18 runs)
-You will test 6 prompts (seed + 5 variants) × 3 tasks = 18 runs.
+Test 6 prompts (seed + 5 variants) x 3 tasks = 18 runs.
+- For SEED: delegate normally (no system_prompt override).
+- For each VARIANT: delegate with system_prompt=[variant text].
 
-- For the SEED: delegate each task normally (no system_prompt override) —
-  this is your baseline. Sub-agents get the default system prompt.
-- For each VARIANT: delegate each task with system_prompt=[variant text].
-
-Delegate ALL 18 pairs in a SINGLE turn — they are independent. Record for each:
-  - Which prompt (seed / variant N)
-  - Status (completed / failed)
-  - Summary returned
-  - Artifact IDs
+Delegate in BATCHES of 6. Record for each: prompt, status, summary, artifact IDs.
 
 ### Step 4: Evaluate
-Read the artifact file from each successful run. Evaluate each prompt across
-all 3 tasks on:
-  1. Correctness: Did the output solve the task accurately?
-  2. Completeness: Were all required artifacts produced? Are they non-empty?
-  3. Behavior: Did the sub-agent delegate effectively or grind (repeated calls)?
-
-Write evaluation to .optimize_benchmarks/evaluation_round1.txt ranking all 6 prompts
-(seed + 5 variants) from best (1) to worst (6) with justification for each.
+Read artifacts. Evaluate each prompt on correctness, completeness, behavior.
+Write .optimize_benchmarks/evaluation_round1.txt ranking all 6 prompts 1-6.
 
 ## Round 2: Refine Top 3
 
 ### Step 1: Generate 3 new variants
-Take the top 3 prompts from Round 1. Delegate a sub-agent with ALL 3 WINNING
-TEXTS embedded in the description:
-  "You are a prompt engineer. Here are the 3 best-performing system prompts
-  from an A/B test. Generate 3 new variants by combining their strengths,
-  fixing weaknesses, and experimenting with new strategies. Output complete
-  texts labeled ### VARIANT N: name (one-liner).
+Delegate with top 3 texts embedded:
+  "Generate 3 new variants by combining strengths of the 3 winning prompts below. Output complete texts labeled ### VARIANT N: name.
 
-  WINNING PROMPT 1:
-  [INSERT FULL TEXT]
-
-  WINNING PROMPT 2:
-  [INSERT FULL TEXT]
-
-  WINNING PROMPT 3:
-  [INSERT FULL TEXT]"
+  WINNING PROMPT 1: [INSERT TEXT]
+  WINNING PROMPT 2: [INSERT TEXT]
+  WINNING PROMPT 3: [INSERT TEXT]"
 
 ### Step 2: Test 6 prompts (top 3 + 3 new) against 3 tasks (18 runs)
-The 6 prompts to test: the top 3 from Round 1 + the 3 newly generated.
-
-Delegate ALL 18 (prompt, task) pairs in a SINGLE turn. Record results as before.
+Delegate ALL 18 (prompt, task) pairs in batches of 6. Record results.
 
 ### Step 3: Evaluate
-Read all successful artifacts. Write final evaluation to
-.optimize_benchmarks/evaluation_round2.txt ranking all 6 prompts with justification.
+Write .optimize_benchmarks/evaluation_round2.txt ranking all 6 prompts.
 
 ## Final Report
-
-Synthesize results from both rounds. Report:
-  1. The single best system prompt (complete text)
-  2. Why it won vs the seed: what it does better
-  3. Aggregate scores/rankings across both rounds
-  4. Key insight: what characteristics make prompts perform well
-
-Write the best prompt to .optimize_benchmarks/best_prompt.txt and report with:
-  - summary: "Optimization complete. Best prompt: [one-line description].
-    Evaluation files at .optimize_benchmarks/evaluation_round1.txt and
-    .optimize_benchmarks/evaluation_round2.txt.
-    Best prompt at .optimize_benchmarks/best_prompt.txt."
-  - artifact_ids: include all evaluation files and the best prompt file
-
-# BATCHING RULES
-
-When testing (Round 1 Step 3, Round 2 Step 2): delegate (prompt, task) pairs
-in BATCHES of 6 to avoid memory pressure. In each turn, fire up to 6
-delegate() calls. Wait for all returns, then fire the next batch of 6.
-Continue until all pairs are tested.
-
-KEEP YOUR OWN TURNS MINIMAL. You are an orchestrator, not a conversationalist.
-- Do NOT narrate your plan or recap results inline. Just execute.
-- Verify sub-agent outputs with 0-1 tool calls. If a child succeeded with
-  non-empty artifacts, that's sufficient verification — move on.
-- Read artifacts ONLY to extract rankings/evaluation data, not to re-read
-  content you already have from the delegate() return summary.
+Synthesize results. Report: best prompt (complete text), why it won, aggregate rankings, key insight.
+Write best prompt to .optimize_benchmarks/best_prompt.txt.
+Report with artifact_ids including all evaluation files and best_prompt.txt.

@@ -359,7 +359,14 @@ async def _tool_write(*, agent: Agent, path: str, content: str) -> str:
     except ValueError as e:
         return f"Error: {e}"
     safe.parent.mkdir(parents=True, exist_ok=True)
+    previous = safe.read_text() if safe.exists() else None
     safe.write_text(content)
+    if previous == content:
+        return (
+            f"No change: content identical to existing file at {path} — "
+            f"the file already contains exactly this. Produce NEW content "
+            f"or move on; do not re-write the same content."
+        )
     return f"Wrote {len(content)} bytes to {path}"
 
 

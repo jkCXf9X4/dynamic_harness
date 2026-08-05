@@ -201,6 +201,13 @@ class Runtime:
     def get_usage(self, agent_id: str) -> dict:
         return self.usage_tracker.get_usage(agent_id)
 
+    def get_retries(self, agent_id: str) -> int:
+        agent = self._agents.get(agent_id)
+        return agent._llm_retries if agent else 0
+
+    def total_retries(self) -> int:
+        return sum(a._llm_retries for a in self._agents.values())
+
     def total_usage(self) -> dict:
         return self.usage_tracker.total_usage()
 
