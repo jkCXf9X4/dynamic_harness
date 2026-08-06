@@ -314,6 +314,45 @@ TOOL_CONVERSE_DEF = ToolDef(
     },
 )
 
+TOOL_PRUNE_DEF = ToolDef(
+    name="prune",
+    description="Remove stale or irrelevant committed turns from this agent's "
+                "context to reduce token usage. Turns are identified by the "
+                "prune_id shown in the Context Observation (e.g. 't3'). A turn "
+                "is the assistant message plus its tool results — all are "
+                "removed together and replaced by a short PRUNED marker. The "
+                "full content is kept in memory and can be retrieved later via "
+                "restore(prune_id=...). The task definition and system prompt "
+                "are never touched. Prefer this over compress() when only a "
+                "few turns are stale.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "prune_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Turn ids (from Context Observation 'prune_id:tools') to prune",
+            },
+        },
+        "required": ["prune_ids"],
+    },
+)
+
+TOOL_RESTORE_DEF = ToolDef(
+    name="restore",
+    description="Bring a previously pruned turn (assistant message + its tool "
+                "results) back into this agent's context. The turn is "
+                "re-inserted at the location of its PRUNED marker. Use this "
+                "when a dropped tool result turns out to be needed after all.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "prune_id": {"type": "string", "description": "Turn id to restore, e.g. 't3'"},
+        },
+        "required": ["prune_id"],
+    },
+)
+
 TOOL_READ_ARTIFACT_DEF = ToolDef(
     name="read_artifact",
     description="Read an artifact by its ID. Artifacts are stored when agents call "
@@ -662,6 +701,10 @@ async def _tool_compress(*, agent: Agent) -> str:
         agent._messages[0],
         {"role": "system", "content": f"[Context compressed] {summary}"},
     ]
+    agent._pruned.clear()
+    agent._prune_markers.clear()
+    agent._turn_order.clear()
+    agent._turns.clear()
     after = len(agent._messages)
     saved = before - after
     agent.emit_activity(ActivityEvent(
@@ -674,6 +717,165 @@ async def _tool_compress(*, agent: Agent) -> str:
         },
     ))
     return f"Compressed: {before} messages -> {after} messages ({saved} removed).\nSummary: {summary[:200]}..."
+
+
+def _make_prune_marker(pid: str, turn_msgs: list[dict[str, Any]]) -> str:
+    tool_names = ", ".join(
+        tc.get("function", {}).get("name", "?")
+        for tc in turn_msgs[0].get("tool_calls", [])
+    ) if turn_msgs and turn_msgs[0].get("role") == "assistant" else "reply"
+    tail = ""
+    for m in reversed(turn_msgs):
+        content = m.get("content")
+        if content:
+            tail = content
+            break
+    tail = tail[:200]
+    suffix = "…" if len(tail) == 200 else ""
+    return (
+        f"[PRUNED {pid} ({tool_names}) — retained for restore(prune_id={pid!r}). "
+        f"Tail: {tail}{suffix}]"
+    )
+
+
+async def _tool_prune(*, agent: Agent, prune_ids: list[str] | str | None = None) -> str:
+    if isinstance(prune_ids, str):
+        prune_ids = [pid.strip() for pid in prune_ids.split(",") if pid.strip()]
+    prune_ids = list(prune_ids or [])
+    if not prune_ids:
+        return (
+            "prune(prune_ids=[...]) drops whole committed turns (assistant "
+            "message + tool results) and replaces them with a short PRUNED "
+            "marker. IDs are listed in your Context Observation as "
+            "'prune_id:tools'; use restore(prune_id=...) to bring one back."
+        )
+    if not agent._turns:
+        return "No committed turns to prune."
+
+    requested = [str(pid) for pid in prune_ids]
+    invalid = [pid for pid in requested if pid not in agent._turns]
+    already = [pid for pid in requested if pid in agent._pruned]
+    pending = [pid for pid in requested if pid in agent._turns and pid not in agent._pruned]
+
+    if not pending:
+        notes = []
+        if already:
+            notes.append(f"already pruned (use restore): {already}")
+        if invalid:
+            notes.append(f"unknown ids (see Context Observation): {invalid}")
+        return "Nothing to prune. " + "; ".join(notes)
+
+    remove: dict[int, str] = {}
+    for pid in pending:
+        for m in agent._turns[pid]:
+            remove[id(m)] = pid
+
+    existing_marker_by_id = {
+        id(info["marker"]): pid
+        for pid, info in agent._prune_markers.items()
+    }
+
+    new_messages: list[dict[str, Any]] = []
+    marker_for: dict[str, dict[str, Any]] = {}
+    i = 0
+    idx = 0
+    messages = agent._messages
+    while i < len(messages):
+        m = messages[i]
+        pid = remove.get(id(m))
+        if pid is None:
+            new_messages.append(m)
+            old_pid = existing_marker_by_id.get(id(m))
+            if old_pid is not None:
+                agent._prune_markers[old_pid]["index"] = idx
+            i += 1
+            idx += 1
+            continue
+        turn_len = len(agent._turns[pid])
+        marker = {
+            "role": "assistant",
+            "content": _make_prune_marker(pid, agent._turns[pid]),
+        }
+        marker_for[pid] = {"marker": marker, "index": idx}
+        new_messages.append(marker)
+        i += turn_len
+        idx += 1
+
+    agent._messages = new_messages
+    for pid in pending:
+        agent._pruned.add(pid)
+        agent._prune_markers[pid] = marker_for[pid]
+
+    chars_saved = sum(
+        len(_json.dumps(m)) for pid in pending for m in agent._turns[pid]
+    )
+    evicted = agent.evict_pruned_overflow()
+    agent.emit_activity(ActivityEvent(
+        agent_id=agent.id,
+        event_type=ActivityEventType.COMPRESSION,
+        data={
+            "turns_pruned": pending,
+            "chars_saved": chars_saved,
+            "turns_evicted": evicted,
+        },
+    ))
+    notes = []
+    if invalid:
+        notes.append(f"unknown ids (see Context Observation): {invalid}")
+    if already:
+        notes.append(f"already pruned (use restore): {already}")
+    if evicted:
+        notes.append(
+            f"old retained turns permanently discarded "
+            f"(retention cap {agent.max_pruned_retained}): {evicted}"
+        )
+    suffix = ("; " + "; ".join(notes)) if notes else ""
+    return (
+        f"Pruned turns {pending} ({len(pending)} turns, ~{chars_saved} chars "
+        f"removed from context). Replaced with PRUNED markers. "
+        f"Use restore(prune_id=...) to bring one back.{suffix}"
+    )
+
+
+async def _tool_restore(*, agent: Agent, prune_id: str) -> str:
+    prune_id = str(prune_id)
+    entry = agent._prune_markers.get(prune_id)
+    if entry is None:
+        return (f"Nothing to restore for {prune_id!r}: it is not currently pruned "
+                f"(or was evicted and is no longer retained).")
+    turn_msgs = agent._turns[prune_id]
+    marker = entry["marker"]
+    messages = agent._messages
+    target_idx: int | None = None
+
+    stored_idx = entry.get("index")
+    if stored_idx is not None and 0 <= stored_idx < len(messages) and messages[stored_idx] is marker:
+        target_idx = stored_idx
+    else:
+        for j, m in enumerate(messages):
+            if m is marker:
+                target_idx = j
+                break
+    if target_idx is None:
+        return (f"Cannot restore {prune_id!r}: its PRUNED marker is no longer present "
+                f"in the context (likely removed by compression or eviction).")
+
+    agent._messages = messages[:target_idx] + turn_msgs + messages[target_idx + 1:]
+    for pid, info in agent._prune_markers.items():
+        if pid == prune_id:
+            continue
+        idx = info.get("index")
+        if idx is not None and idx > target_idx:
+            info["index"] = idx + (len(turn_msgs) - 1)
+    agent._pruned.discard(prune_id)
+    agent._prune_markers.pop(prune_id, None)
+
+    chars = sum(len(_json.dumps(m)) for m in turn_msgs)
+    n_tools = len(turn_msgs) - 1
+    return (
+        f"Restored turn {prune_id} (assistant + {n_tools} tool result(s), "
+        f"~{chars} chars) at its original position."
+    )
 
 
 async def _tool_converse(*, agent: Agent, agent_id: str, message: str) -> str:
@@ -711,5 +913,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(TOOL_FAIL_DEF, _tool_fail)
     registry.register(TOOL_ASK_DEF, _tool_ask)
     registry.register(TOOL_COMPRESS_DEF, _tool_compress)
+    registry.register(TOOL_PRUNE_DEF, _tool_prune)
+    registry.register(TOOL_RESTORE_DEF, _tool_restore)
     registry.register(TOOL_CONVERSE_DEF, _tool_converse)
     registry.register(TOOL_READ_ARTIFACT_DEF, _tool_read_artifact)

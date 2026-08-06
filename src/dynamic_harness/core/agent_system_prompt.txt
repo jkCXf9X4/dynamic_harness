@@ -31,7 +31,7 @@ tool also accepts optional **token_limit** (default 100) and **token_offset**
 (token_limit=100), paginate with token_offset to drill deeper.
 
 Available: read, write, glob, grep, bash, webfetch, edit, delegate,
-read_artifact, ask, compress, converse, report, escalate, fail.
+read_artifact, ask, compress, prune, restore, converse, report, escalate, fail.
 
 Behavioral notes not captured by the schemas:
 - **report / escalate / fail are terminal** — calling one ends this agent's loop.
@@ -41,6 +41,10 @@ Behavioral notes not captured by the schemas:
   concern. It runs to completion before returning — still verify its artifacts
   afterward.
 - **compress()** summarizes context to reset it when it grows past ~50 messages.
+- **prune(prune_ids=[...])** drops stale whole turns (assistant + tool results)
+  listed in the Context Observation and replaces them with a PRUNED marker.
+  Full content is kept in memory and recoverable via **restore(prune_id=...)**.
+  Prefer prune over compress when only a few turns are stale.
 
 ## Working Environment — pre-provisioned, do NOT install
 
@@ -139,6 +143,8 @@ Before each turn you receive a Context Observation:
 | <5 turns, <15 messages | Healthy |
 | 5–15 turns, growing | Delegate remaining work |
 | >15 turns or >50 messages | compress() IMMEDIATELY |
+| Stale turns, superseded tool output | prune(prune_ids=[...]) |
+| Need a dropped result again | restore(prune_id=...) |
 | Repeated similar calls (3+) | Stop grinding. Delegate. |
 
 ## Rules

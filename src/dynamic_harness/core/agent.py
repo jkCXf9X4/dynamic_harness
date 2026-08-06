@@ -40,6 +40,8 @@ class Agent:
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
         safety_timeout_seconds: float | None = None,
+        active_turn_window: int = 50,
+        max_pruned_retained: int = 100,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -49,16 +51,24 @@ class Agent:
         self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
         self._safety_timeout_seconds = safety_timeout_seconds
+        self.active_turn_window = max(int(active_turn_window), 1)
+        self.max_pruned_retained = max(int(max_pruned_retained), 0)
         self._started_at: float | None = None
         self._messages: list[dict[str, Any]] = []
         self._has_run: bool = False
         self._iteration: int = 0
         self._llm_retries: int = 0
-        self._recent_batches: deque[list[tuple[str, frozenset[tuple[str, object]]]]] | None = None
+        self._recent_batches: deque[list[tuple[str, str]]] | None = None
         self._last_report: ReportPayload | None = None
         self._last_failure: Failure | None = None
         self._pending_child_task: asyncio.Task[None] | None = None
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
+
+        self._turn_counter: int = 0
+        self._turn_order: list[str] = []
+        self._turns: dict[str, list[dict[str, Any]]] = {}
+        self._pruned: set[str] = set()
+        self._prune_markers: dict[str, dict[str, Any]] = {}
 
         self._runtime = runtime
         self._event_bus = runtime.event_bus
@@ -158,6 +168,56 @@ class Agent:
 
         raise last_error  # type: ignore[misc]
 
+    def _commit_turn(
+        self,
+        assistant_msg: dict[str, Any],
+        results: list[dict[str, Any]],
+    ) -> str:
+        pid = f"t{self._turn_counter}"
+        self._turn_counter += 1
+        self._turn_order.append(pid)
+        self._turns[pid] = [assistant_msg] + list(results)
+        self._messages.append(assistant_msg)
+        self._messages.extend(results)
+        return pid
+
+    def active_turn_ids(self) -> list[str]:
+        active = [pid for pid in self._turn_order if pid not in self._pruned]
+        return active[-self.active_turn_window:]
+
+    def evict_pruned_overflow(self) -> list[str]:
+        evicted: list[str] = []
+        if self.max_pruned_retained <= 0:
+            return evicted
+        while len(self._pruned) > self.max_pruned_retained:
+            candidate = next(
+                (p for p in self._turn_order if p in self._pruned),
+                None,
+            )
+            if candidate is None:
+                break
+            entry = self._prune_markers.pop(candidate, None)
+            if entry is not None:
+                marker = entry.get("marker")
+                if marker is not None:
+                    self._messages = [
+                        m for m in self._messages if m is not marker
+                    ]
+            self._pruned.discard(candidate)
+            self._turns.pop(candidate, None)
+            evicted.append(candidate)
+        return evicted
+
+    def _turn_tool_names(self, pid: str) -> str:
+        names: list[str] = []
+        for msg in self._turns.get(pid, []):
+            if msg.get("role") == "assistant":
+                for tc in msg.get("tool_calls", []):
+                    name = tc.get("function", {}).get("name")
+                    if name:
+                        names.append(name)
+        return ",".join(names) if names else "reply"
+
     async def _run_loop(self) -> None:
         tools = self._tool_registry.openai_schemas()
 
@@ -199,11 +259,18 @@ class Agent:
 
             prompt_tokens = self._usage_tracker.get_usage(self.id).get("prompt_tokens", 0)
 
+            active_turns = self.active_turn_ids()
+            turn_map = " · ".join(
+                f"{pid}:{self._turn_tool_names(pid)}" for pid in active_turns
+            )
             context_obs = (
                 f"[Context Observation]\n"
                 f"Turn: {self._iteration}\n"
                 f"Messages in context: {len(self._messages)}\n"
                 f"Estimated prompt tokens this agent: {prompt_tokens}\n"
+                f"Recent committed turns (prune_id:tools): {turn_map or 'none'}\n"
+                f"Use prune(prune_ids=[...]) to drop stale turns listed above; "
+                f"restore(prune_id=...) to bring a pruned turn back.\n"
                 f"Your task: {self.task.description}\n"
                 f"{self.environment_info}"
             )
@@ -322,18 +389,16 @@ class Agent:
                     ):
                         if self._deferred_delegates is not None:
                             await self._gather_deferred_and_finalize(results)
-                        self._messages.append(assistant_msg)
-                        self._messages.extend(results)
+                        self._commit_turn(assistant_msg, results)
                         return
 
                 if self._deferred_delegates is not None:
                     await self._gather_deferred_and_finalize(results)
 
-                self._messages.append(assistant_msg)
-                self._messages.extend(results)
+                self._commit_turn(assistant_msg, results)
 
                 batch_sig = tuple(
-                    (tc.name, frozenset(tc.arguments.items()))
+                    (tc.name, json.dumps(tc.arguments, sort_keys=True))
                     for tc in response.tool_calls
                 )
                 assert self._recent_batches is not None

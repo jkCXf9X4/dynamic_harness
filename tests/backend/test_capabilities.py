@@ -7,6 +7,7 @@ import pytest
 from dynamic_harness.core.capabilities import TOOL_ASK_DEF, ToolDef, ToolRegistry
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
+from dynamic_harness.core.agent import Agent
 
 
 def test_tool_registry_register_and_list() -> None:
@@ -92,8 +93,8 @@ def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
     assert "question" in td.input_schema.get("properties", {})
 
 
-def test_default_tools_all_fifteen(runtime: Runtime) -> None:
-    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "converse", "read_artifact"}
+def test_default_tools_all_seventeen(runtime: Runtime) -> None:
+    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "read_artifact"}
     assert set(runtime.tool_registry.list_tools()) == expected
 
 
@@ -220,6 +221,161 @@ async def test_compress_tool_no_llm(runtime: Runtime) -> None:
     ]
     result = await runtime.tool_registry.execute("compress", "tc1", agent=agent)
     assert "No LLM available" in result.content
+
+
+def _commit_turn(agent: Agent, *, tools: bool = True, content: str = "reasoning") -> None:
+    assistant_msg: dict[str, object] = {
+        "role": "assistant",
+        "content": content,
+    }
+    results: list[dict[str, object]] = []
+    if tools:
+        assistant_msg["tool_calls"] = [
+            {"id": f"call_{agent._turn_counter}", "type": "function", "function": {"name": "bash", "arguments": "{}"}},
+        ]
+        results.append({"role": "tool", "tool_call_id": f"call_{agent._turn_counter}", "content": "output of a tool call"})
+    agent._commit_turn(assistant_msg, results)
+
+
+@pytest.mark.asyncio
+async def test_prune_removes_turn_and_leaves_marker(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    _commit_turn(agent)
+    assert len(agent._messages) == 4
+
+    result = await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
+    assert "t0" in result.content
+    assert agent._pruned == {"t0"}
+    assert len(agent._messages) == 3
+    assert any("PRUNED t0" in str(m.get("content")) for m in agent._messages)
+    assert len(agent._turns["t0"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_prune_is_pair_atomic_no_dangling_tool_results(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    _commit_turn(agent)
+    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
+
+    live_ids = set()
+    for m in agent._messages:
+        for tc in m.get("tool_calls") or []:
+            live_ids.add(tc["id"])
+    dangling = [m["tool_call_id"] for m in agent._messages if m.get("role") == "tool" and m["tool_call_id"] not in live_ids]
+    assert dangling == []
+
+
+@pytest.mark.asyncio
+async def test_prune_rejects_invalid_id(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    result = await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0", "t99"])
+    assert "unknown ids" in result.content and "t99" in result.content
+    assert "t0" in result.content
+
+
+@pytest.mark.asyncio
+async def test_prune_empty_list_returns_guidance(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    result = await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=[])
+    assert "prune(prune_ids=[...])" in result.content
+
+
+@pytest.mark.asyncio
+async def test_restore_returns_pruned_turn(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    _commit_turn(agent)
+    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
+    assert len(agent._messages) == 3
+
+    result = await runtime.tool_registry.execute("restore", "tc2", agent=agent, prune_id="t0")
+    assert "Restored turn t0" in result.content
+    assert "t0" not in agent._pruned
+    assert len(agent._messages) == 4
+    assert all(not ("PRUNED t0" in str(m.get("content"))) for m in agent._messages)
+    assert len(agent._turns["t0"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_restore_unknown_or_active_id(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    result = await runtime.tool_registry.execute("restore", "tc1", agent=agent, prune_id="t0")
+    assert "not currently pruned" in result.content
+    result = await runtime.tool_registry.execute("restore", "tc2", agent=agent, prune_id="nope")
+    assert "not currently pruned" in result.content
+
+
+@pytest.mark.asyncio
+async def test_prune_accepts_single_string_input(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    result = await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids="t0")
+    assert "t0" in result.content
+    assert agent._pruned == {"t0"}
+
+
+@pytest.mark.asyncio
+async def test_restore_errors_when_marker_missing(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    _commit_turn(agent)
+    _commit_turn(agent)
+    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
+    agent._messages = [m for m in agent._messages if not str(m.get("content", "")).startswith("[PRUNED")]
+    assert len(agent._messages) == 2
+
+    result = await runtime.tool_registry.execute("restore", "tc2", agent=agent, prune_id="t0")
+    assert "no longer present" in result.content
+    assert "t0" in agent._pruned
+    assert len(agent._messages) == 2
+
+
+@pytest.mark.asyncio
+async def test_prune_evicts_old_retained_turns_at_cap(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    agent.max_pruned_retained = 2
+    for _ in range(4):
+        _commit_turn(agent)
+    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0", "t1", "t2", "t3"])
+
+    assert len(agent._pruned) <= 2
+    assert "t0" not in agent._pruned
+    assert "t0" not in agent._turns
+    assert "t0" not in agent._prune_markers
+    assert "t3" in agent._pruned
+    assert "t3" in agent._turns
+
+
+@pytest.mark.asyncio
+async def test_restore_uses_stored_index_reorders_markers(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    for _ in range(3):
+        _commit_turn(agent)
+    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
+    await runtime.tool_registry.execute("prune", "tc2", agent=agent, prune_ids=["t1"])
+
+    order = [str(m.get("content", "")) for m in agent._messages if str(m.get("content", "")).startswith("[PRUNED")]
+    assert order[0].startswith("[PRUNED t0")
+    assert order[1].startswith("[PRUNED t1")
+
+    await runtime.tool_registry.execute("restore", "tc3", agent=agent, prune_id="t0")
+
+    order = [str(m.get("content", "")) for m in agent._messages if str(m.get("content", "")).startswith("[PRUNED")]
+    assert len(order) == 1
+    assert order[0].startswith("[PRUNED t1")
+    assert "t0" not in agent._pruned
+    assert "t1" in agent._pruned
+
+
+def test_active_turn_window_is_configurable(tmp: Path) -> None:
+    rt = Runtime(artifact_root=tmp / "a", repo_root=tmp / "r", generated_root=tmp)
+    agent = Agent("a", Task(description="test"), rt, active_turn_window=200)
+    assert agent.active_turn_window == 200
+    assert rt.delegate(Task(description="test")).active_turn_window == 50
 
 
 @pytest.mark.asyncio

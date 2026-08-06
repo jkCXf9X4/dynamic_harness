@@ -41,6 +41,8 @@ class Runtime:
         self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
+        self._active_turn_window = 50
+        self._max_pruned_retained = 100
 
         self.event_bus = EventBus()
         self.usage_tracker = UsageTracker()
@@ -93,12 +95,16 @@ class Runtime:
                 agent_id, task, self, parent,
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
+                active_turn_window=self._active_turn_window,
+                max_pruned_retained=self._max_pruned_retained,
             )
         else:
             agent = Agent(
                 agent_id, task, self, parent,
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
+                active_turn_window=self._active_turn_window,
+                max_pruned_retained=self._max_pruned_retained,
             )
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []

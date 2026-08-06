@@ -480,6 +480,75 @@ async def test_compress_tool_with_messages(runtime: Runtime) -> None:
     assert "No LLM available" in result.content
 
 
+# ── Prune / restore tools ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_agent_prunes_then_restores_turn(runtime: Runtime) -> None:
+    f1 = runtime.generated_root / "old.txt"
+    f2 = runtime.generated_root / "new.txt"
+    f1.write_text("OLD-CONTENT")
+    f2.write_text("NEW-CONTENT")
+    runtime.set_llm(_ToolLLM([
+        ToolCallResponse(tool_calls=[ToolCallData(id="c1", name="read", arguments={"path": str(f1)})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c2", name="read", arguments={"path": str(f2)})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c3", name="prune", arguments={"prune_ids": ["t0"]})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c4", name="restore", arguments={"prune_id": "t0"})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=None, content="Read both files. Old: OLD-CONTENT New: NEW-CONTENT", model="mock"),
+    ]))
+    agent = _make_agent(runtime, "Read old.txt and new.txt")
+    await agent.run()
+    assert agent.task.status.value == "completed"
+    assert "OLD-CONTENT" in agent._last_report.summary
+    assert "OLD-CONTENT" in json.dumps(agent._messages)
+    assert all(not str(m.get("content", "")).startswith("[PRUNED") for m in agent._messages)
+
+    live_ids = set()
+    for m in agent._messages:
+        for tc in m.get("tool_calls") or []:
+            live_ids.add(tc["id"])
+    dangling = [m["tool_call_id"] for m in agent._messages if m.get("role") == "tool" and m["tool_call_id"] not in live_ids]
+    assert dangling == []
+
+
+@pytest.mark.asyncio
+async def test_agent_prune_removes_turn_from_context(runtime: Runtime) -> None:
+    f = runtime.generated_root / "data.txt"
+    f.write_text("DATA-CONTENT")
+    runtime.set_llm(_ToolLLM([
+        ToolCallResponse(tool_calls=[ToolCallData(id="c1", name="read", arguments={"path": str(f)})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c2", name="prune", arguments={"prune_ids": ["t0"]})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=None, content="Done.", model="mock"),
+    ]))
+    agent = _make_agent(runtime, "Read data.txt")
+    await agent.run()
+    assert agent.task.status.value == "completed"
+    assert any(str(m.get("content", "")).startswith("[PRUNED t0") for m in agent._messages)
+    assert all(m.get("role") != "tool" or "DATA-CONTENT" not in str(m.get("content", "")) for m in agent._messages)
+    assert agent._pruned == {"t0"}
+    assert len(agent._turns["t0"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_compress_resets_prune_bookkeeping(runtime: Runtime) -> None:
+    f = runtime.generated_root / "data.txt"
+    f.write_text("DATA-CONTENT")
+    runtime.set_llm(_ToolLLM([
+        ToolCallResponse(tool_calls=[ToolCallData(id="c1", name="read", arguments={"path": str(f)})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c2", name="prune", arguments={"prune_ids": ["t0"]})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c3", name="compress", arguments={})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=None, content="Done.", model="mock"),
+    ]))
+    agent = _make_agent(runtime, "Read data.txt")
+    await agent.run()
+    assert agent.task.status.value == "completed"
+    assert agent._pruned == set()
+    assert agent._prune_markers == {}
+    assert agent._turn_order == ["t2"]
+    assert set(agent._turns) == {"t2"}
+    assert "DATA-CONTENT" not in str(agent._messages)
+    assert any(str(m.get("content", "")).startswith("[Context compressed]") for m in agent._messages)
+
+
 # ── Converse tool (covered by existing tests in test_capabilities.py) ──
 
 @pytest.mark.asyncio
