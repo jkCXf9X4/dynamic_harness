@@ -219,13 +219,77 @@ class TodosTask(BenchmarkTask):
         return True, f"{len(truth)} TODO/FIXME hits match"
 
 
+class FileSizesTask(BenchmarkTask):
+    """Long-context probe: compute byte sizes of many files one at a time.
+
+    Deliberately drives many sequential tool calls (one ``wc -c`` per file) so
+    the agent accumulates a long transcript of stale tool results. This is the
+    scenario where prune/restore should help keep context/prompt tokens low
+    without sacrificing correctness (each entry is written to disk as it is
+    read).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            id="manyfiles",
+            description=(
+                "There is a directory named _payload containing many text "
+                "files. Compute the byte size of EVERY file in _payload, "
+                "processing them ONE FILE AT A TIME (call the bash tool once "
+                "per file, e.g. `wc -c _payload/<file>`). As soon as you have "
+                "a size, append a line of the form `<filename>:<size>` to "
+                ".optimize_benchmarks/sizes.txt (create it if needed). Do not "
+                "move on to the next file until the previous size is written. "
+                "You may prune() turns for files you have already written to "
+                "disk, since their results are no longer needed. "
+                "When every file is done, report with that artifact. "
+                ".optimize_benchmarks/ exists."
+            ),
+            artifact_paths=[".optimize_benchmarks/sizes.txt"],
+        )
+
+    def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
+        payload = scan_root / "_payload"
+        if not payload.is_dir():
+            return False, "_payload directory missing from workspace"
+
+        truth: dict[str, int] = {}
+        for p in sorted(payload.iterdir()):
+            if p.is_file():
+                size = int(subprocess.check_output(["wc", "-c", str(p)]).split()[0])
+                truth[p.name] = size
+
+        produced: dict[str, int] = {}
+        out = output_dir / "sizes.txt"
+        if out.exists():
+            for line in out.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                *name_parts, size_tok = line.rsplit(":", 1)
+                name = ":".join(name_parts).strip().replace("./", "").strip("/")
+                if not name or not size_tok.strip().isdigit():
+                    continue
+                produced[name] = int(size_tok.strip())
+
+        if set(truth) != set(produced):
+            missing = sorted(set(truth) - set(produced))
+            extra = sorted(set(produced) - set(truth))
+            return False, f"file sets differ: missing={missing} extra={extra}"
+
+        wrong = {n for n in truth if truth[n] != produced.get(n)}
+        if wrong:
+            return False, f"size mismatch for {sorted(wrong)}"
+
+        return True, f"all {len(truth)} file sizes in _payload match"
+
+
 ALL_TASKS: list[BenchmarkTask] = [
     LargestFilesTask(),
     FibonacciTask(),
     TodosTask(),
+    FileSizesTask(),
 ]
-
-
 def find_task(task_id: str) -> BenchmarkTask:
     for t in ALL_TASKS:
         if t.id == task_id:

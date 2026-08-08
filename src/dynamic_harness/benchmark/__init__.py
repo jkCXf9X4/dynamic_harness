@@ -35,13 +35,14 @@ class Benchmark:
         output_dir: Path,
         price_input_per_mtok: float = 0.0,
         price_output_per_mtok: float = 0.0,
+        collector: MetricsCollector | None = None,
     ) -> None:
         self.runtime_factory = runtime_factory
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.price_in = price_input_per_mtok
         self.price_out = price_output_per_mtok
-        self.collector = MetricsCollector(
+        self.collector = collector or MetricsCollector(
             price_input_per_mtok=self.price_in,
             price_output_per_mtok=self.price_out,
         )

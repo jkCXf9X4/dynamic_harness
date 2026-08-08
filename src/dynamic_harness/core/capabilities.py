@@ -47,6 +47,9 @@ class ToolRegistry:
     def register(self, tool_def: ToolDef, fn: ToolFunc) -> None:
         self._tools[tool_def.name] = (tool_def, fn)
 
+    def unregister(self, name: str) -> None:
+        self._tools.pop(name, None)
+
     def get(self, name: str) -> tuple[ToolDef, ToolFunc] | None:
         return self._tools.get(name)
 

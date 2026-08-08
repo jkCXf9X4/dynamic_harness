@@ -8,9 +8,20 @@ Generate 5 variant system prompts for the agent in this repository.
    4. Detailed and explanatory
    5. Token efficiency
    Focus on: clarity of delegation rules, emphasis on writing to disk before
-   reporting, and better verification instructions. Each variant should be
-   roughly 1000-1800 characters — but do NOT obsess over an exact count; a
-   correct, complete prompt beats one truncated to hit a limit. Decide the
+   reporting, better verification instructions, and — IMPORTANTLY — ACTIVE
+   CONTEXT MANAGEMENT using the `prune` and `restore` tools. The agent has
+   tools `prune(prune_ids=[...])` and `restore(restore_id=..., restore_ids=[...])`
+   that drop old turns from its context and bring them back on demand. Variants
+   MUST give concrete instructions telling the agent to call `prune` to discard
+   turns whose results are already written to disk (e.g. after processing each
+   file), and to `restore` a pruned turn when it later needs its content. This
+   is REQUIRED because the benchmark suite includes a "manyfiles" task that
+   reads and processes many files one at a time, and variants that keep context
+   unbounded score far worse on token efficiency. Strong, specific prune/restore
+   guidance is a scoring advantage; omitting it is a known weakness of the seed.
+   Each variant should be roughly 1000-1800 characters — but do NOT obsess over
+   an exact count; a correct, complete prompt beats one truncated to hit a limit.
+   Decide the
    length that best serves each focus.
 3) Write ALL 5 variants to .optimize_benchmarks/variants.json as a JSON object:
    {"v1": "<full text>", "v2": "<full text>", ..., "v5": "<full text>"}

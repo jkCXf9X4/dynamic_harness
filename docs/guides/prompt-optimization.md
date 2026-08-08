@@ -12,25 +12,39 @@ Given the baseline prompt (`src/dynamic_harness/core/agent_system_prompt.txt`),
 an **orchestrator agent** runs a two-round A/B test:
 
 - **Round 1** — generates 5 variants + tests all 6 prompts (seed + 5) against
-  3 benchmark tasks = 18 runs.
+  the benchmark task suite.
 - **Round 2** — takes the top 3, generates 3 refined variants, tests 6 prompts
-  × 3 tasks = 18 runs.
+  again.
 - Aggregates results and writes the single best prompt to disk.
 
-The orchestrator explicitly does **not** solve the benchmark tasks itself — it
-delegates each (prompt, task) pair to a sub-agent for evaluation.
+All measurement/ranking is deterministic and in-process: each (prompt, task)
+pair is run by a fresh `Runtime` in a staged snapshot workspace and verified
+against a **failable ground-truth verifier** (see `dynamic_harness.benchmark`).
+The LLM only performs creative variant generation; it never solves or ranks the
+tasks.
+
+The benchmark tasks come from **one canonical source**:
+`src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`). That same list drives
+the general optimization (`scripts/run_optimize.py`), the dedicated prune/restore
+A/B (`scripts/run_prune_ab.py`), and the standalone CLI
+(`python -m dynamic_harness.benchmark.run`). There is no second, prose-embedded
+task list to keep in sync.
 
 ## 2. Files involved
 
 | Role | Path |
 |---|---|
-| Orchestrator instructions | `prompts/optimize.prompt` |
-| Small-scale smoke test | `prompts/test_optimize.prompt` |
-| Runner script | `scripts/run_optimize.py` |
+| Single task source | `src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`) |
+| Optimization runner | `scripts/run_optimize.py` |
+| Prune/restore A/B test | `scripts/run_prune_ab.py` |
+| Standalone metric CLI | `src/dynamic_harness/benchmark/run.py` |
+| Variant-generation instructions | `prompts/generate_variants.prompt` |
+| Refinement instructions | `prompts/refine_variants.prompt` |
 | Baseline prompt (the thing being optimized) | `src/dynamic_harness/core/agent_system_prompt.txt` |
 | Model/provider config | `harness.json` |
 | Runtime output (artifacts/commits/traces) | `.dynamic-harness/` |
-| Benchmark output files | `.optimize_benchmarks/` |
+| Optimization output files | `.optimize_benchmarks/` |
+| Prune/restore A/B output files | `.optimize_ab/` |
 
 ## 3. Prerequisites
 
@@ -63,8 +77,7 @@ delegates each (prompt, task) pair to a sub-agent for evaluation.
 
 ## 4. How to run
 
-Clean the benchmark state, then run the script (edit
-`scripts/run_optimize.py` if you want the small test instead of the full run):
+Clean the benchmark state, then run the optimization:
 
 ```bash
 rm -rf .optimize_benchmarks/*
@@ -72,28 +85,31 @@ source venv/bin/activate
 python scripts/run_optimize.py
 ```
 
-- The script reads `prompts/optimize.prompt`, creates a Runtime, injects the
-  configured LLM, and runs the orchestrator.
+- The script uses generation/refinement agents (`prompts/generate_variants.prompt`,
+  `prompts/refine_variants.prompt`) to write variant prompts to
+  `.optimize_benchmarks/variants.json` / `variants_round2.json`, then measures
+  every (prompt, task) pair with the deterministic `Benchmark` harness against
+  `ALL_TASKS` and ranks on data.
 - Live output prints each delegation and tool call; the final `=== RESULTS ===`
-  block summarizes the best prompt, artifact IDs, agent/token/commit counts,
-  and total time.
-- Expect **5–10 minutes** and roughly **2M tokens** for the full 36-run run
-  (the observed run: 39 agents, 2.1M tokens, ~423s).
+  block summarizes the best prompt, pass fraction, token/cost/turn totals, and
+  total time.
+- Expect several minutes to ~10+ minutes depending on model and task count.
 
 > The runner deliberately calls `trace_store.clear()` before each run to avoid
 > stale trace data. Benchmark files persist under `.optimize_benchmarks/`.
 
-### Running just the small test
+### Running just a smoke test
 
-To sanity-check the pipeline quickly, point the script at the smoke test:
-`scripts/run_optimize.py:83` reads `prompts/optimize.prompt`; temporarily
-change it to `prompts/test_optimize.prompt` (single task, 3 prompts), or run
-the CLI directly:
+To sanity-check the pipeline without a full run, use the standalone metric CLI
+against a single prompt (`--seed-only` runs only the default prompt):
 
 ```bash
 source venv/bin/activate
-dynamic-harness -m prompts/test_optimize.prompt
+python -m dynamic_harness.benchmark.run --seed-only
 ```
+
+This runs every task in `ALL_TASKS` against the seed prompt and prints the
+verification verdict per task.
 
 ## 5. Outputs
 
@@ -101,12 +117,31 @@ After a full run, `.optimize_benchmarks/` contains:
 
 | File | Contents |
 |---|---|
-| `variants.txt` | 5 variant prompts from Round 1 |
-| `evaluation_round1.txt` | Ranking of all 6 Round-1 prompts (1 = best) |
-| `variants_round2.txt` | 3 refined variants from Round 2 |
-| `evaluation_round2.txt` | Final ranking of the 6 Round-2 prompts |
+| `variants.json` / `variants_round2.json` | Round-1 / Round-2 variant prompts |
+| `round1.json` / `round1.md`, `round2.json` / `round2.md` | Per-run metrics + ranked reports |
 | `best_prompt.txt` | **The single best system prompt (complete text)** |
-| `largest_files.txt`, `fibonacci.py`, `test_fibonacci.py`, `todos.txt` | Benchmark task outputs |
+| Task artifacts | `largest_files.txt`, `fibonacci.py`, `test_fibonacci.py`, `todos.txt`, `sizes.txt` |
+
+The prune/restore A/B (`.optimize_ab/`) writes `on/bench.*` and `off/bench.*`
+plus a printed comparison.
+
+## 5b. The task suite (one front)
+
+All tasks live in `src/dynamic_harness/benchmark/tasks.py` and are consumed by
+every entry point:
+
+| id | What it checks | Why it's included |
+|---|---|---|
+| `discovery` | 3 largest `.py` files by size | basic file tooling |
+| `codegen` | Fibonacci + assertions, run via `python3` | code generation + verification |
+| `analysis` | TODO/FIXME scan correctness | search + reporting |
+| `manyfiles` | byte sizes of every file in `_payload/`, processed one at a time | **long multi-step context**: ~16+ sequential tool calls, so it stresses and rewards `prune()`/`restore()` context management |
+
+The `manyfiles` task is the pruning probe — it builds a large transcript of
+stale tool results, so a system prompt that guides agents to `prune()` finished
+turns (and `restore()` when needed) scores lower prompt-token counts without
+losing correctness. That is what makes the optimizer search for pruning-aware
+prompts.
 
 ## 6. Feeding the optimized prompt back to the application
 
@@ -171,8 +206,11 @@ tail -n +2 .optimize_benchmarks/best_prompt.txt > src/dynamic_harness/core/agent
 
 ## 8. Customizing the benchmark
 
-Edit `prompts/optimize.prompt` to change the three benchmark tasks or the
-variant-generation guidance. The tasks are intentionally simple and
-self-verifying (write output to disk, then `report()` it), so the evaluator can
-compare correctness across prompts: large-file discovery, fibonacci
-code-gen + assert tests, and recursive TODO/FIXME scanning.
+To add, remove, or change a task, edit `src/dynamic_harness/benchmark/tasks.py`
+and register it in `ALL_TASKS`. Each task is a `BenchmarkTask` subclass with a
+**failable** ground-truth `verify()` that compares the agent's output artifact
+against computed ground truth. Because `ALL_TASKS` is the single front, the
+change automatically applies to the general optimization, the prune/restore A/B,
+and the CLI. To tune what the optimizer searches for (e.g. pruning), edit
+`prompts/generate_variants.prompt` and `prompts/refine_variants.prompt`; to reweight
+the objective, edit `src/dynamic_harness/benchmark/scoring.py`.

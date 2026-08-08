@@ -29,6 +29,7 @@ def _metrics_to_dict(m: RunMetrics) -> dict:
         "failures": m.failures,
         "escalations": m.escalations,
         "latency_s": round(m.latency_s, 2),
+        "extra": m.extra or None,
     }
 
 

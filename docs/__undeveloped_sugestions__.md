@@ -1,11 +1,9 @@
 
 
+How to enable the agent to remove unrelevant context
 
-lets impprove the docs/VISION.md, docs/agent_methodology_guidelines.md and prompt a bit, 
-* minimize output to increase speed - 
-* improve the workflow parts to reflect systems engineering practices of 15288 make sure the base is reflected in the system prompt to set the agent context correctly:
+---
 
- ### 1. Recursive Task Decomposition
+DO a complete and critical review of the codebase, look at architectural solutions, module boundaries and alternatives for evaluating potensial improvments
 
-### 2. Analyze → Implement → Verify Loop
-
+Prioritize ease of working and understandable solutions over smart and compact

@@ -29,6 +29,8 @@ from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ActivityEvent, ActivityEventType
 from dynamic_harness.llm.openai_provider import OpenAIProvider
 
+from run_prune_ab import AbCollector
+
 load_dotenv()
 
 OUT_DIR = Path(".optimize_benchmarks")
@@ -100,6 +102,28 @@ def _progress(line: str) -> None:
     print(line, flush=True)
 
 
+def _prune_summary(runs: list, label: str) -> None:
+    """Print per-prompt prune/restore/compress call totals (hard evidence)."""
+    from pathlib import Path
+    import json as _json
+    data = _json.loads(Path(OUT_DIR / f"{label}.json").read_text())
+    per_prompt: dict[str, dict[str, int]] = {}
+    for r in data:
+        extra = r.get("extra") or {}
+        tc = extra.get("tool_calls") or {}
+        key = f"{r['prompt_id']}:{r['task_id']}"
+        per_prompt.setdefault(key, {"prune": 0, "restore": 0, "compress": 0})
+        for k in ("prune", "restore", "compress"):
+            per_prompt[key][k] += tc.get(k, 0)
+    print(f"\n--- prune/restore usage ({label}) ---", flush=True)
+    if not per_prompt:
+        print("  (no tool-call data recorded)", flush=True)
+        return
+    for key in sorted(per_prompt):
+        c = per_prompt[key]
+        print(f"  {key:32s} prune={c['prune']} restore={c['restore']} compress={c['compress']}", flush=True)
+
+
 async def main() -> None:
     config = load_harness_config()
     api_key = merge_api_key()
@@ -121,6 +145,10 @@ async def main() -> None:
         output_dir=OUT_DIR,
         price_input_per_mtok=config.llm.price_input_per_mtok or 0.0,
         price_output_per_mtok=config.llm.price_output_per_mtok or 0.0,
+        collector=AbCollector(
+            price_input_per_mtok=config.llm.price_input_per_mtok or 0.0,
+            price_output_per_mtok=config.llm.price_output_per_mtok or 0.0,
+        ),
     )
 
     # ── Round 1: generate 5 variants ─────────────────────────────────────
@@ -141,6 +169,7 @@ async def main() -> None:
     winners = [r.prompt_id for r in ranks1]
     print("\n--- ROUND 1 RANKING ---", flush=True)
     print(format_scores(ranked1), flush=True)
+    _prune_summary([], "round1")
 
     # ── Round 2: refine top 3 ────────────────────────────────────────────
     print("\n=== ROUND 2: refine top 3 ===", flush=True)
@@ -165,6 +194,7 @@ async def main() -> None:
     ranked2 = await benchmark.evaluate(prompts2, progress=_progress, report_stem="round2")
     print("\n--- ROUND 2 RANKING ---", flush=True)
     print(format_scores(ranked2), flush=True)
+    _prune_summary([], "round2")
 
     # ── Final: select best ───────────────────────────────────────────────
     best = ranked2[0]

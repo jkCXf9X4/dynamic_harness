@@ -6,7 +6,13 @@ Winning prompts:
 
 1) Read each winning prompt; extract its strongest, non-redundant ideas.
 2) Create 3 new complete, self-contained system prompts that combine those
-   strengths. Each roughly 1000-1800 characters — do NOT obsess over an exact
+   strengths. PRESERVE AND STRENGTHEN every winning prompt's guidance on the
+   `prune`/`restore` tools: instruct the agent to actively `prune` turns whose
+   results are already written to disk (especially across long multi-file
+   tasks) and to `restore` a pruned turn only when its content is needed again.
+   Do not let this context-management guidance get diluted in the combination —
+   it is essential for the "manyfiles" task's token-efficiency score. Each
+   roughly 1000-1800 characters — do NOT obsess over an exact
    count; a correct, complete prompt beats one truncated to hit a limit.
 3) Write ALL 3 variants to .optimize_benchmarks/variants_round2.json as a JSON
    object: {"n1": "<full text>", "n2": "<full text>", "n3": "<full text>"}

@@ -158,6 +158,7 @@ class Agent:
                         "server_error", "500", "502", "503", "504",
                         "timeout", "temporary", "connection", "network",
                         "overloaded", "capacity",
+                        "expecting value", "jsondecode", "anticipate_processing_error",
                     )
                 )
                 if not is_retryable or attempt >= max_retries:
