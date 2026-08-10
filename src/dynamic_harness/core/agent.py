@@ -69,6 +69,7 @@ class Agent:
         self._turns: dict[str, list[dict[str, Any]]] = {}
         self._pruned: set[str] = set()
         self._prune_markers: dict[str, dict[str, Any]] = {}
+        self._in_flight_prune: set[str] = set()
 
         self._runtime = runtime
         self._event_bus = runtime.event_bus
@@ -178,9 +179,32 @@ class Agent:
         self._turn_counter += 1
         self._turn_order.append(pid)
         self._turns[pid] = [assistant_msg] + list(results)
-        self._messages.append(assistant_msg)
-        self._messages.extend(results)
+        if pid in self._in_flight_prune:
+            self._in_flight_prune.discard(pid)
+            self._mark_turn_pruned(pid)
+        else:
+            self._messages.append(assistant_msg)
+            self._messages.extend(results)
         return pid
+
+    def _mark_turn_pruned(self, pid: str) -> None:
+        from ..core.capabilities import _make_prune_marker
+        marker = {
+            "role": "assistant",
+            "content": _make_prune_marker(pid, self._turns[pid]),
+        }
+        self._messages.append(marker)
+        self._pruned.add(pid)
+        self._prune_markers[pid] = {"marker": marker, "index": len(self._messages) - 1}
+        self.evict_pruned_overflow()
+
+    def _turn_token_estimate(self, pid: str) -> int:
+        total = 0
+        for m in self._turns.get(pid, []):
+            total += len(str(m.get("content") or ""))
+            for tc in m.get("tool_calls") or []:
+                total += len(json.dumps(tc.get("function", {}).get("arguments", "")))
+        return max(1, total // 4)
 
     def active_turn_ids(self) -> list[str]:
         active = [pid for pid in self._turn_order if pid not in self._pruned]
@@ -261,17 +285,29 @@ class Agent:
             prompt_tokens = self._usage_tracker.get_usage(self.id).get("prompt_tokens", 0)
 
             active_turns = self.active_turn_ids()
-            turn_map = " · ".join(
-                f"{pid}:{self._turn_tool_names(pid)}" for pid in active_turns
-            )
+            if active_turns:
+                turn_map = " · ".join(
+                    f"{pid}:{self._turn_tool_names(pid)}"
+                    f"(~{self._turn_token_estimate(pid)}tk)"
+                    for pid in active_turns
+                )
+                total_active = sum(
+                    self._turn_token_estimate(pid) for pid in active_turns
+                )
+            else:
+                turn_map = "none"
+                total_active = 0
+            next_turn = f"t{self._turn_counter}"
             context_obs = (
                 f"[Context Observation]\n"
                 f"Turn: {self._iteration}\n"
                 f"Messages in context: {len(self._messages)}\n"
                 f"Estimated prompt tokens this agent: {prompt_tokens}\n"
-                f"Recent committed turns (prune_id:tools): {turn_map or 'none'}\n"
-                f"Use prune(prune_ids=[...]) to drop stale turns listed above; "
-                f"restore(prune_id=...) to bring a pruned turn back.\n"
+                f"Active turn tokens: {total_active} (prune stale turns to cut this)\n"
+                f"Recent committed turns (prune_id:tools~tokens): {turn_map}\n"
+                f"Your next turn will commit as prune_id: {next_turn}.\n"
+                f"Prune turns whose results are already on disk using "
+                f"prune(prune_ids=['tN', ...]); the costliest turns save the most.\n"
                 f"Your task: {self.task.description}\n"
                 f"{self.environment_info}"
             )

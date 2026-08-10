@@ -752,15 +752,20 @@ async def _tool_prune(*, agent: Agent, prune_ids: list[str] | str | None = None)
             "marker. IDs are listed in your Context Observation as "
             "'prune_id:tools'; use restore(prune_id=...) to bring one back."
         )
-    if not agent._turns:
+    requested = [str(pid) for pid in prune_ids]
+    next_turn = f"t{agent._turn_counter}"
+    in_flight = [pid for pid in requested if pid == next_turn]
+    for pid in in_flight:
+        agent._in_flight_prune.add(pid)
+
+    if not agent._turns and not in_flight:
         return "No committed turns to prune."
 
-    requested = [str(pid) for pid in prune_ids]
-    invalid = [pid for pid in requested if pid not in agent._turns]
+    invalid = [pid for pid in requested if pid not in agent._turns and pid != next_turn]
     already = [pid for pid in requested if pid in agent._pruned]
     pending = [pid for pid in requested if pid in agent._turns and pid not in agent._pruned]
 
-    if not pending:
+    if not pending and not in_flight:
         notes = []
         if already:
             notes.append(f"already pruned (use restore): {already}")
@@ -831,6 +836,11 @@ async def _tool_prune(*, agent: Agent, prune_ids: list[str] | str | None = None)
         notes.append(
             f"old retained turns permanently discarded "
             f"(retention cap {agent.max_pruned_retained}): {evicted}"
+        )
+    if in_flight:
+        notes.append(
+            f"{next_turn} (this response's turn) will be pruned at commit — "
+            f"its content stays recoverable via restore"
         )
     suffix = ("; " + "; ".join(notes)) if notes else ""
     return (

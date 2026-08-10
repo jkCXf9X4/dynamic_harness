@@ -549,6 +549,65 @@ async def test_compress_resets_prune_bookkeeping(runtime: Runtime) -> None:
     assert any(str(m.get("content", "")).startswith("[Context compressed]") for m in agent._messages)
 
 
+@pytest.mark.asyncio
+async def test_agent_prunes_in_flight_turn_same_response(runtime: Runtime) -> None:
+    f = runtime.generated_root / "data.txt"
+    f.write_text("DATA-CONTENT")
+    runtime.set_llm(_ToolLLM([
+        ToolCallResponse(tool_calls=[
+            ToolCallData(id="c1", name="read", arguments={"path": str(f)}),
+            ToolCallData(id="c2", name="prune", arguments={"prune_ids": ["t0"]}),
+        ], content=None, model="mock"),
+        ToolCallResponse(tool_calls=None, content="Done.", model="mock"),
+    ]))
+    agent = _make_agent(runtime, "Read data.txt")
+    await agent.run()
+    assert agent.task.status.value == "completed"
+    assert agent._pruned == {"t0"}
+    assert any(str(m.get("content", "")).startswith("[PRUNED t0") for m in agent._messages)
+    assert all(m.get("role") != "tool" or "DATA-CONTENT" not in str(m.get("content", "")) for m in agent._messages)
+    assert len(agent._turns["t0"]) == 3
+    assert agent._in_flight_prune == set()
+
+
+@pytest.mark.asyncio
+async def test_agent_in_flight_prune_then_restore(runtime: Runtime) -> None:
+    f = runtime.generated_root / "data.txt"
+    f.write_text("DATA-CONTENT")
+    runtime.set_llm(_ToolLLM([
+        ToolCallResponse(tool_calls=[
+            ToolCallData(id="c1", name="read", arguments={"path": str(f)}),
+            ToolCallData(id="c2", name="prune", arguments={"prune_ids": ["t0"]}),
+        ], content=None, model="mock"),
+        ToolCallResponse(tool_calls=[ToolCallData(id="c3", name="restore", arguments={"prune_id": "t0"})], content=None, model="mock"),
+        ToolCallResponse(tool_calls=None, content="Done.", model="mock"),
+    ]))
+    agent = _make_agent(runtime, "Read data.txt")
+    await agent.run()
+    assert agent.task.status.value == "completed"
+    assert agent._pruned == set()
+    assert "DATA-CONTENT" in json.dumps(agent._messages)
+
+
+@pytest.mark.asyncio
+async def test_prune_unknown_in_flight_id_keeps_marker_bookkeeping(runtime: Runtime) -> None:
+    f = runtime.generated_root / "data.txt"
+    f.write_text("DATA-CONTENT")
+    runtime.set_llm(_ToolLLM([
+        ToolCallResponse(tool_calls=[
+            ToolCallData(id="c1", name="read", arguments={"path": str(f)}),
+            ToolCallData(id="c2", name="prune", arguments={"prune_ids": ["t0", "t99"]}),
+        ], content=None, model="mock"),
+        ToolCallResponse(tool_calls=None, content="Done.", model="mock"),
+    ]))
+    agent = _make_agent(runtime, "Read data.txt")
+    await agent.run()
+    assert agent.task.status.value == "completed"
+    assert agent._pruned == {"t0"}
+    assert len(agent._messages) >= 1
+    assert agent._in_flight_prune == set()
+
+
 # ── Converse tool (covered by existing tests in test_capabilities.py) ──
 
 @pytest.mark.asyncio
