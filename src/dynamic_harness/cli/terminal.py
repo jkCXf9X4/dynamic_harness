@@ -16,9 +16,9 @@ from ..core.agent import Agent
 from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
-from ..core.task import ActivityEvent
-from .common import build_runtime, workspace_dir
-from .format_event import format_event
+from .common import build_runtime
+from .present import build_agent_tree, build_stats
+from .render import render_event, render_rich_tree
 
 console = Console()
 
@@ -51,47 +51,17 @@ def _install_ask_tool(runtime: Runtime) -> None:
     runtime.tool_registry.register(TOOL_ASK_DEF, _ask)
 
 
-def _format_event(event: ActivityEvent) -> str | None:
-    return format_event(event)
-
-
 def _make_tree(runtime: Runtime) -> Tree:
-    tree = Tree(":robot: [bold]Agent Tree[/]")
-    g = runtime.task_graph()
-    agents = runtime.all_agents()
-
-    def ul(id_: str) -> str:
-        u = runtime.get_usage(id_)
-        t = u.get("total_tokens", 0)
-        m = u.get("message_count", 0)
-        return f" [dim]({t}t, {m}msgs)[/]" if t or m else ""
-
-    def add(parent_id: str, node: Tree) -> None:
-        for cid in g.get(parent_id, []):
-            a = agents.get(cid)
-            lbl = f"[dim]{cid[:8]}[/]"
-            if a:
-                lbl += f" \u2014 {a.task.description[:50]}  [{a.task.status.value}]{ul(cid)}"
-            n = node.add(lbl)
-            add(cid, n)
-
-    for aid in g:
-        a = agents.get(aid)
-        if a and a.parent is None:
-            lbl = f"[bold]{aid[:8]}[/] \u2014 {a.task.description[:50]}  [{a.task.status.value}]{ul(aid)}"
-            n = tree.add(lbl)
-            add(aid, n)
-
-    return tree
+    return render_rich_tree(build_agent_tree(runtime))
 
 
 def _make_status(runtime: Runtime) -> Table:
     t = Table.grid(padding=(0, 1))
     t.add_column()
-    u = runtime.total_usage()
-    t.add_row(f"Agents: [bold]{runtime.agent_count()}[/]")
-    t.add_row(f"Commits: [bold]{runtime.repository.count()}[/]")
-    t.add_row(f"Tokens: [bold]{u['total_tokens']}[/]")
+    stats = build_stats(runtime)
+    t.add_row(f"Agents: [bold]{stats.agents}[/]")
+    t.add_row(f"Commits: [bold]{stats.commits}[/]")
+    t.add_row(f"Tokens: [bold]{stats.tokens}[/]")
     return t
 
 
@@ -115,7 +85,7 @@ async def _run_with_live(runtime: Runtime, runner: AgentRunner, description: str
     events: list[str] = []
     runtime.on_report(lambda aid, p: events.append(f"\u2713 {aid[:8]} report done"))
     runtime.on_failure(lambda aid, f: events.append(f"\u2717 {aid[:8]} fail: {f.error[:60]}"))
-    runtime.on_activity(lambda e: events.append(_format_event(e)) if _format_event(e) else None)
+    runtime.on_activity(lambda e: events.append(render_event(e)) if render_event(e) else None)
 
     with Live(_render, refresh_per_second=4, console=console) as live:
         run_task = asyncio.create_task(runner.run(description, root_agent=root_agent))

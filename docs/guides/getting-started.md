@@ -110,6 +110,10 @@ Launches the Textual TUI. `--tui` is also accepted as the first argument:
 - **Left panel:** Tree of agents (green = completed, red = failed, yellow = running)
 - **Right panel:** Streaming events from all agents
 
+The TUI and the terminal REPL share a single rendering pipeline
+(`cli/present.py` view-models + `cli/render.py` adapters), so agent trees,
+status lines, and event formatting are consistent across both interfaces.
+
 ### No-LLM Mode (testing)
 
 ```bash

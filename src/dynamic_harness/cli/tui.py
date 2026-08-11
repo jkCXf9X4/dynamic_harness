@@ -16,8 +16,9 @@ from ..core.agent import Agent
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
 from ..core.task import ActivityEvent
-from .common import build_runtime, workspace_dir
-from .format_event import format_event
+from .common import build_runtime
+from .present import AgentNode, build_agent_tree, build_stats
+from .render import apply_tree, render_event, stats_lines
 
 COMMANDS = {
     "/help": "Show this help message",
@@ -42,24 +43,18 @@ STYLES: dict[str, Style] = {
     "output-activity": Style(color="#8888aa", dim=True),
 }
 
-STATUS_COLORS = {
-    "running": "yellow",
-    "completed": "green",
-    "failed": "red",
-    "escalated": "orange3",
-    "pending": "grey50",
-}
+SEPARATOR = " " + "\u2500" * 40
 
 
-def _fmt_usage(usage: dict) -> str:
-    t = usage.get("total_tokens", 0)
-    m = usage.get("message_count", 0)
-    parts = []
-    if t:
-        parts.append(f"{t}t")
-    if m:
-        parts.append(f"{m}msgs")
-    return f" ({', '.join(parts)})" if parts else ""
+def _render_text_tree(node: AgentNode, depth: int) -> list[str]:
+    prefix = "  " * depth
+    line = f"{prefix}{node.short_id} - {node.short_description} [{node.status}]"
+    if node.usage:
+        line += f" {node.usage}"
+    lines = [line]
+    for child in node.children:
+        lines.extend(_render_text_tree(child, depth + 1))
+    return lines
 
 
 class PromptTextArea(TextArea):
@@ -140,6 +135,7 @@ class TUI(App[None]):
         self._run_log: list[dict] = []
         self._current_agent_task: asyncio.Task | None = None
         self._root_agent: Agent | None = None
+        self._tree_dirty: bool = False
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -148,20 +144,43 @@ class TUI(App[None]):
         yield PromptTextArea(id="input", text="")
 
     def on_mount(self) -> None:
-        self.set_interval(0.5, self._refresh)
+        self._wire_events()
+        self.set_interval(0.5, self._maybe_refresh_tree)
+        self._tree_dirty = True
+        self._maybe_refresh_tree()
         self.query_one("#input", PromptTextArea).focus()
+
+    def _wire_events(self) -> None:
+        self.runtime.on_report(
+            lambda aid, p: self._write_report(aid, p)
+        )
+        self.runtime.on_failure(
+            lambda aid, f: self._write_failure(aid, f)
+        )
+        self.runtime.on_activity(
+            lambda e: self._on_activity(e)
+        )
 
     def write_output(self, style_name: str, text: str) -> None:
         style = STYLES.get(style_name, Style())
         self.query_one("#output", RichLog).write(RichText(text, style=style))
 
+    def _write_report(self, aid: str, p: Any) -> None:
+        self.write_output("output-event", f"\u2713 {aid[:8]} report done\n\n{p.summary}\n\n")
+        self._tree_dirty = True
+
+    def _write_failure(self, aid: str, f: Any) -> None:
+        self.write_output("output-error", f"\u2717 {aid[:8]} fail: {f.error}\n")
+        self._tree_dirty = True
+
     def _format_activity(self, event: ActivityEvent) -> str | None:
-        text = format_event(event, emoji=True, show_args=True)
+        text = render_event(event, emoji=True, show_args=True)
         if text is None:
             return None
         return text + "\n"
 
     def _on_activity(self, event: ActivityEvent) -> None:
+        self._tree_dirty = True
         if not self._verbose:
             return
         text = self._format_activity(event)
@@ -202,15 +221,16 @@ class TUI(App[None]):
                 self.write_output("output-label", line + "\n")
 
         elif cmd == "/agents":
-            total = self.runtime.total_usage()
-            self.write_output("output-label", f"Agents:  {self.runtime.agent_count()}\n")
-            self.write_output("output-label", f"Commits: {self.runtime.repository.count()}\n")
-            self.write_output("output-label", f"Tokens:  {total['total_tokens']}\n")
+            stats = build_stats(self.runtime)
+            self.write_output("output-label", f"Agents:  {stats.agents}\n")
+            self.write_output("output-label", f"Commits: {stats.commits}\n")
+            self.write_output("output-label", f"Tokens:  {stats.tokens}\n")
 
         elif cmd == "/reset":
             self.runtime.reset()
             self._root_agent = None
             self._run_log.clear()
+            self._tree_dirty = True
             self.write_output("output-label", "Runtime reset.\n")
 
         elif cmd == "/new":
@@ -233,29 +253,13 @@ class TUI(App[None]):
             self.write_output("output-label", "Activity events hidden. Use /verbose to show.\n")
 
         elif cmd == "/tree":
-            g = self.runtime.task_graph()
-            agents = self.runtime.all_agents()
-            if not g:
+            model = build_agent_tree(self.runtime)
+            if not model:
                 self.write_output("output-label", "No agents yet.\n")
                 return
-
-            def render_node(aid: str, depth: int) -> None:
-                agent = agents.get(aid)
-                prefix = "  " * depth
-                if agent:
-                    label = f"{prefix}{aid[:8]} - {agent.task.description[:50]} [{agent.task.status.value}]"
-                    usage = self.runtime.get_usage(aid)
-                    ustr = _fmt_usage(usage)
-                    if ustr:
-                        label += f" {ustr}"
-                    self.write_output("output-label", label + "\n")
-                for child in g.get(aid, []):
-                    render_node(child, depth + 1)
-
-            for aid in g:
-                agent = agents.get(aid)
-                if agent and agent.parent is None:
-                    render_node(aid, 0)
+            for node in model:
+                for line in _render_text_tree(node, 0):
+                    self.write_output("output-label", line + "\n")
 
         else:
             self.write_output("output-error", f"Unknown command: {cmd}. Try /help\n")
@@ -263,23 +267,6 @@ class TUI(App[None]):
     async def _run_agent(self, description: str) -> None:
         agent_count_before = self.runtime.agent_count()
         runner = AgentRunner(self.runtime)
-
-        self.runtime.event_bus.clear()
-
-        self.runtime.on_report(
-            lambda aid, p: self.write_output(
-                "output-event", f"\u2713 {aid[:8]} report done\n\n{p.summary}\n\n"
-            )
-        )
-        self.runtime.on_failure(
-            lambda aid, f: self.write_output(
-                "output-error", f"\u2717 {aid[:8]} fail: {f.error}\n"
-            )
-        )
-
-        self.runtime.on_activity(
-            lambda e: self._on_activity(e)
-        )
 
         loop_task = asyncio.create_task(
             runner.run(
@@ -295,6 +282,7 @@ class TUI(App[None]):
         except Exception as e:
             self.write_output("output-error", f"Error: {e}\n")
         finally:
+
             self._current_agent_task = None
             if self._root_agent is None:
                 agents = self.runtime.all_agents()
@@ -307,6 +295,7 @@ class TUI(App[None]):
 
         msg = f"\u2713 {self.runtime.repository.count()} commits, {self.runtime.agent_count()} agents"
         self.write_output("output-label", msg + "\n")
+        self._tree_dirty = True
 
         self._run_log.append(
             {
@@ -316,64 +305,21 @@ class TUI(App[None]):
             }
         )
 
-    def _refresh(self) -> None:
-        self._update_tree()
-
-    def _update_tree(self) -> None:
-        tree = self.query_one("#sidebar", Tree)
-        tree.clear()
-
-        g = self.runtime.task_graph()
-        agents = self.runtime.all_agents()
-
-        if not g:
-            tree.root.add(RichText(" No agents yet.", style="grey50"))
-            tree.root.add(RichText(" Enter a task to begin.", style="grey50"))
+    def _maybe_refresh_tree(self) -> None:
+        if not self._tree_dirty:
             return
+        self._apply_tree()
+        self._tree_dirty = False
 
-        def add_children(parent_id: str, parent_node: Any) -> None:
-            for child_id in g.get(parent_id, []):
-                agent = agents.get(child_id)
-                if agent:
-                    status = agent.task.status.value
-                    color = STATUS_COLORS.get(status, "grey50")
-                    label = RichText.assemble(
-                        (f"  {agent.id[:8]}  ", "bold"),
-                        (agent.task.description[:40], ""),
-                        (f" [{status}]", color),
-                    )
-                    usage = self.runtime.get_usage(child_id)
-                    ustr = _fmt_usage(usage)
-                    if ustr:
-                        label.append(ustr, "grey50")
-                    child_node = parent_node.add(label)
-                    add_children(child_id, child_node)
-                else:
-                    parent_node.add(RichText(f"  {child_id[:8]}", style="dim"))
-                    add_children(child_id, parent_node)
+    def _apply_tree(self) -> None:
+        tree = self.query_one("#sidebar", Tree)
+        model = build_agent_tree(self.runtime)
+        apply_tree(tree, model)
 
-        for aid in g:
-            agent = agents.get(aid)
-            if agent and agent.parent is None:
-                status = agent.task.status.value
-                color = STATUS_COLORS.get(status, "grey50")
-                label = RichText.assemble(
-                    (f"  {agent.id[:8]}  ", "bold"),
-                    (agent.task.description[:46], ""),
-                    (f" [{status}]", color),
-                )
-                usage = self.runtime.get_usage(aid)
-                ustr = _fmt_usage(usage)
-                if ustr:
-                    label.append(ustr, "grey50")
-                node = tree.root.add(label)
-                add_children(aid, node)
-
-        total = self.runtime.total_usage()
-        tree.root.add(RichText(" " + "\u2500" * 40, style="grey50"))
-        tree.root.add(RichText(f" Agents: {self.runtime.agent_count()}", style="grey50"))
-        tree.root.add(RichText(f" Commits: {self.runtime.repository.count()}", style="grey50"))
-        tree.root.add(RichText(f" Tokens: {total['total_tokens']}", style="grey50"))
+        if model:
+            tree.root.add(RichText(SEPARATOR, style="grey50"))
+            for line in stats_lines(build_stats(self.runtime)):
+                tree.root.add(RichText(line, style="grey50"))
 
         for node in tree.root.children:
             try:
