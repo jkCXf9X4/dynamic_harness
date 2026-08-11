@@ -8,7 +8,7 @@ classes:
   - ToolResult
   - ToolRegistry
 summary: >
-  Complete reference for all 15 built-in tools, their OpenAPI schemas,
+  Complete reference for all 17 built-in tools, their OpenAPI schemas,
   implementations, and the ToolRegistry API for registering custom tools.
 related:
   - api/runtime.md
@@ -75,13 +75,15 @@ class ToolResult:
 | 6 | `webfetch` | `url: str` | No | Network |
 | 7 | `edit` | `path: str, old_string: str, new_string: str` | No | Filesystem |
 | 8 | `delegate` | `description: str, role?: str, system_prompt?: str` | No | Orchestration |
-| 9 | `report` | `summary: str, artifact_ids?: list[str], confidence?: float` | **Yes** | Terminal |
+| 9 | `report` | `summary: str, artifact_ids?: list[str], technical_summary?: str, full_report?: str, confidence?: float` | **Yes** | Terminal |
 | 10 | `escalate` | `issue: str` | **Yes** | Terminal |
 | 11 | `fail` | `error: str` | **Yes** | Terminal |
 | 12 | `ask` | `question: str` | No | I/O |
 | 13 | `compress` | *(none)* | No | Context |
-| 14 | `converse` | `agent_id: str, message: str` | No | Communication |
-| 15 | `read_artifact` | `artifact_id: str` | No | Artifact |
+| 14 | `prune` | `prune_ids?: list[str]` | No | Context |
+| 15 | `restore` | `prune_id: str` | No | Context |
+| 16 | `converse` | `agent_id: str, message: str` | No | Communication |
+| 17 | `read_artifact` | `artifact_id: str` | No | Artifact |
 
 Terminal tools (report, escalate, fail) set the agent's task status and stop the tool-calling loop.
 
@@ -171,7 +173,7 @@ Terminal tools (report, escalate, fail) set the agent's task status and stop the
 }
 ```
 
-**Implementation:** `asyncio.create_subprocess_shell()` with stdout/stderr capture. Kills process on timeout. Returns combined stdout + stderr.
+**Implementation:** `asyncio.create_subprocess_exec()` with stdout/stderr capture. The command is split into arguments via shell-quoting rules — **no shell operators (pipes, redirects, `&&`, `||`, etc.) are supported**. Kills process on timeout. Returns combined stdout + stderr.
 
 ---
 
@@ -225,16 +227,20 @@ Terminal tools (report, escalate, fail) set the agent's task status and stop the
 
 This is the core orchestration tool. It:
 1. Creates a child `Agent` with the given description + role
-2. Runs the child to completion (`await child.run()`)
-3. Returns status, summary, artifact IDs, and confidence
+2. Batch-delegates with any other `delegate()` calls in the same turn (parallel), running children to completion before returning
+3. Returns status, summary, artifact IDs, and confidence as JSON
 
-**Returns:**
+**Returns (JSON):**
+```json
+{
+  "child_id": "abc123def456",
+  "status": "completed",
+  "summary": "Found 3 HIGH-severity issues in auth.py...",
+  "artifact_ids": ["/tmp/security_findings.json"],
+  "confidence": 0.95
+}
 ```
-Delegated to agent abc123def456. Status: completed
-Summary: Found 3 HIGH-severity issues in auth.py...
-Artifact IDs: /tmp/security_findings.json
-Confidence: 0.95
-```
+On failure, the JSON includes a `"failure"` field with the failure reason instead of `summary`.
 
 **Critical:** The return value is a preview summary only. The parent **must** verify by reading the child's artifact files. Blind synthesis from the return value is an anti-pattern.
 
@@ -251,6 +257,14 @@ Confidence: 0.95
       "type": "array",
       "items": { "type": "string" },
       "description": "Artifact IDs to attach"
+    },
+    "technical_summary": {
+      "type": "string",
+      "description": "Optional detailed technical analysis of findings"
+    },
+    "full_report": {
+      "type": "string",
+      "description": "Optional complete report with full detail"
     },
     "confidence": {
       "type": "number",
@@ -329,7 +343,43 @@ Terminates the agent with `TaskStatus.failed`.
 
 ---
 
-### 14. `converse` — Message another agent
+### 14. `prune` — Drop stale turns from context
+
+```json
+{
+  "name": "prune",
+  "parameters": {
+    "prune_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Turn ids (from Context Observation 'prune_id:tools') to prune"
+    }
+  },
+  "required": ["prune_ids"]
+}
+```
+
+**Implementation:** Removes whole committed turns (assistant message + tool results) listed in the Context Observation and replaces them with a short `[PRUNED ...]` marker. The full content is kept in memory and can be recovered via `restore()`. Prefer over `compress()` when only a few turns are stale. The task definition and system prompt are never touched.
+
+---
+
+### 15. `restore` — Bring a pruned turn back
+
+```json
+{
+  "name": "restore",
+  "parameters": {
+    "prune_id": { "type": "string", "description": "Turn id to restore, e.g. 't3'" }
+  },
+  "required": ["prune_id"]
+}
+```
+
+**Implementation:** Re-inserts a previously pruned turn (assistant message + tool results) back into the context at the location of its PRUNED marker. Returns an error if the turn was already evicted (e.g. by compression or the retention cap).
+
+---
+
+### 16. `converse` — Message another agent
 
 ```json
 {
@@ -346,7 +396,7 @@ Terminates the agent with `TaskStatus.failed`.
 
 ---
 
-### 15. `read_artifact` — Read an artifact by ID
+### 17. `read_artifact` — Read an artifact by ID
 
 ```json
 {

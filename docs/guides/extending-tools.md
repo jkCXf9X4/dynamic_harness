@@ -233,16 +233,26 @@ If you want a tool available only to specific agents, register before delegating
 
 ## Unregistering Tools
 
-```python
-# Not directly supported. Workaround: use a separate ToolRegistry:
+The `ToolRegistry` supports removing a tool by name:
 
+```python
+runtime.tool_registry.unregister("my_tool")
+
+# Verify it's gone
+assert "my_tool" not in runtime.tool_registry.list_tools()
+```
+
+Note: the registry is shared across agents, so unregistering affects all agents.
+For per-agent tool sets, consider overriding the tool list via a custom Agent
+subclass or a dedicated registry. If you need a fully custom set of defaults,
+you can also build your own registry:
+
+```python
 from dynamic_harness.core.capabilities import ToolRegistry, register_default_tools
 
 my_registry = ToolRegistry()
 register_default_tools(my_registry)
 my_registry.register(my_tool_def, my_tool_fn)
-
-runtime.tool_registry = my_registry  # Replace entirely
 ```
 
 ## Best Practices

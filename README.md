@@ -20,7 +20,7 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 | Runtime | [docs/api/runtime.md](docs/api/runtime.md) |
 | Agent | [docs/api/agent.md](docs/api/agent.md) |
 | Task models | [docs/api/task.md](docs/api/task.md) |
-| Tools (all 15) | [docs/api/tools.md](docs/api/tools.md) |
+| Tools (all 17) | [docs/api/tools.md](docs/api/tools.md) |
 | Artifact system | [docs/api/artifacts.md](docs/api/artifacts.md) |
 | Repository | [docs/api/repository.md](docs/api/repository.md) |
 | LLM provider | [docs/api/llm.md](docs/api/llm.md) |
@@ -72,7 +72,7 @@ User: "Analyze this repo for security issues"
        └── report(summary, artifact_ids=[...]) -> commit to Repository
 ```
 
-## Available tools (15)
+## Available tools (17)
 
 | Tool | Parameters | Category |
 |------|-----------|----------|
@@ -88,7 +88,9 @@ User: "Analyze this repo for security issues"
 | `converse` | `agent_id, message` | Communication |
 | `ask` | `question` | I/O |
 | `compress` | *(none)* | Context |
-| `report` | `summary, artifact_ids?, confidence?` | Terminal |
+| `prune` | `prune_ids?` | Context |
+| `restore` | `prune_id` | Context |
+| `report` | `summary, artifact_ids?, technical_summary?, full_report?, confidence?` | Terminal |
 | `escalate` | `issue` | Terminal |
 | `fail` | `error` | Terminal |
 
@@ -96,11 +98,14 @@ Full details: [docs/api/tools.md](docs/api/tools.md)
 
 ## Usage
 
-### TUI (interactive)
+### Interactive (default terminal)
 
 ```bash
 dynamic-harness
 ```
+
+Opens the default Rich-rendered interactive REPL. For the Textual TUI (most
+verbose), use `dynamic-harness --tui`:
 
 | Command | Action |
 |---------|--------|
@@ -111,6 +116,7 @@ dynamic-harness
 | `/reset` | Clear agents and graph |
 | `/new` | Fresh root agent |
 | `/kill` | Kill running agent |
+| `/verbose` / `/quiet` | Toggle activity events |
 
 ### Single-shot
 
@@ -154,4 +160,6 @@ See [docs/guides/programmatic-usage.md](docs/guides/programmatic-usage.md) for p
 dynamic-harness --no-llm "test task"
 ```
 
-Agents immediately report their task description. Useful for testing infrastructure and learning the lifecycle.
+With no LLM configured, agents fail immediately with `"No LLM provider
+configured"`. This is only useful for verifying the runtime/tool infrastructure —
+it does **not** produce a report.

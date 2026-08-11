@@ -66,6 +66,8 @@ The structured output an agent produces when it completes.
 class ReportPayload(BaseModel):
     task_id: str           # Must match agent.task.id
     summary: str           # Concrete 1-2 sentence findings
+    technical_summary: str | None  # Optional detailed technical analysis
+    full_report: str | None        # Optional complete report with full detail
     confidence: float | None  # 0.0 (uncertain) to 1.0 (certain)
     claims: list[str]         # Specific claims made
     next_actions: list[str]   # Suggested follow-ups

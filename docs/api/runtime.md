@@ -41,7 +41,7 @@ Runtime(
 runtime.artifact_store: ArtifactStore     # In-memory + on-disk artifact storage
 runtime.repository: Repository            # Git-like commit provenance
 runtime.trace_store: TraceStore | None    # JSONL debug traces
-runtime.tool_registry: ToolRegistry       # Registered tools (15 default)
+runtime.tool_registry: ToolRegistry       # Registered tools (17 default)
 runtime.generated_root: Path | None       # Generated output directory
 ```
 
@@ -139,7 +139,7 @@ Each handler receives `(agent_id: str, payload)` where payload is the correspond
 
 ### `set_llm(llm: LLMProvider | None) -> None`
 
-Inject an LLM provider. Without this, agents run in no-LLM mode (immediately report their task description).
+Inject an LLM provider. Without this, `Agent.run()` fails immediately with `"No LLM provider configured"`.
 
 ```python
 from dynamic_harness.llm.openai_provider import OpenAIProvider
@@ -150,7 +150,7 @@ runtime.set_llm(provider)
 
 ## Token Usage Tracking
 
-### `record_usage(agent_id, *, prompt_tokens=0, completion_tokens=0, message_count=0) -> None`
+### `async record_usage(agent_id, *, prompt_tokens=0, completion_tokens=0, message_count=0) -> None`
 
 Called internally by the agent loop after each LLM response. Tracks per-agent token consumption.
 
@@ -167,9 +167,9 @@ Aggregated token consumption across all agents.
 
 ## Lifecycle
 
-### `reset() -> None`
+### `reset(clear_handlers: bool = False) -> None`
 
-Clears all state: agents, task graph, usage tracking, repository, artifact store, trace store, and event handlers. Prepares the runtime for a fresh session.
+Clears all state: agents, task graph, usage tracking, repository, artifact store, and trace store. Event handlers are only cleared when `clear_handlers=True`. Prepares the runtime for a fresh session.
 
 ## Typical Usage
 

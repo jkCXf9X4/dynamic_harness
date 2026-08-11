@@ -45,26 +45,36 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 ```
 src/dynamic_harness/
-├── __init__.py              → exports TraceStore
-├── __main__.py              → entry: python -m dynamic_harness
+├── __init__.py              → exports Harness + TraceStore
+├── __main__.py              → entry: python -m dynamic_harness (Rich terminal CLI)
+├── config.py                → HarnessConfig, LLMProviderConfig, SafetyConfig, harness.json loading
+├── api/
+│   └── harness.py           → Harness (high-level programmatic Python API)
 ├── core/
 │   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop
-│   ├── capabilities.py      → ToolDef, ToolCall, ToolRegistry, 15 tool implementations
-│   ├── runtime.py           → Runtime orchestrator (agents, task graph, event handlers)
-│   ├── task.py              → Task, ReportPayload, Escalation, Failure, DelegateRequest
+│   ├── capabilities.py      → ToolDef, ToolCall, ToolResult, ToolRegistry, 17 tool implementations
+│   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus)
+│   ├── task.py              → Task, ReportPayload, Escalation, Failure, DelegateRequest, ActivityEvent
 │   ├── runner.py            → AgentRunner (pure lifecycle, no rendering)
+│   ├── events.py            → EventBus + typed activity-event payloads
+│   ├── usage.py             → UsageTracker (per-agent/total token tracking)
+│   ├── protocols.py         → Protocol definitions
 │   └── trace.py             → TraceStore (JSONL debug trace)
 ├── cli/
-│   ├── tui.py               → Textual TUI (main CLI, interactive REPL)
-│   ├── common.py            → workspace_dir(), build_runtime()
-│   └── terminal.py       → Direct terminal mode (Rich Live-rendered loop)
+│   ├── terminal.py          → DEFAULT CLI: Rich Live-rendered terminal (batch, -i REPL, --tui)
+│   ├── tui.py               → Textual TUI (most verbose mode; via --tui)
+│   └── common.py            → workspace_dir(), build_runtime()
 ├── artifact/
 │   ├── store.py             → ArtifactView, Artifact, ArtifactStore (progressive disclosure)
 │   └── summary.py           → summarize_artifact(), hierarchical_summary()
 ├── memory/
 │   └── repository.py        → Commit, Repository (Git-like provenance)
+├── benchmark/               → BenchmarkTask suite + deterministic scoring/verification
+│   ├── tasks.py             → ALL_TASKS (single canonical task source)
+│   ├── runner.py, scoring.py, metrics.py, report.py
+│   └── run.py               → standalone CLI (python -m dynamic_harness.benchmark.run)
 └── llm/
-    ├── provider.py           → LLMProvider (ABC), LLMConfig, ToolCallResponse
+    ├── provider.py           → LLMProvider (ABC), LLMConfig, LLMResponse, ToolCallData, ToolCallResponse
     └── openai_provider.py    → OpenAIProvider (OpenAI/OpenRouter compatible)
 
 tests/
@@ -72,7 +82,7 @@ tests/
 ├── test_agent_loop.py        → AgentRunner completion, events, cancellation
 ├── test_agent_loop_detection.py → Safety: max iterations, repeated-call detection
 ├── test_runtime.py           → Runtime task graph, artifacts, event handlers
-├── test_capabilities.py      → ToolRegistry + all 15 tool implementations
+├── test_capabilities.py      → ToolRegistry + all 17 tool implementations
 ├── test_artifact.py          → ArtifactStore progressive disclosure, file I/O
 └── test_repository.py        → Repository commits, parent/child, persistence
 
@@ -137,35 +147,40 @@ Task(
 ```python
 ReportPayload(
     task_id: str
-    summary: str         # Concrete findings (1-2 sentences)
+    summary: str              # Concrete findings (1-2 sentences)
+    technical_summary: str | None  # Detailed technical analysis (optional)
+    full_report: str | None   # Complete report with full detail (optional)
     confidence: float | None  # 0.0–1.0
     claims: list[str]
     next_actions: list[str]
-    artifact_ids: list[str]  # Paths/files written to disk
+    artifact_ids: list[str]   # Paths/files written to disk
     questions: list[str]
 )
 ```
 
 ### Agent (`core/agent.py`)
-- Constructor: `Agent(agent_id, task, runtime, parent=None, system_prompt=None, safety_max_iterations=500, repeated_call_limit=5)`
+- Constructor: `Agent(agent_id, task, runtime, parent=None, *, system_prompt=None, safety_max_iterations=500, repeated_call_limit=5, safety_timeout_seconds=None, active_turn_window=50, max_pruned_retained=100)`
 - `async run()` — executes tool-calling loop to completion
 - `delegate(description, role=None, system_prompt=None, **metadata)` — creates child Agent
 - `report(payload: ReportPayload)` — delivers report to Runtime
 - `escalate(issue, **context)` — escalates to parent
 - `fail(error, trace=None)` — reports failure
 - `continue_with_input(user_message)` — resumes agent with new input
+- `request_more_budget(current_usage, requested, reason)` — emits budget request
+- `get_other_agent(agent_id)` — look up another agent by ID
 
 ### Runtime (`core/runtime.py`)
-- Constructor: `Runtime(artifact_root, repo_root, trace_root=None, generated_root=None)`
+- Constructor: `Runtime(artifact_root, repo_root, trace_root=None, generated_root=None, config=None)`
 - `delegate(task, parent=None, agent_type=None)` → Agent
 - `deliver_report(agent_id, payload)` — save artifact + commit + fire handlers
 - `deliver_escalation(agent_id, esc)` — mark task escalated
 - `deliver_failure(agent_id, fail)` — mark task failed
-- Event handlers: `on_report()`, `on_escalation()`, `on_failure()`, `on_budget_request()`
+- Event handlers: `on_report()`, `on_escalation()`, `on_failure()`, `on_budget_request()`, `on_activity()`
 - `register_agent_class(name, cls)` — register custom agent type
 - `set_llm(llm)` — inject LLM provider
 - `task_graph()` → dict[str, list[str]] — parent→children map
-- `reset()` — clear all state
+- `get_usage(agent_id)` / `total_usage()` — per-agent / aggregate token usage
+- `reset(clear_handlers=False)` — clear state (event handlers only if `clear_handlers=True`)
 
 ### ToolRegistry (`core/capabilities.py`)
 - `register(tool_def: ToolDef, fn: ToolFunc)` — add a tool
@@ -184,7 +199,7 @@ ReportPayload(
 
 ### LLMProvider (`llm/provider.py`)
 - `LLMProvider` (ABC) with `generate()`, `generate_with_tools()`, `generate_structured()`
-- `LLMConfig(model, temperature, max_tokens)`
+- `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
 ## 15 Built-in Tools
@@ -199,13 +214,15 @@ ReportPayload(
 | 6 | `webfetch` | `url: str` | No |
 | 7 | `edit` | `path: str, old_string: str, new_string: str` | No |
 | 8 | `delegate` | `description: str, role?: str, system_prompt?: str` | No |
-| 9 | `report` | `summary: str, artifact_ids?: list[str], confidence?: float` | **Yes** |
+| 9 | `report` | `summary: str, artifact_ids?: list[str], technical_summary?: str, full_report?: str, confidence?: float` | **Yes** |
 | 10 | `escalate` | `issue: str` | **Yes** |
 | 11 | `fail` | `error: str` | **Yes** |
 | 12 | `ask` | `question: str` | No |
 | 13 | `compress` | *(none)* | No |
-| 14 | `converse` | `agent_id: str, message: str` | No |
-| 15 | `read_artifact` | `artifact_id: str` | No |
+| 14 | `prune` | `prune_ids?: list[str]` | No |
+| 15 | `restore` | `prune_id: str` | No |
+| 16 | `converse` | `agent_id: str, message: str` | No |
+| 17 | `read_artifact` | `artifact_id: str` | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop.
 
@@ -215,8 +232,17 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 1. **Max iterations:** Default 500. Exceeding → force-fail with message.
 2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops).
-3. **Context observation:** Every turn includes turn count, message count, token estimate.
-4. **Compress tool:** LLM can compress its own context when past ~50 messages.
+3. **Wall-clock timeout:** Optional `safety_timeout_seconds` → force-fail when exceeded.
+4. **Context observation:** Every turn includes turn count, message count, token estimate.
+5. **Compress tool:** LLM can compress its own context when past ~50 messages.
+6. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
+
+## Process (CLI / programmatic)
+
+- Default CLI = `cli/terminal.py` (Rich Live-rendered). `--tui` switches to the Textual TUI.
+- The `agent_system_prompt.txt` is loaded at import time into `AGENT_SYSTEM_PROMPT`.
+- Applies `harness.json` via `config.load_harness_config()` (discovery: `--config` → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults).
+- No-LLM mode: without `set_llm()`, `Agent.run()` fails with "No LLM provider configured".
 
 ## Conventions for Modifying This Codebase
 

@@ -56,7 +56,7 @@ view.views["headline"]           # Same as view.headline
 artifact.get_view("technical")   # or .technical
 ```
 
-The `headline` is always populated (from `report.summary[:200]`). Other views are filled based on artifact size — smaller artifacts may have data in all views; larger ones primarily use `headline` + `summary_200`.
+The `headline` is always populated (the first line of `report.summary`, truncated to 200 chars) and `summary_200` (the first 200 chars of the summary). `summary_1000` is populated when the summary exceeds 200 chars. `technical` and `full_report` are populated from the matching `ReportPayload` fields.
 
 ## `Artifact` — An Immutable Result
 

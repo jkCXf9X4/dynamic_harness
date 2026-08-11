@@ -34,6 +34,9 @@ Agent(
     system_prompt: str | None = None,  # Override default AGENT_SYSTEM_PROMPT
     safety_max_iterations: int = 500,  # Max turns before force-fail
     repeated_call_limit: int = 5,      # Repeated identical calls before force-fail
+    safety_timeout_seconds: float | None = None,  # Optional wall-clock timeout
+    active_turn_window: int = 50,      # Recent turns reported in Context Observation
+    max_pruned_retained: int = 100,    # Pruned turns kept in memory for restore()
 )
 ```
 
@@ -61,7 +64,7 @@ The main entry point. Runs the agent to completion:
 3. Enters `_run_loop()` — the tool-calling loop
 4. Terminates when `report()`, `escalate()`, or `fail()` is called
 
-**No-LLM mode:** If `runtime._llm` is `None`, the agent immediately calls `report()` with the task description as the summary.
+**No-LLM mode:** If `runtime._llm` is `None`, the agent immediately calls `fail()` with `"No LLM provider configured"`.
 
 ```python
 agent = runtime.delegate(Task(description="Read foo.py and count lines"))

@@ -194,7 +194,8 @@ await agent.run()
 # Reset for a clean session
 runtime.reset()
 
-# All state cleared: agents, task graph, usage, events, artifacts, commits
+# Cleared: agents, task graph, usage, artifacts, commits, traces
+# (event handlers are only cleared with runtime.reset(clear_handlers=True))
 ```
 
 ## Complete Integration Example
@@ -249,7 +250,7 @@ asyncio.run(run_analysis("/path/to/repo"))
 
 ## No-LLM Mode
 
-For testing or LLM-free workflows, skip `runtime.set_llm()`:
+If you skip `runtime.set_llm()`, agents enter no-LLM mode:
 
 ```python
 runtime = Runtime(artifact_root=..., repo_root=...)
@@ -257,8 +258,13 @@ runtime = Runtime(artifact_root=..., repo_root=...)
 
 agent = runtime.delegate(Task(description="Write a report"))
 await agent.run()
-# agent._last_report.summary == "Agent abc123 executed: Write a report"
+# agent.task.status == TaskStatus.failed
+# agent._last_failure.error == "No LLM provider configured"
 ```
+
+No-LLM mode does **not** produce a report — the agent fails immediately with
+`"No LLM provider configured"`. It is only useful for verifying tool/runtime
+infrastructure, not for producing output.
 
 ## Error Handling
 

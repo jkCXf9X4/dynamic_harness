@@ -129,11 +129,9 @@ from dynamic_harness.llm.openai_provider import OpenAIProvider
 
 ```python
 OpenAIProvider(
-    api_key: str,                          # OpenAI/OpenRouter API key
-    model: str = "deepseek/deepseek-v4-flash",
-    base_url: str | None = None,           # Default: https://api.openai.com/v1
-    temperature: float = 0.0,
-    max_tokens: int | None = None,
+    model: str = "gpt-4o",                  # Model name
+    base_url: str | None = None,            # None → OpenAI default
+    api_key: str | None = None,             # None → uses env / AsyncOpenAI
     verify_ssl: bool = True,
     provider_ignore: list[str] | None = None,    # OpenRouter providers to exclude
     provider_allow_fallbacks: bool = True,       # Allow OpenRouter fallback routing
@@ -156,10 +154,10 @@ export OPENAI_API_KEY=sk-...                   # Fallback key
 ```json
 {
   "llm": {
-    "model": "deepseek/deepseek-v4-pro",
+    "model": "deepseek/deepseek-v4-flash-0731",
     "base_url": "https://openrouter.ai/api/v1",
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": false
+    "provider_allow_fallbacks": true
   },
   "safety": {
     "max_iterations": 500,

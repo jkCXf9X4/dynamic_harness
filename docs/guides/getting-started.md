@@ -56,10 +56,10 @@ Edit as needed:
 ```json
 {
   "llm": {
-    "model": "deepseek/deepseek-v4-pro",
+    "model": "deepseek/deepseek-v4-flash-0731",
     "base_url": "https://openrouter.ai/api/v1",
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": false
+    "provider_allow_fallbacks": true
   },
   "safety": {
     "max_iterations": 500,
@@ -84,15 +84,13 @@ export OPENAI_API_KEY=sk-your-key-here
 
 ## Your First Task
 
-### TUI Mode (interactive)
+### Interactive Terminal (default)
 
 ```bash
 dynamic-harness
 ```
 
-Type your task in the input bar and press Enter. The TUI shows:
-- **Left panel:** Tree of agents (green = completed, red = failed, yellow = running)
-- **Right panel:** Streaming events from all agents
+Opens the default Rich-rendered interactive REPL. Type a task and press Enter. Live rendering shows the agent tree (left), status, and streaming events.
 
 ### Single-Shot Mode
 
@@ -102,16 +100,26 @@ dynamic-harness "Find the 3 largest Python files in this project"
 
 Runs the task and exits. The output shows each agent's actions and final report.
 
+### TUI Mode (most verbose)
+
+```bash
+dynamic-harness --tui
+```
+
+Launches the Textual TUI. `--tui` is also accepted as the first argument:
+- **Left panel:** Tree of agents (green = completed, red = failed, yellow = running)
+- **Right panel:** Streaming events from all agents
+
 ### No-LLM Mode (testing)
 
 ```bash
 dynamic-harness --no-llm "test without AI"
 ```
 
-The agent immediately reports its task description. Useful for:
-- Testing the runtime without API costs
-- Verifying tool infrastructure
-- Learning the agent lifecycle
+Runs without an LLM. Because no LLM is configured, the agent immediately
+**fails** with `"No LLM provider configured"`. Useful for verifying the
+runtime/tool infrastructure without API costs, but it does **not** produce a
+report — expect a failure, not a summary.
 
 ## Understanding the Output
 

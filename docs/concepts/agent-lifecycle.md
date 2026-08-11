@@ -78,11 +78,8 @@ await agent.run()
 async def run(self) -> None:
     llm = self.llm  # Get LLM from runtime
     if not llm:
-        # No-LLM mode: immediately report
-        self.report(ReportPayload(
-            task_id=self.task.id,
-            summary=f"Agent {self.id} executed: {self.task.description}",
-        ))
+        # No-LLM mode: fail immediately
+        self.fail("No LLM provider configured")
         return
 
     # Format the user message
