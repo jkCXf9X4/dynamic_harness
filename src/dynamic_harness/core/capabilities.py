@@ -28,12 +28,6 @@ class ToolDef(BaseModel):
     input_schema: dict[str, Any]
 
 
-class ToolCall(BaseModel):
-    id: str
-    name: str
-    arguments: dict[str, Any]
-
-
 class ToolResult:
     def __init__(self, tool_call_id: str, content: str) -> None:
         self.tool_call_id = tool_call_id
@@ -203,7 +197,12 @@ TOOL_REPORT_DEF = ToolDef(
             "artifact_ids": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Artifact IDs to attach",
+                "description": "IDs of artifacts to attach (referenced in earlier report/read_artifact output)",
+            },
+            "files_written": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Paths of files written to disk during this task",
             },
             "technical_summary": {
                 "type": "string",
@@ -400,9 +399,11 @@ async def _tool_write(*, agent: Agent, path: str, content: str) -> str:
         safe = _resolve_safe_path(path, agent)
     except ValueError as e:
         return f"Error: {e}"
-    safe.parent.mkdir(parents=True, exist_ok=True)
-    previous = safe.read_text() if safe.exists() else None
-    safe.write_text(content)
+    lock = await agent.workspace_lock(safe)
+    async with lock:
+        safe.parent.mkdir(parents=True, exist_ok=True)
+        previous = safe.read_text() if safe.exists() else None
+        safe.write_text(content)
     if previous == content:
         return (
             f"No change: content identical to existing file at {path} — "
@@ -418,25 +419,6 @@ def _is_hidden(path: str | Path) -> bool:
         if part.startswith("."):
             return True
     return False
-
-
-def _build_gitignore_filter() -> Callable[[str], bool]:
-    gitignore = Path.cwd() / ".gitignore"
-    if not gitignore.exists():
-        return lambda p: False
-
-    try:
-        import pathspec
-        spec = pathspec.PathSpec.from_lines(
-            "gitignore", gitignore.read_text().splitlines()
-        )
-
-        def is_ignored(path: str) -> bool:
-            return spec.match_file(path)
-    except ImportError:
-        return lambda p: False
-
-    return is_ignored
 
 
 async def _tool_glob(*, agent: Agent, pattern: str) -> str:
@@ -481,41 +463,14 @@ async def _tool_edit(*, agent: Agent, path: str, old_string: str, new_string: st
         safe = _resolve_safe_path(path, agent)
     except ValueError as e:
         return f"Error: {e}"
-    content = safe.read_text()
-    if old_string not in content:
-        return f"Error: old_string not found in {path}"
-    new_content = content.replace(old_string, new_string, 1)
-    safe.write_text(new_content)
+    lock = await agent.workspace_lock(safe)
+    async with lock:
+        content = safe.read_text()
+        if old_string not in content:
+            return f"Error: old_string not found in {path}"
+        new_content = content.replace(old_string, new_string, 1)
+        safe.write_text(new_content)
     return f"Replaced in {path}"
-
-
-def _format_delegate_result(child: Agent) -> str:
-    status = child.task.status.value
-    child._runtime.emit_activity(ActivityEvent(
-        agent_id=child.parent.id if child.parent else "",
-        event_type=ActivityEventType.DELEGATION_END,
-        data={
-            "child_id": child.id,
-            "status": status,
-        },
-    ))
-    result: dict[str, Any] = {
-        "child_id": child.id,
-        "status": status,
-    }
-
-    if child._last_report:
-        r = child._last_report
-        result["summary"] = r.summary[:500]
-        if r.artifact_ids:
-            result["artifact_ids"] = r.artifact_ids
-        if r.confidence is not None:
-            result["confidence"] = r.confidence
-
-    if child._last_failure:
-        result["failure"] = child._last_failure.error[:500]
-
-    return _json.dumps(result, indent=2)
 
 
 async def _tool_delegate(
@@ -534,31 +489,21 @@ async def _tool_delegate(
         },
     ))
     task = asyncio.create_task(child.run())
+    agent._runtime.track_agent_task(task)
     if agent._deferred_delegates is not None:
         agent._deferred_delegates.append((_tool_call_id, child, task))
         return _json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
 
-    agent._pending_child_task = task
-    try:
-        await agent._pending_child_task
-    except asyncio.CancelledError:
-        agent._pending_child_task.cancel()
-        try:
-            await agent._pending_child_task
-        except asyncio.CancelledError:
-            pass
-        raise
-    finally:
-        agent._pending_child_task = None
-
-    return _format_delegate_result(child)
+    await task
+    return agent._format_delegate_result(child)
 
 
-async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
+async def _tool_report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, files_written: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
     agent.report(ReportPayload(
         task_id=agent.task.id,
         summary=summary,
         artifact_ids=artifact_ids or [],
+        files_written=files_written or [],
         confidence=confidence,
         technical_summary=technical_summary,
         full_report=full_report,
@@ -635,28 +580,35 @@ async def _tool_bash(*, agent: Agent, command: str, timeout: int = 30000) -> str
         return f"Error: invalid command syntax: {e}"
 
     cwd = agent.generated_root
-
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=cwd,
-    )
+    repo_lock = None
+    if args:
+        repo_lock = agent.repo_lock()
+        await repo_lock.acquire()
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
-    except TimeoutError:
-        proc.kill()
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
+        )
         try:
-            await proc.wait()
-        except Exception:
-            pass
-        return f"Error: command timed out after {timeout}ms"
-    result = ""
-    if stdout:
-        result += stdout.decode(errors="replace")
-    if stderr:
-        result += f"\n(STDERR)\n{stderr.decode(errors='replace')}"
-    return result.strip() or "(no output)"
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout / 1000)
+        except asyncio.TimeoutError:
+            proc.kill()
+            try:
+                await proc.wait()
+            except Exception:
+                pass
+            return f"Error: command timed out after {timeout}ms"
+        result = ""
+        if stdout:
+            result += stdout.decode(errors="replace")
+        if stderr:
+            result += f"\n(STDERR)\n{stderr.decode(errors='replace')}"
+        return result.strip() or "(no output)"
+    finally:
+        if repo_lock:
+            repo_lock.release()
 
 
 COMPRESSION_PROMPT = """\
@@ -722,25 +674,6 @@ async def _tool_compress(*, agent: Agent) -> str:
     return f"Compressed: {before} messages -> {after} messages ({saved} removed).\nSummary: {summary[:200]}..."
 
 
-def _make_prune_marker(pid: str, turn_msgs: list[dict[str, Any]]) -> str:
-    tool_names = ", ".join(
-        tc.get("function", {}).get("name", "?")
-        for tc in turn_msgs[0].get("tool_calls", [])
-    ) if turn_msgs and turn_msgs[0].get("role") == "assistant" else "reply"
-    tail = ""
-    for m in reversed(turn_msgs):
-        content = m.get("content")
-        if content:
-            tail = content
-            break
-    tail = tail[:200]
-    suffix = "…" if len(tail) == 200 else ""
-    return (
-        f"[PRUNED {pid} ({tool_names}) — retained for restore(prune_id={pid!r}). "
-        f"Tail: {tail}{suffix}]"
-    )
-
-
 async def _tool_prune(*, agent: Agent, prune_ids: list[str] | str | None = None) -> str:
     if isinstance(prune_ids, str):
         prune_ids = [pid.strip() for pid in prune_ids.split(",") if pid.strip()]
@@ -802,7 +735,7 @@ async def _tool_prune(*, agent: Agent, prune_ids: list[str] | str | None = None)
         turn_len = len(agent._turns[pid])
         marker = {
             "role": "assistant",
-            "content": _make_prune_marker(pid, agent._turns[pid]),
+            "content": agent._make_prune_marker(pid),
         }
         marker_for[pid] = {"marker": marker, "index": idx}
         new_messages.append(marker)

@@ -110,13 +110,13 @@ Runtime.deliver_report():
         task_id=agent.task.id,
         agent_id=agent_id,
         summary=payload.summary,
-        artifact_ids=payload.artifact_ids + [artifact.id],
-        parent_ids=[agent.task.parent_id] if parent else [],
+        artifact_ids=[artifact.id],
+        parent_ids=self.repository.commit_ids_for_tasks(parent_task_ids),
      )
      → repository.commit(commit)
 ```
 
-The commit's `artifact_ids` include both the report artifact and any files the agent wrote. This provides end-to-end provenance from task to result.
+The commit's `artifact_ids` hold the report artifact UUID; files the agent wrote are referenced separately via the report's `files_written` (persisted as a `files_written.json` sidecar on the artifact). This provides end-to-end provenance from task to result.
 
 ## Programmatic Access
 

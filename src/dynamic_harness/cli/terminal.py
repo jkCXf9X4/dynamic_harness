@@ -16,8 +16,9 @@ from ..core.agent import Agent
 from ..core.capabilities import TOOL_ASK_DEF
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
-from ..core.task import ActivityEvent, ActivityEventType
+from ..core.task import ActivityEvent
 from .common import build_runtime, workspace_dir
+from .format_event import format_event
 
 console = Console()
 
@@ -51,37 +52,7 @@ def _install_ask_tool(runtime: Runtime) -> None:
 
 
 def _format_event(event: ActivityEvent) -> str | None:
-    eid = event.agent_id[:8]
-    d = event.data
-    et = event.event_type
-
-    if et == ActivityEventType.TOOL_CALL_START:
-        name = d.get("tool_name", "?")
-        return f"  [{eid}] {name}()"
-    elif et == ActivityEventType.TOOL_CALL_END:
-        name = d.get("tool_name", "?")
-        rlen = d.get("result_length", 0)
-        return f"  [{eid}] {name}() \u2192 {rlen}b"
-    elif et == ActivityEventType.LLM_CALL_END:
-        tc = d.get("tool_calls", [])
-        pt = d.get("prompt_tokens", 0)
-        ct = d.get("completion_tokens", 0)
-        return f"  [{eid}] LLM \u2192 {', '.join(tc) if tc else 'text'} ({pt}+{ct}t)"
-    elif et == ActivityEventType.DELEGATION_START:
-        child = d.get("child_id", "?")[:8]
-        return f"  [{eid}] delegate \u2192 {child}"
-    elif et == ActivityEventType.DELEGATION_END:
-        child = d.get("child_id", "?")[:8]
-        status = d.get("status", "?")
-        return f"  [{eid}] {child} \u2192 {status}"
-    elif et == ActivityEventType.COMPRESSION:
-        saved = d.get("saved", 0)
-        return f"  [{eid}] compressed (-{saved})"
-    elif et == ActivityEventType.SAFETY_WARNING:
-        return f"  [{eid}] \u26a0 {d.get('warning_type', '')}"
-    elif et == ActivityEventType.ITERATION:
-        return None
-    return None
+    return format_event(event)
 
 
 def _make_tree(runtime: Runtime) -> Tree:

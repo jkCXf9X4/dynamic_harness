@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
@@ -34,6 +36,8 @@ class Runtime:
             generated_root.mkdir(parents=True, exist_ok=True)
         self._generated_root = generated_root
         self._agents: dict[str, Agent] = {}
+        self._agent_retries: dict[str, int] = {}
+        self._agent_run_tasks: set[asyncio.Task[Any]] = set()
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
         self._llm: LLMProvider | None = None
@@ -50,9 +54,27 @@ class Runtime:
         self.tool_registry = ToolRegistry()
         register_default_tools(self.tool_registry)
 
+        self._path_locks: dict[str, asyncio.Lock] = {}
+        self._lock_guard = asyncio.Lock()
+        self._repo_lock = asyncio.Lock()
+
     @property
     def generated_root(self) -> Path | None:
         return self._generated_root
+
+    @property
+    def provider(self) -> LLMProvider | None:
+        """The configured LLM provider (public read accessor for `_llm`)."""
+        return self._llm
+
+    async def acquire_path_lock(self, path: str) -> asyncio.Lock:
+        """Return a per-path lock to serialize concurrent writes to the same file."""
+        async with self._lock_guard:
+            return self._path_locks.setdefault(path, asyncio.Lock())
+
+    def repo_lock(self) -> asyncio.Lock:
+        """Global lock serializing repo-mutating operations (e.g. bash/git)."""
+        return self._repo_lock
 
     def get_gitignore_filter(self) -> Callable[[str], bool]:
         gitignore = Path.cwd() / ".gitignore"
@@ -132,13 +154,20 @@ class Runtime:
         )
         artifact = Artifact(task_id=agent.task.id, agent_id=agent_id, views=view)
         self.artifact_store.save(artifact)
+        if payload.files_written:
+            self.artifact_store.write_text(
+                artifact.id, "files_written.json",
+                json.dumps(payload.files_written, indent=2),
+            )
 
         commit = Commit(
             task_id=agent.task.id,
             agent_id=agent_id,
             summary=payload.summary,
-            artifact_ids=payload.artifact_ids + [artifact.id],
-            parent_ids=[agent.task.parent_id] if agent.task.parent_id else [],
+            artifact_ids=[artifact.id],
+            parent_ids=self.repository.commit_ids_for_tasks(
+                [agent.task.parent_id] if agent.task.parent_id else []
+            ),
         )
         self.repository.commit(commit)
 
@@ -208,16 +237,27 @@ class Runtime:
         return self.usage_tracker.get_usage(agent_id)
 
     def get_retries(self, agent_id: str) -> int:
-        agent = self._agents.get(agent_id)
-        return agent._llm_retries if agent else 0
+        return self._agent_retries.get(agent_id, 0)
 
     def total_retries(self) -> int:
-        return sum(a._llm_retries for a in self._agents.values())
+        return sum(self._agent_retries.values())
+
+    def record_retry(self, agent_id: str) -> None:
+        self._agent_retries[agent_id] = self._agent_retries.get(agent_id, 0) + 1
+
+    def track_agent_task(self, task: asyncio.Task[Any]) -> None:
+        """Track a spawned agent run task (used by the delegate tool) so reset()
+        can cancel in-flight work."""
+        self._agent_run_tasks.add(task)
+        task.add_done_callback(self._agent_run_tasks.discard)
 
     def total_usage(self) -> dict:
         return self.usage_tracker.total_usage()
 
     def reset(self, *, clear_handlers: bool = False) -> None:
+        for task in list(self._agent_run_tasks):
+            task.cancel()
+        self._agent_run_tasks.clear()
         self._agents.clear()
         self._task_graph.clear()
         self.usage_tracker.clear()
@@ -227,5 +267,7 @@ class Runtime:
         self.artifact_store.clear()
         if self.trace_store:
             self.trace_store.clear()
+        self._path_locks.clear()
+        self._agent_retries.clear()
         if clear_handlers:
             self.event_bus.clear()

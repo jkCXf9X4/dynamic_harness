@@ -15,8 +15,9 @@ from textual.widgets import RichLog, TextArea, Tree
 from ..core.agent import Agent
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
-from ..core.task import ActivityEvent, ActivityEventType
+from ..core.task import ActivityEvent
 from .common import build_runtime, workspace_dir
+from .format_event import format_event
 
 COMMANDS = {
     "/help": "Show this help message",
@@ -155,45 +156,10 @@ class TUI(App[None]):
         self.query_one("#output", RichLog).write(RichText(text, style=style))
 
     def _format_activity(self, event: ActivityEvent) -> str | None:
-        eid = event.agent_id[:8]
-        d = event.data
-        et = event.event_type
-
-        if et == ActivityEventType.TOOL_CALL_START:
-            name = d.get("tool_name", "?")
-            args = d.get("arguments", {})
-            arg_str = ", ".join(f"{k}={str(v)[:30]}" for k, v in args.items())
-            return f"  [{eid}] \U0001f527 {name}({arg_str})\n"
-        elif et == ActivityEventType.TOOL_CALL_END:
-            name = d.get("tool_name", "?")
-            rlen = d.get("result_length", 0)
-            return f"  [{eid}] \u2705 {name} \u2192 {rlen} bytes\n"
-        elif et == ActivityEventType.LLM_CALL_END:
-            tc = d.get("tool_calls", [])
-            pt = d.get("prompt_tokens", 0)
-            ct = d.get("completion_tokens", 0)
-            tc_str = ", ".join(tc) if tc else "text-only"
-            return f"  [{eid}] \U0001f4ac LLM \u2192 {tc_str} ({pt}+{ct} tokens)\n"
-        elif et == ActivityEventType.DELEGATION_START:
-            child = d.get("child_id", "?")[:8]
-            desc = (d.get("description", "") or "")[:60]
-            return f"  [{eid}] \U0001f476 delegate \u2192 {child} \"{desc}\"\n"
-        elif et == ActivityEventType.DELEGATION_END:
-            child = d.get("child_id", "?")[:8]
-            status = d.get("status", "?")
-            return f"  [{eid}] \U0001f476 {child} \u2192 {status}\n"
-        elif et == ActivityEventType.COMPRESSION:
-            before = d.get("before", 0)
-            after = d.get("after", 0)
-            saved = d.get("saved", 0)
-            return f"  [{eid}] \U0001f504 compressed {before}\u2192{after} msgs (-{saved})\n"
-        elif et == ActivityEventType.SAFETY_WARNING:
-            wtype = d.get("warning_type", "")
-            if wtype == "max_iterations":
-                return f"  [{eid}] \u26a0\ufe0f max iterations ({d.get('iteration', 0)}/{d.get('limit', 0)})\n"
-            return f"  [{eid}] \u26a0\ufe0f repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})\n"
-        elif et == ActivityEventType.ITERATION:
+        text = format_event(event, emoji=True, show_args=True)
+        if text is None:
             return None
+        return text + "\n"
 
     def _on_activity(self, event: ActivityEvent) -> None:
         if not self._verbose:

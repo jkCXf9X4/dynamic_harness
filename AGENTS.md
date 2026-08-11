@@ -153,7 +153,8 @@ ReportPayload(
     confidence: float | None  # 0.0–1.0
     claims: list[str]
     next_actions: list[str]
-    artifact_ids: list[str]   # Paths/files written to disk
+    artifact_ids: list[str]   # Stored artifact UUIDs (system-managed)
+    files_written: list[str]  # Files the agent wrote to disk
     questions: list[str]
 )
 ```

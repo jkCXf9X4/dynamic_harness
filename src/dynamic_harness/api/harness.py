@@ -45,6 +45,7 @@ class Harness:
         llm_config: dict[str, Any] | None = None,
         runtime: Runtime | None = None,
         *,
+        llm: Any | None = None,
         verbose: bool = True,
     ) -> None:
         if runtime is not None:
@@ -63,7 +64,9 @@ class Harness:
         self._runner = AgentRunner(self._runtime)
         self._verbose = verbose
 
-        if llm_config:
+        if llm is not None:
+            self._runtime.set_llm(llm)
+        elif llm_config:
             self._configure_llm(llm_config)
 
         self._runtime.on_report(self._on_report)

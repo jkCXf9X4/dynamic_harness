@@ -71,7 +71,8 @@ class ReportPayload(BaseModel):
     confidence: float | None  # 0.0 (uncertain) to 1.0 (certain)
     claims: list[str]         # Specific claims made
     next_actions: list[str]   # Suggested follow-ups
-    artifact_ids: list[str]   # Paths to artifact files on disk
+    artifact_ids: list[str]   # Stored artifact UUIDs (system-managed)
+    files_written: list[str]  # Paths of files the agent wrote to disk
     questions: list[str]      # Open questions for the user/parent
 ```
 
@@ -82,7 +83,7 @@ ReportPayload(
     summary="Added JWT expiry validation to auth.py. 3 tests pass.",
     confidence=0.95,
     claims=["auth.py:45 adds expiry check", "3 tests pass in test_auth.py"],
-    artifact_ids=["/tmp/auth_fix_summary.txt"],
+    files_written=["/tmp/auth_fix_summary.txt"],
 )
 ```
 

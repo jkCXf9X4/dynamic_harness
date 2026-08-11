@@ -1,5 +1,5 @@
 from .agent import Agent
-from .capabilities import ToolCall, ToolDef, ToolRegistry, ToolResult
+from .capabilities import ToolDef, ToolRegistry, ToolResult
 from .runner import AgentRunner
 from .runtime import Runtime
 from .task import (
@@ -26,7 +26,6 @@ __all__ = [
     "Runtime",
     "Task",
     "TaskStatus",
-    "ToolCall",
     "ToolDef",
     "ToolRegistry",
     "ToolResult",

@@ -30,7 +30,7 @@ class Commit(BaseModel):
     task_id: str         # The task this commit records
     agent_id: str        # The agent that completed the work
     summary: str         # Report summary (from ReportPayload)
-    artifact_ids: list[str]  # Artifact IDs including the report artifact
+    artifact_ids: list[str]  # Stored artifact UUIDs (incl. the report artifact)
     parent_ids: list[str]    # Parent commit IDs (typically 0 or 1)
     child_ids: list[str]     # Child commit IDs (populated automatically)
     timestamp: datetime      # UTC, auto-generated
@@ -127,6 +127,6 @@ Runtime.deliver_report():
   1. artifact_store.save(Artifact)     → ArtifactStore records result
   2. repository.commit(Commit)         → Repository records provenance
      ├── commit.summary = payload.summary
-     ├── commit.artifact_ids = payload.artifact_ids + [report_artifact.id]
-     └── commit.parent_ids = [agent.task.parent_id]  (if parent exists)
+     ├── commit.artifact_ids = [report_artifact.id]
+     └── commit.parent_ids = repository.commit_ids_for_tasks([task.parent_id])
 ```

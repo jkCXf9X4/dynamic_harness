@@ -22,3 +22,9 @@ Make sure the tui works
 ---
 
 add something to ensure that prompt is normalized/adapted to the tooling
+
+
+---
+
+Do a critical review of internal module boundaries to ensure that modules and classes are of reasonable size and abstraction
+Its ok to do large changes to the code base, no need to persist interfaces---this is an experimental software 

@@ -27,20 +27,16 @@ class Task(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class DelegateRequest(BaseModel):
-    task: Task
-    budget: int | None = None
-
-
 class ReportPayload(BaseModel):
     task_id: str
     summary: str
     technical_summary: str | None = None
     full_report: str | None = None
-    confidence: float | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     claims: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     artifact_ids: list[str] = Field(default_factory=list)
+    files_written: list[str] = Field(default_factory=list)
     questions: list[str] = Field(default_factory=list)
 
 

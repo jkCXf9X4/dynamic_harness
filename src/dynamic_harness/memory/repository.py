@@ -29,6 +29,7 @@ class Repository:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self._commits: dict[str, Commit] = {}
+        self._task_commits: dict[str, str] = {}
         self._load_existing()
 
     def _load_existing(self) -> None:
@@ -36,9 +37,11 @@ class Repository:
             data = p.read_text()
             c = Commit.model_validate_json(data)
             self._commits[c.id] = c
+            self._task_commits[c.task_id] = c.id
 
     def commit(self, commit: Commit) -> Commit:
         self._commits[commit.id] = commit
+        self._task_commits[commit.task_id] = commit.id
         p = _commit_path(self.root, commit.id)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(commit.model_dump_json(indent=2))
@@ -62,6 +65,19 @@ class Repository:
 
     def get(self, commit_id: str) -> Commit | None:
         return self._commits.get(commit_id)
+
+    def commit_for_task(self, task_id: str) -> Commit | None:
+        commit_id = self._task_commits.get(task_id)
+        if commit_id is None:
+            return None
+        return self._commits.get(commit_id)
+
+    def commit_ids_for_tasks(self, task_ids: Sequence[str]) -> list[str]:
+        """Resolve task ids to their latest commit ids (for parent linkage)."""
+        return [
+            cid for tid in task_ids
+            if (cid := self._task_commits.get(tid)) is not None
+        ]
 
     def log(self, limit: int = 50) -> Sequence[Commit]:
         sorted_commits = sorted(self._commits.values(), key=lambda c: c.timestamp, reverse=True)
@@ -89,6 +105,7 @@ class Repository:
 
     def clear(self) -> None:
         self._commits.clear()
+        self._task_commits.clear()
         if self.root.exists():
             shutil.rmtree(self.root)
             self.root.mkdir(parents=True, exist_ok=True)

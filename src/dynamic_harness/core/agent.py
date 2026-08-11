@@ -57,12 +57,11 @@ class Agent:
         self._messages: list[dict[str, Any]] = []
         self._has_run: bool = False
         self._iteration: int = 0
-        self._llm_retries: int = 0
         self._recent_batches: deque[list[tuple[str, str]]] | None = None
         self._last_report: ReportPayload | None = None
         self._last_failure: Failure | None = None
-        self._pending_child_task: asyncio.Task[None] | None = None
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
+        self._loop_lock = asyncio.Lock()
 
         self._turn_counter: int = 0
         self._turn_order: list[str] = []
@@ -75,7 +74,7 @@ class Agent:
         self._event_bus = runtime.event_bus
         self._tool_registry = runtime.tool_registry
         self._usage_tracker = runtime.usage_tracker
-        self._llm = runtime._llm
+        self._llm = runtime.provider
         self._trace_store = runtime.trace_store
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
@@ -120,24 +119,27 @@ class Agent:
         try:
             await self._run_loop()
         except asyncio.CancelledError:
-            if self._pending_child_task and not self._pending_child_task.done():
-                self._pending_child_task.cancel()
-                try:
-                    await self._pending_child_task
-                except asyncio.CancelledError:
-                    pass
             if not self._last_report and not self._last_failure:
                 self.fail("Agent cancelled")
             raise
+        except Exception as exc:
+            if not self._last_report and not self._last_failure:
+                self.fail(f"Unhandled agent error: {exc}")
+            self._event_bus.emit_activity(ActivityEvent(
+                agent_id=self.id,
+                event_type=ActivityEventType.SAFETY_WARNING,
+                data={"warning_type": "agent_error", "error": str(exc)},
+            ))
 
     async def continue_with_input(self, user_message: str) -> None:
-        if not self._has_run:
-            self.task.description = user_message
-            await self.run()
-            return
-        self.task.status = TaskStatus.running
-        self._messages.append({"role": "user", "content": user_message})
-        await self._run_loop()
+        async with self._loop_lock:
+            if not self._has_run:
+                self.task.description = user_message
+                await self.run()
+                return
+            self.task.status = TaskStatus.running
+            self._messages.append({"role": "user", "content": user_message})
+            await self._run_loop()
 
     async def _llm_call_with_retry(self, tools: list[dict], max_retries: int = 3) -> Any:
         llm = self.llm
@@ -164,7 +166,7 @@ class Agent:
                 )
                 if not is_retryable or attempt >= max_retries:
                     raise
-                self._llm_retries += 1
+                self._runtime.record_retry(self.id)
                 delay = base_delay * (2 ** attempt)
                 await asyncio.sleep(delay)
 
@@ -188,15 +190,61 @@ class Agent:
         return pid
 
     def _mark_turn_pruned(self, pid: str) -> None:
-        from ..core.capabilities import _make_prune_marker
         marker = {
             "role": "assistant",
-            "content": _make_prune_marker(pid, self._turns[pid]),
+            "content": self._make_prune_marker(pid),
         }
         self._messages.append(marker)
         self._pruned.add(pid)
         self._prune_markers[pid] = {"marker": marker, "index": len(self._messages) - 1}
         self.evict_pruned_overflow()
+
+    def _make_prune_marker(self, pid: str) -> str:
+        turn_msgs = self._turns[pid]
+        tool_names = ", ".join(
+            tc.get("function", {}).get("name", "?")
+            for tc in turn_msgs[0].get("tool_calls", [])
+        ) if turn_msgs and turn_msgs[0].get("role") == "assistant" else "reply"
+        tail = ""
+        for m in reversed(turn_msgs):
+            content = m.get("content")
+            if content:
+                tail = content
+                break
+        tail = tail[:200]
+        suffix = "…" if len(tail) == 200 else ""
+        return (
+            f"[PRUNED {pid} ({tool_names}) — retained for restore(prune_id={pid!r}). "
+            f"Tail: {tail}{suffix}]"
+        )
+
+    def _format_delegate_result(self, child: Agent) -> str:
+        status = child.task.status.value
+        child._runtime.emit_activity(ActivityEvent(
+            agent_id=child.parent.id if child.parent else "",
+            event_type=ActivityEventType.DELEGATION_END,
+            data={
+                "child_id": child.id,
+                "status": status,
+            },
+        ))
+        result: dict[str, Any] = {
+            "child_id": child.id,
+            "status": status,
+        }
+
+        if child._last_report:
+            r = child._last_report
+            result["summary"] = r.summary[:500]
+            if r.artifact_ids:
+                result["artifact_ids"] = r.artifact_ids
+            if r.confidence is not None:
+                result["confidence"] = r.confidence
+
+        if child._last_failure:
+            result["failure"] = child._last_failure.error[:500]
+
+        return json.dumps(result, indent=2)
 
     def _turn_token_estimate(self, pid: str) -> int:
         total = 0
@@ -489,23 +537,27 @@ class Agent:
         if not self._deferred_delegates:
             self._deferred_delegates = None
             return
-        from ..core.capabilities import _format_delegate_result
 
         pending = self._deferred_delegates
         self._deferred_delegates = None
 
+        children = [child for _, child, _ in pending]
+        outcomes = await asyncio.gather(
+            *(task for _, _, task in pending),
+            return_exceptions=True,
+        )
+
         deferred_map: dict[str, Agent] = {}
-        for tcid, child, task in pending:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        for (tcid, child, _), outcome in zip(pending, outcomes):
             deferred_map[tcid] = child
+            if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
+                if not child._last_report and not child._last_failure:
+                    child.fail(f"Child agent raised: {outcome}")
 
         for r in results:
             tcid = r["tool_call_id"]
             if tcid in deferred_map:
-                r["content"] = _format_delegate_result(deferred_map[tcid])
+                r["content"] = self._format_delegate_result(deferred_map[tcid])
 
     def delegate(
         self,
@@ -534,6 +586,14 @@ class Agent:
 
     def get_gitignore_filter(self) -> Any:
         return self._runtime.get_gitignore_filter()
+
+    async def workspace_lock(self, path) -> asyncio.Lock:
+        """Per-path lock serializing concurrent writes to the same file."""
+        return await self._runtime.acquire_path_lock(str(path))
+
+    def repo_lock(self) -> asyncio.Lock:
+        """Global lock serializing repo-mutating operations across agents."""
+        return self._runtime.repo_lock()
 
     @property
     def generated_root(self) -> Any:

@@ -95,7 +95,7 @@ class MetricsCollector:
         delegations = 0
         message_count = 0
         total_turns = 0
-        llm_retries = 0
+        llm_retries = runtime.total_retries()
         failures = 0
         escalations = 0
 
@@ -104,7 +104,6 @@ class MetricsCollector:
                 delegations += 1
             message_count += len(agent._messages)
             total_turns += agent._iteration
-            llm_retries += agent._llm_retries
             st = agent.task.status.value if agent.task.status else ""
             if st == "failed":
                 failures += 1
