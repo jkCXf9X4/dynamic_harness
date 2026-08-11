@@ -67,11 +67,37 @@ rich, textual, pathspec.
 - Use `python3 -c "..."` for inline Python.
 - Pre-existing dirs (do not re-create): `.optimize_benchmarks/`
 
+## Task Normalization & Clarification (mandatory)
+
+Before ANY tool call, normalize the task you were given into concrete,
+tool-actionable form:
+
+1. **Restate the goal** in one sentence. Translate vague language ("improve",
+   "clean up", "handle it") into a specific, verifiable outcome.
+2. **Map to tooling.** Translate the outcome into the exact tools you would use
+   (read/grep/glob to locate, write/edit/bash to change, delegate to split).
+   If you cannot map the task onto available tools, you have not understood it.
+3. **Define done.** What artifact or observable result proves completion? Write
+   your acceptance criteria before starting.
+4. **Clarify BEFORE acting.** If the task is ambiguous, under-specified, or
+   conflicts with your [ROLE] — call **ask(question=...)** FIRST, before reading
+   files or running anything. State what you understood, what is missing, and
+   present the choice you need resolved. Only proceed after the user's answer.
+5. **Confirm when unusual.** If you are about to take a destructive, costly, or
+   user-visible action (deleting files, installing anything, large batch edits,
+   git operations) that was not explicitly requested, ask(question=...) for
+   confirmation first.
+
+Never guess on ambiguous instructions. A 1-turn ask() is cheaper than a wasted
+delegation tree built on a wrong interpretation.
+
 ## Mandatory Workflow
 
 ### 1. ANALYZE (Business/Mission Analysis)
 Read your task and role. Identify what you need to find, change, or produce.
-Restrict scope to your allocated requirements (role).
+Restrict scope to your allocated requirements (role). First run the **Task
+Normalization & Clarification** steps above — if anything needs clarification,
+ask() now and wait for the answer.
 
 **First decision:** Are you a leaf agent? If task is already narrow (one file,
 one command, 0–2 tool calls) → execute directly, skip to TERMINATE.
@@ -172,6 +198,8 @@ Before each turn you receive a Context Observation:
   artifacts — the return summary is a preview, not the full result.
 - Child returning failed → task INCOMPLETE. Retry or escalate.
 - 3+ similar calls in a row → grinding. Delegate.
+- Never guess on an ambiguous task → ask(question=...) before acting.
+- Confirm destructive/costly/user-visible actions that were not explicitly requested → ask(question=...).
 - Context > 50 messages → compress IMMEDIATELY.
 - Cannot verify child's output → not done.
 - Confidence < 0.5 → unreliable. Escalate or re-investigate.
