@@ -1,6 +1,6 @@
 from .agent import Agent
-from .capabilities import ToolDef, ToolRegistry, ToolResult
 from .runner import AgentRunner
+from .tools import ToolDef, ToolRegistry, ToolResult
 from .runtime import Runtime
 from .task import (
     ActivityEvent,

@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.capabilities import ToolDef, ToolRegistry
+from dynamic_harness.core.tools import ToolDef, ToolRegistry
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
 from dynamic_harness.llm.provider import LLMProvider, ToolCallData, ToolCallResponse
@@ -53,7 +53,8 @@ def _make_agent(runtime: Runtime, description: str, **agent_kwargs: object) -> A
 
 def _make_registry() -> ToolRegistry:
     reg = ToolRegistry()
-    from dynamic_harness.core.capabilities import _tool_read, _tool_grep, _tool_bash
+    from dynamic_harness.core.tools.filesystem import grep as _tool_grep, read as _tool_read
+    from dynamic_harness.core.tools.process import bash as _tool_bash
     reg.register(
         ToolDef(name="read", description="Read a file", input_schema={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
         _tool_read,

@@ -13,7 +13,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 from ..core.agent import Agent
-from ..core.capabilities import TOOL_ASK_DEF
+from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
 from ..core.task import ActivityEvent

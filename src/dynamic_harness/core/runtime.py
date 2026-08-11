@@ -9,7 +9,7 @@ from uuid import uuid4
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
 from .agent import Agent
-from .capabilities import ToolRegistry, register_default_tools
+from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
 from .task import ActivityEvent, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
 from .trace import TraceStore

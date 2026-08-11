@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from dynamic_harness.core.capabilities import TOOL_ASK_DEF, ToolDef, ToolRegistry
+from dynamic_harness.core.tools import ToolDef, ToolRegistry
+from dynamic_harness.core.tools.agents import TOOL_ASK_DEF
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
 from dynamic_harness.core.agent import Agent
