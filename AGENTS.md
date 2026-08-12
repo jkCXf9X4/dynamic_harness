@@ -11,17 +11,17 @@ model_refs:
   - ArtifactView, Artifact, ArtifactStore
   - Commit, Repository
   - LLMProvider, LLMConfig, LLMResponse, ToolCallData, ToolCallResponse
-  - AgentRunner, TraceStore
+  - TraceStore
 api_modules:
   - dynamic_harness.core.task
   - dynamic_harness.core.agent
   - dynamic_harness.core.context
   - dynamic_harness.core.environment
+  - dynamic_harness.core.prompts
   - dynamic_harness.core.tool_context
   - dynamic_harness.core.runtime
   - dynamic_harness.core.tools.registry
   - dynamic_harness.core.events_format
-  - dynamic_harness.core.runner
   - dynamic_harness.artifact.store
   - dynamic_harness.artifact.summary
   - dynamic_harness.memory.repository
@@ -59,8 +59,7 @@ src/dynamic_harness/
 │   ├── context.py           → AgentContext (turns, prune/restore/compress)
 │   ├── environment.py       → EnvironmentInfo (runtime-detected, injected)
 │   ├── tool_context.py      → ToolContext (public interface handed to tool functions)
-│   ├── runner.py            → AgentRunner (pure lifecycle, no rendering)
-│   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus)
+│   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus, run())
 │   ├── task.py              → Task, ReportPayload, Escalation, Failure, AgentOutcome, ActivityEvent
 │   ├── events.py            → EventBus (isolated handler dispatch)
 │   ├── events_format.py     → format_event() — single event→text source
@@ -75,10 +74,9 @@ src/dynamic_harness/
 │       ├── agents.py        → delegate, report, escalate, fail, ask, converse, read_artifact
 │       └── context.py       → compress, prune, restore
 ├── cli/
-│   ├── terminal.py          → DEFAULT CLI: Rich Live-rendered terminal (batch, -i REPL, --tui)
-│   ├── tui.py               → Textual TUI (most verbose mode; via --tui)
+│   ├── terminal.py          → DEFAULT CLI: Rich Live-rendered terminal (batch, -i REPL)
 │   ├── present.py           → AgentNode/Stats view-models (build_agent_tree, build_stats)
-│   ├── render.py            → engine adapters over present.py (Rich/Textual)
+│   ├── render.py            → Rich adapter over present.py
 │   └── common.py            → workspace_dir(), build_runtime()
 ├── artifact/
 │   ├── store.py             → ArtifactView, Artifact, ArtifactStore (progressive disclosure)
@@ -96,7 +94,7 @@ src/dynamic_harness/
 tests/
 ├── backend/
 │   ├── test_agent.py             → Agent hierarchy, failure, report, sibling isolation
-│   ├── test_agent_loop.py        → AgentRunner completion, events, cancellation
+│   ├── test_agent_loop.py        → Runtime.run() completion, events, cancellation
 │   ├── test_agent_loop_detection.py → Safety: max iterations, repeated-call detection
 │   ├── test_runtime.py           → Runtime task graph, artifacts, event handlers, provenance
 │   ├── test_capabilities.py      → ToolRegistry + all 17 tool implementations
@@ -106,9 +104,7 @@ tests/
 │   ├── test_e2e.py               → end-to-end report flows with rich views
 │   └── test_benchmark.py         → scoring/aggregation
 └── cli/
-    ├── test_present.py           → build_agent_tree / build_stats view-models
-    ├── test_tui_args.py          → TUI arg parsing
-    └── test_tui_smoke.py         → TUI headless smoke
+    └── test_present.py           → build_agent_tree / build_stats view-models
 
 docs/
 ├── VISION.md                 → Architectural vision and success criteria
@@ -266,7 +262,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 ## Process (CLI / programmatic)
 
-- Default CLI = `cli/terminal.py` (Rich Live-rendered). `--tui` switches to the Textual TUI.
+- Default CLI = `cli/terminal.py` (Rich Live-rendered, batch + `-i` REPL).
 - The `agent_system_prompt.txt` is loaded at import time into `AGENT_SYSTEM_PROMPT`.
 - Applies `harness.json` via `config.load_harness_config()` (discovery: `--config` → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults).
 - No-LLM mode: without `set_llm()`, `Agent.run()` fails with "No LLM provider configured".
@@ -279,7 +275,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 - **UUID-based IDs:** 12-char hex prefixes via `uuid4().hex[:12]`
 - **Tests** use `pytest` + `pytest-asyncio`; mock LLM providers for determinism
 - **New tools** are registered via `register_default_tools()` in `core/tools/registration.py`
-- **New CLI commands** go in `cli/tui.py`
+- **New CLI commands** go in `cli/terminal.py`
 - Run tests: `pytest` from repo root
 
 ## Extension Points
@@ -290,7 +286,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Custom agent class | Subclass `Agent`, register via `runtime.register_agent_class("name", cls)` |
 | Custom LLM provider | Implement `LLMProvider` ABC |
 | Event handlers | `runtime.on_report(fn)`, `runtime.on_escalation(fn)`, etc. |
-| Programmatic usage | Import `Runtime` + `Task`, use `runtime.delegate()` + `agent.run()` |
+| Programmatic usage | Import `Runtime`, use `await runtime.run(description)` → `agent.outcome` |
 
 ## File-Search Quick Reference
 
@@ -303,5 +299,5 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change artifact storage | `artifact/store.py` |
 | Change commit/persistence | `memory/repository.py` |
 | Change LLM integration | `llm/openai_provider.py` |
-| Change TUI interface | `cli/tui.py` |
+| Change terminal interface | `cli/terminal.py` |
 | Change agent methodology | `docs/agent_methodology_guidelines.md` |

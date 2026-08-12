@@ -1,7 +1,7 @@
 """Single source for turning an ``ActivityEvent`` into a human-readable line.
 
-Both the Rich terminal, the Textual TUI and the programmatic `Harness` logger
-render events through here so the event->text mapping lives in exactly one place.
+Both the Rich terminal and the programmatic `Harness` logger render events
+through here so the event->text mapping lives in exactly one place.
 """
 
 from __future__ import annotations

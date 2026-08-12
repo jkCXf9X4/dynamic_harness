@@ -92,7 +92,6 @@ async def prune(*, ctx: ToolContext, prune_ids: list[str] | str | None = None) -
             data={
                 "turns_pruned": result["turns_pruned"],
                 "chars_saved": result["chars_saved"],
-                "turns_evicted": result["evicted"],
             },
         ))
     return result["message"]

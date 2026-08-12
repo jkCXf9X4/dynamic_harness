@@ -21,9 +21,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
-from ..core.task import Task
 from .metrics import MetricsCollector
 from .tasks import BenchmarkTask
 
@@ -98,40 +96,22 @@ async def run_one(
     ``system_prompt`` None → SEED (default agent system prompt).
     ``system_prompt`` set  → variant override.
 
-    Runs inside a staged snapshot workspace (chdir for the duration) so the
-    agent's glob/grep/bash/read/write all resolve against a clean copy of the
-    repo, and verifiers compare against that same snapshot.
+    Runs against the staged snapshot workspace by setting it as the runtime's
+    generated (sandbox) root — every file tool, glob/grep, and bash command
+    resolves there, so no process-global ``os.chdir`` is needed.
     """
-    import os
-
     if workspace is None:
         workspace = Path.cwd()
-    started_in = Path.cwd()
-    chdir_workspace = workspace.resolve() != started_in.resolve()
 
     _clear_outputs(workspace, task)
-    if chdir_workspace:
-        os.chdir(workspace)
-
     rt = runtime_factory()
     if rt.provider is None:
-        if chdir_workspace:
-            os.chdir(started_in)
         raise BenchmarkRunError("runtime has no LLM set")
+    rt.set_generated_root(workspace)
 
-    try:
-        runner = AgentRunner(rt)
-        t0 = time.monotonic()
-
-        task_kwargs = {}
-        if system_prompt is not None:
-            task_kwargs["system_prompt"] = system_prompt
-        root = rt.delegate(Task(description=task.description, **task_kwargs))
-        await runner.run(task.description, root_agent=root)
-        latency = time.monotonic() - t0
-    finally:
-        if chdir_workspace:
-            os.chdir(started_in)
+    t0 = time.monotonic()
+    root = await rt.run(task.description, system_prompt=system_prompt)
+    latency = time.monotonic() - t0
 
     status = root.task.status.value if root.task.status else "unknown"
 

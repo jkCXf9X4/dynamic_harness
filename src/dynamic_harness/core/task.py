@@ -64,8 +64,8 @@ class Failure(BaseModel):
 class AgentOutcome:
     """Public, read-only summary of how an agent's run ended.
 
-    Consumers (AgentRunner, MetricsCollector, delegation formatting) read this
-    instead of reaching into private agent fields.
+    Consumers (Runtime.run callers, MetricsCollector, delegation formatting)
+    read this instead of reaching into private agent fields.
     """
 
     report: ReportPayload | None = None

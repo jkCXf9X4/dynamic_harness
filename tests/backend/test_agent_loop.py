@@ -5,21 +5,20 @@ import asyncio
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.runner import AgentRunner
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
 
 
 @pytest.mark.asyncio
-async def test_runner_runs_agent_to_completion(runtime: Runtime) -> None:
-    runner = AgentRunner(runtime)
-    await runner.run("test task")
-    assert any("fail:" in e for e in runner.events)
-    assert len(runner.events) >= 1
+async def test_runtime_run_returns_agent_and_fails_without_llm(runtime: Runtime) -> None:
+    root = await runtime.run("test task")
+    assert root.task.status.value == "failed"
+    assert root.last_failure is not None
+    assert "No LLM provider configured" in root.last_failure.error
 
 
 @pytest.mark.asyncio
-async def test_runner_tracks_events_and_reports(runtime: Runtime) -> None:
+async def test_runtime_run_with_registered_agent(runtime: Runtime) -> None:
     class LeafAgent(Agent):
         async def run(self) -> None:
             self.report(ReportPayload(
@@ -28,24 +27,21 @@ async def test_runner_tracks_events_and_reports(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("LeafAgent", LeafAgent)
-    task = Task(description="test")
-    root = runtime.delegate(task, agent_type="LeafAgent")
-    await root.run()
+    root = await runtime.run("test", agent_type="LeafAgent")
 
+    assert root.task.status.value == "completed"
     assert root.last_report is not None
     assert "Leaf" in root.last_report.summary
 
 
 @pytest.mark.asyncio
-async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
+async def test_runtime_run_tracks_failure_outcome(runtime: Runtime) -> None:
     class FailingAgent(Agent):
         async def run(self) -> None:
             self.fail("oops")
 
     runtime.register_agent_class("FailingAgent", FailingAgent)
-    task = Task(description="fail")
-    root = runtime.delegate(task, agent_type="FailingAgent")
-    await root.run()
+    root = await runtime.run("fail", agent_type="FailingAgent")
 
     assert root.last_failure is not None
     assert "oops" in root.last_failure.error
@@ -53,32 +49,41 @@ async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_runner_clear_events(runtime: Runtime) -> None:
-    runner = AgentRunner(runtime)
-    runner.events.append("stale event")
-    await runner.run("test", clear_events=True)
-    assert "stale event" not in runner.events
-    assert any("fail:" in e for e in runner.events)
+async def test_runtime_run_resumes_root_agent(runtime: Runtime) -> None:
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary=f"iter: {self.task.description}",
+            ))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    root = await runtime.run("first", agent_type="LeafAgent")
+    assert root.last_report is not None
+
+    await runtime.run("second", root_agent=root)
+    assert root.task.status.value == "completed"
+    # continue_with_input appended a user message and the agent re-reported.
+    assert root.last_report is not None
 
 
 @pytest.mark.asyncio
-async def test_runner_does_not_clear_events_when_false(runtime: Runtime) -> None:
-    runner = AgentRunner(runtime)
-    runner.events.append("stale event")
-    await runner.run("test", clear_events=False)
-    assert "stale event" in runner.events
+async def test_runtime_run_reuse_creates_distinct_roots(runtime: Runtime) -> None:
+    a = await runtime.run("task one")
+    b = await runtime.run("task two")
+    assert a.id != b.id
+    assert runtime.agent_count() == 2
 
 
 @pytest.mark.asyncio
-async def test_runner_cancel_via_task_cancellation(runtime: Runtime) -> None:
+async def test_cancel_via_task_cancellation(runtime: Runtime) -> None:
     class SlowAgent(Agent):
         async def run(self) -> None:
             for _ in range(100):
                 await asyncio.sleep(0.01)
 
     runtime.register_agent_class("SlowAgent", SlowAgent)
-    task = Task(description="slow")
-    root = runtime.delegate(task, agent_type="SlowAgent")
+    root = runtime.delegate(Task(description="slow"), agent_type="SlowAgent")
 
     run_task = asyncio.ensure_future(root.run())
     await asyncio.sleep(0.05)
@@ -88,12 +93,3 @@ async def test_runner_cancel_via_task_cancellation(runtime: Runtime) -> None:
         await run_task
 
     assert root.task.status.value == "running"
-
-
-@pytest.mark.asyncio
-async def test_runner_reuse_across_multiple_runs(runtime: Runtime) -> None:
-    runner = AgentRunner(runtime)
-    await runner.run("first task")
-    await runner.run("second task", clear_events=False)
-    assert len(runner.events) == 2
-    assert all("fail:" in e for e in runner.events)

@@ -104,8 +104,7 @@ Full details: [docs/api/tools.md](docs/api/tools.md)
 dynamic-harness
 ```
 
-Opens the default Rich-rendered interactive REPL. For the Textual TUI (most
-verbose), use `dynamic-harness --tui`:
+Opens a Rich-rendered interactive REPL:
 
 | Command | Action |
 |---------|--------|

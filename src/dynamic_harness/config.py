@@ -33,6 +33,10 @@ class AgentConfig(BaseModel):
                     "context observation (e.g. 'pip is unavailable'). Kept empty "
                     "by default so agents are never told false environment facts.",
     )
+    active_turn_window: int = Field(
+        default=50, ge=1,
+        description="How many recent committed turns the Context Observation lists.",
+    )
 
 
 class HarnessConfig(BaseModel):

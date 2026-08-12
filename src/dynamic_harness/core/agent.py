@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .context import AgentContext
+from .prompts import AGENT_SYSTEM_PROMPT, ObservationInputs, build_observation, build_user_message
 from .task import (
     ActivityEvent,
     ActivityEventType,
@@ -26,11 +27,6 @@ if TYPE_CHECKING:
     from .runtime import Runtime
 
 
-AGENT_SYSTEM_PROMPT = (Path(__file__).parent / "agent_system_prompt.txt").read_text()
-
-MAX_TOOL_RESULT_CHARS = 100_000
-
-
 class Agent:
     def __init__(
         self,
@@ -44,7 +40,6 @@ class Agent:
         repeated_call_limit: int = 5,
         safety_timeout_seconds: float | None = None,
         active_turn_window: int = 50,
-        max_pruned_retained: int = 100,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -64,7 +59,6 @@ class Agent:
 
         self.context = AgentContext(
             active_turn_window=active_turn_window,
-            max_pruned_retained=max_pruned_retained,
         )
 
         self._runtime = runtime
@@ -115,14 +109,6 @@ class Agent:
     def active_turn_window(self, value: int) -> None:
         self.context.active_turn_window = max(int(value), 1)
 
-    @property
-    def max_pruned_retained(self) -> int:
-        return self.context.max_pruned_retained
-
-    @max_pruned_retained.setter
-    def max_pruned_retained(self, value: int) -> None:
-        self.context.max_pruned_retained = max(int(value), 0)
-
     # -- LLM / environment -------------------------------------------------
 
     @property
@@ -148,9 +134,7 @@ class Agent:
             self.fail("No LLM provider configured")
             return
 
-        user_message = self.task.description
-        if self.task.role:
-            user_message = f"[ROLE] {self.task.role}\n\n[TASK] {self.task.description}"
+        user_message = build_user_message(self.task.description, self.task.role)
         self.context.reset(self._system_prompt or AGENT_SYSTEM_PROMPT, user_message)
         self._has_run = True
         self._observation_msg = None
@@ -300,33 +284,20 @@ class Agent:
         self.context.messages.append(self._observation_msg)
 
     def _context_observation(self, prompt_tokens: int) -> str:
-        active_turns = self.context.active_turn_ids()
-        if active_turns:
-            turn_map = " · ".join(
-                f"{pid}:{self.context.turn_tool_names(pid)}"
-                f"(~{self.context.turn_token_estimate(pid)}tk)"
-                for pid in active_turns
-            )
-            total_active = sum(
-                self.context.turn_token_estimate(pid) for pid in active_turns
-            )
-        else:
-            turn_map = "none"
-            total_active = 0
-        next_turn = f"t{self.context.turn_counter}"
-        return (
-            f"[Context Observation]\n"
-            f"Turn: {self._iteration}\n"
-            f"Messages in context: {len(self.context.messages)}\n"
-            f"Estimated prompt tokens this agent: {prompt_tokens}\n"
-            f"Active turn tokens: {total_active} (prune stale turns to cut this)\n"
-            f"Recent committed turns (prune_id:tools~tokens): {turn_map}\n"
-            f"Your next turn will commit as prune_id: {next_turn}.\n"
-            f"Prune turns whose results are already on disk using "
-            f"prune(prune_ids=['tN', ...]); the costliest turns save the most.\n"
-            f"Your task: {self.task.description}\n"
-            f"{self.environment_info}"
-        )
+        active = self.context.active_turn_ids()
+        active_turns = [
+            (pid, self.context.turn_tool_names(pid), self.context.turn_token_estimate(pid))
+            for pid in active
+        ]
+        return build_observation(ObservationInputs(
+            iteration=self._iteration,
+            messages_count=len(self.context.messages),
+            prompt_tokens=prompt_tokens,
+            active_turns=active_turns,
+            next_turn_id=f"t{self.context.turn_counter}",
+            environment_text=self.environment_info,
+            task_description=self.task.description,
+        ))
 
     def _emit_iteration(self, prompt_tokens: int) -> None:
         self._event_bus.emit_activity(ActivityEvent(
@@ -419,12 +390,6 @@ class Agent:
             if ts:
                 ts.record_tool_result(self.id, tc.id, tc.name, result.content)
             truncated = result.content
-            if len(truncated) > MAX_TOOL_RESULT_CHARS:
-                truncated = truncated[:MAX_TOOL_RESULT_CHARS] + (
-                    f"\n\n[TRUNCATED: {len(result.content) - MAX_TOOL_RESULT_CHARS} "
-                    f"chars omitted from tool result ({len(result.content)} total). "
-                    f"Use more specific tool parameters to reduce output size.]"
-                )
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.TOOL_CALL_END,

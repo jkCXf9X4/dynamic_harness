@@ -11,8 +11,6 @@ from .registry import ToolDef
 if TYPE_CHECKING:
     from ...core.tool_context import ToolContext
 
-MAX_READ_CHARS = 400_000
-
 
 TOOL_READ_DEF = ToolDef(
     name="read",
@@ -120,13 +118,7 @@ async def read(*, ctx: ToolContext, path: str) -> str:
         safe = resolve_safe_path(path, ctx)
     except ValueError as e:
         return f"Error: {e}"
-    text = safe.read_text()
-    if len(text) > MAX_READ_CHARS:
-        text = text[:MAX_READ_CHARS] + (
-            f"\n\n[TRUNCATED: file larger than {MAX_READ_CHARS} chars; "
-            f"read the first {MAX_READ_CHARS}. Use token_offset to paginate.]"
-        )
-    return text
+    return safe.read_text()
 
 
 async def write(*, ctx: ToolContext, path: str, content: str) -> str:

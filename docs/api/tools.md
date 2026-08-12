@@ -322,7 +322,7 @@ Terminates the agent with `TaskStatus.failed`.
 }
 ```
 
-**Implementation:** The default implementation prompts on stdin via `input()`. The Rich CLI and the Textual TUI install their own `ask` handler that routes the question through their own input UI.
+**Implementation:** The default implementation prompts on stdin via `input()`. The Rich CLI installs its own `ask` handler that routes the question through the terminal prompt.
 
 ---
 

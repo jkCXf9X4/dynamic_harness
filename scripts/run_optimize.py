@@ -24,7 +24,6 @@ from dynamic_harness.benchmark import Benchmark
 from dynamic_harness.benchmark.scoring import format_scores
 from dynamic_harness.config import load_harness_config, merge_api_key
 from dynamic_harness.core.agent import AGENT_SYSTEM_PROMPT
-from dynamic_harness.core.runner import AgentRunner
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ActivityEvent, ActivityEventType
 from dynamic_harness.llm.openai_provider import OpenAIProvider
@@ -58,7 +57,7 @@ def _make_llm(config, api_key: str) -> OpenAIProvider:
         model=config.llm.model,
         base_url=config.llm.base_url,
         api_key=api_key,
-        verify_ssl=False,
+        verify_ssl=config.llm.verify_ssl,
         provider_ignore=config.llm.provider_ignore or None,
         provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
     )
@@ -79,9 +78,8 @@ async def _run_generation(config, llm, prompt_path: Path) -> None:
     rt = _runtime(config)
     rt.set_llm(llm)
     rt.on_activity(on_activity)
-    runner = AgentRunner(rt)
     prompt = prompt_path.read_text()
-    await runner.run(prompt)
+    await rt.run(prompt)
     if rt.trace_store:
         rt.trace_store.clear()
 

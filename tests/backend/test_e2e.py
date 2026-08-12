@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from dynamic_harness.core.agent import Agent
-from dynamic_harness.core.runner import AgentRunner
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
 
@@ -276,7 +275,7 @@ async def test_e2e_summary_1000_populated_when_long(runtime: Runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_e2e_headless_runner_with_rich_report(runtime: Runtime) -> None:
-    """AgentRunner with rich reporting: all view levels captured."""
+    """Headless run: all report view levels captured."""
     class RichReporter(Agent):
         async def run(self) -> None:
             self.report(ReportPayload(
@@ -327,9 +326,6 @@ async def test_e2e_headless_runner_with_rich_report(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("RichReporter", RichReporter)
-
-    runner = AgentRunner(runtime)
-    runner.runtime.register_agent_class("RichReporter", RichReporter)
 
     task = Task(description="Review codebase for type safety and null safety")
     root = runtime.delegate(task, agent_type="RichReporter")
@@ -410,7 +406,7 @@ async def test_e2e_cross_session_recovery_all_levels(runtime: Runtime) -> None:
 
 @pytest.mark.asyncio
 async def test_e2e_m_flag_integration(runtime: Runtime) -> None:
-    """Simulate the -m flag path: read a prompt file, run AgentRunner with it."""
+    """Simulate the -m flag path: read a prompt file and run it."""
     from pathlib import Path as PathLib
     prompt_file = PathLib(__file__).parent.parent.parent / "prompts" / "security_audit.txt"
     assert prompt_file.exists(), "prompt file missing"
@@ -429,8 +425,6 @@ async def test_e2e_m_flag_integration(runtime: Runtime) -> None:
             ))
 
     runtime.register_agent_class("PromptRunner", PromptRunner)
-    runner = AgentRunner(runtime)
-    runner.runtime.register_agent_class("PromptRunner", PromptRunner)
 
     task = Task(description=prompt_text)
     root = runtime.delegate(task, agent_type="PromptRunner")

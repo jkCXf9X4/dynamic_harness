@@ -286,7 +286,7 @@ async def test_prune_empty_list_returns_guidance(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_restore_returns_pruned_turn(runtime: Runtime) -> None:
+async def test_restore_reappends_pruned_turn(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
     _commit_turn(agent)
     _commit_turn(agent)
@@ -321,38 +321,7 @@ async def test_prune_accepts_single_string_input(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_restore_errors_when_marker_missing(runtime: Runtime) -> None:
-    agent = runtime.delegate(Task(description="test"))
-    _commit_turn(agent)
-    _commit_turn(agent)
-    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
-    agent.context.messages = [m for m in agent.context.messages if not str(m.get("content", "")).startswith("[PRUNED")]
-    assert len(agent.context.messages) == 2
-
-    result = await runtime.tool_registry.execute("restore", "tc2", agent=agent, prune_id="t0")
-    assert "no longer present" in result.content
-    assert "t0" in agent.context.pruned
-    assert len(agent.context.messages) == 2
-
-
-@pytest.mark.asyncio
-async def test_prune_evicts_old_retained_turns_at_cap(runtime: Runtime) -> None:
-    agent = runtime.delegate(Task(description="test"))
-    agent.max_pruned_retained = 2
-    for _ in range(4):
-        _commit_turn(agent)
-    await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0", "t1", "t2", "t3"])
-
-    assert len(agent.context.pruned) <= 2
-    assert "t0" not in agent.context.pruned
-    assert "t0" not in agent.context.turns
-    assert "t0" not in agent.context.prune_markers
-    assert "t3" in agent.context.pruned
-    assert "t3" in agent.context.turns
-
-
-@pytest.mark.asyncio
-async def test_restore_uses_stored_index_reorders_markers(runtime: Runtime) -> None:
+async def test_prune_changes_marker_order_stays_linked(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
     for _ in range(3):
         _commit_turn(agent)

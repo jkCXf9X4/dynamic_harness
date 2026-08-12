@@ -46,8 +46,7 @@ class Runtime:
         self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
-        self._active_turn_window = 50
-        self._max_pruned_retained = 100
+        self._active_turn_window = (config.agent.active_turn_window if config else 50)
         self._environment_info: EnvironmentInfo = build_environment_info(
             notes=config.agent.environment_notes if config else []
         )
@@ -107,6 +106,36 @@ class Runtime:
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
 
+    def set_generated_root(self, root: Path) -> None:
+        """Set/replace the sandbox workspace agents operate in."""
+        p = Path(root)
+        p.mkdir(parents=True, exist_ok=True)
+        self._generated_root = p
+
+    async def run(
+        self,
+        description: str,
+        *,
+        role: str | None = None,
+        system_prompt: str | None = None,
+        agent_type: str | None = None,
+        root_agent: Agent | None = None,
+    ) -> Agent:
+        """The single path to run an agent task.
+
+        Fresh task: delegates a new root agent with ``description`` and runs it.
+        ``root_agent``: resumes an existing agent with the new message
+        (``continue_with_input``). Returns the agent; read ``agent.outcome`` /
+        ``agent.last_report`` for the result.
+        """
+        if root_agent is not None:
+            await root_agent.continue_with_input(description)
+            return root_agent
+        task = Task(description=description, role=role, system_prompt=system_prompt)
+        root = self.delegate(task, agent_type=agent_type)
+        await root.run()
+        return root
+
     async def aclose(self) -> None:
         if self._llm:
             await self._llm.aclose()
@@ -124,7 +153,6 @@ class Runtime:
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
                 active_turn_window=self._active_turn_window,
-                max_pruned_retained=self._max_pruned_retained,
             )
         else:
             agent = Agent(
@@ -132,7 +160,6 @@ class Runtime:
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
                 active_turn_window=self._active_turn_window,
-                max_pruned_retained=self._max_pruned_retained,
             )
         agent.set_environment_info(self._environment_info)
         self._agents[agent_id] = agent

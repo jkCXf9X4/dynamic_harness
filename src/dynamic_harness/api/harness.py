@@ -7,7 +7,6 @@ from typing import Any, Callable
 
 from ..core.agent import Agent
 from ..core.events_format import format_event
-from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
 from ..core.task import ActivityEvent, ActivityEventType, Failure, ReportPayload, Task
 
@@ -62,8 +61,8 @@ class Harness:
                 trace_root=Path(trace_root) if trace_root else None,
             )
 
-        self._runner = AgentRunner(self._runtime)
         self._verbose = verbose
+        self._last_reports: list[tuple[str, str]] = []
 
         if llm is not None:
             self._runtime.set_llm(llm)
@@ -126,7 +125,7 @@ class Harness:
 
     @property
     def last_reports(self) -> list[tuple[str, str]]:
-        return self._runner.last_reports
+        return self._last_reports
 
     @property
     def agent_count(self) -> int:
@@ -151,7 +150,8 @@ class Harness:
 
     def run(self, description: str) -> None:
         """Run a single task synchronously (creates a new event loop)."""
-        asyncio.run(self._runner.run(description))
+        root = asyncio.run(self._runtime.run(description))
+        self._capture(root)
         if self._verbose:
             usage = self.total_usage
             logger.info(
@@ -161,13 +161,21 @@ class Harness:
 
     async def run_async(self, description: str) -> None:
         """Run a single task asynchronously (for use inside an existing event loop)."""
-        await self._runner.run(description)
+        root = await self._runtime.run(description)
+        self._capture(root)
         if self._verbose:
             usage = self.total_usage
             logger.info(
                 "Done \u2014 %s agents, %s commits, %s tokens",
                 self.agent_count, self.commit_count, usage.get("total_tokens", 0),
             )
+
+    def _capture(self, root: Agent) -> None:
+        """Record the root agent's terminal report for ``last_reports``."""
+        if root.last_report:
+            self._last_reports = [(root.id[:8], root.last_report.summary)]
+        else:
+            self._last_reports = []
 
     def run_file(self, path: str | Path) -> None:
         """Read a prompt from a file and run it synchronously."""
@@ -181,4 +189,4 @@ class Harness:
 
     def reset(self) -> None:
         self._runtime.reset()
-        self._runner = AgentRunner(self._runtime)
+        self._last_reports = []

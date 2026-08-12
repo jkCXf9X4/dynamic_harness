@@ -14,7 +14,6 @@ from rich.tree import Tree
 
 from ..core.agent import Agent
 from ..core.tools.agents import TOOL_ASK_DEF
-from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
 from .common import build_runtime
 from .present import build_agent_tree, build_stats
@@ -38,7 +37,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--api-key", help="LLM API key")
     parser.add_argument("--artifact-dir", help="Directory for artifacts")
     parser.add_argument("--repo-dir", help="Directory for commit repository")
-    parser.add_argument("--tui", action="store_true", help="Launch the Textual TUI instead")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
     return parser.parse_args(argv)
 
@@ -79,7 +77,7 @@ def _render(runtime: Runtime, events: list[str]) -> Table:
     return layout
 
 
-async def _run_with_live(runtime: Runtime, runner: AgentRunner, description: str, root_agent: Agent | None = None) -> None:
+async def _run_with_live(runtime: Runtime, description: str, root_agent: Agent | None = None) -> Agent:
     runtime.event_bus.clear()
 
     events: list[str] = []
@@ -88,20 +86,25 @@ async def _run_with_live(runtime: Runtime, runner: AgentRunner, description: str
     runtime.on_activity(lambda e: events.append(render_event(e)) if render_event(e) else None)
 
     with Live(get_renderable=lambda: _render(runtime, events), refresh_per_second=4, console=console) as live:
-        run_task = asyncio.create_task(runner.run(description, root_agent=root_agent))
+        run_task = asyncio.create_task(runtime.run(description, root_agent=root_agent))
         while not run_task.done():
             await asyncio.sleep(0.25)
-        await run_task
+    root = await run_task
+    return root
+
+
+def _print_outcome(root: Agent) -> None:
+    if root.last_report:
+        console.print(f"\n[bold green]\u2713 Agent {root.id[:8]}[/]")
+        console.print(f"  {root.last_report.summary}\n")
+    elif root.last_failure:
+        console.print(f"\n[bold red]\u2717 Agent {root.id[:8]}[/] failed: {root.last_failure.error[:200]}\n")
 
 
 def _run_batch(runtime: Runtime, prompt: str) -> None:
     _install_ask_tool(runtime)
-    runner = AgentRunner(runtime)
-    asyncio.run(_run_with_live(runtime, runner, prompt))
-
-    for tag, summary in runner.last_reports:
-        console.print(f"\n[bold green]\u2713 Agent {tag}[/]")
-        console.print(f"  {summary}\n")
+    root = asyncio.run(_run_with_live(runtime, prompt))
+    _print_outcome(root)
 
     usage = runtime.total_usage()
     console.print(f"[dim]Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}[/]")
@@ -113,7 +116,6 @@ async def _run_interactive_async(runtime: Runtime) -> None:
     console.print("Type a task, or /help for commands.\n")
 
     root_agent: Agent | None = None
-    runner = AgentRunner(runtime)
 
     while True:
         try:
@@ -137,30 +139,19 @@ async def _run_interactive_async(runtime: Runtime) -> None:
             elif cmd == "/reset":
                 runtime.reset()
                 root_agent = None
-                runner = AgentRunner(runtime)
                 console.print("Runtime reset.")
             else:
                 console.print(f"Unknown: {cmd}. Try /help")
             continue
 
-        await _run_with_live(runtime, runner, text, root_agent=root_agent)
-
+        root = await _run_with_live(runtime, text, root_agent=root_agent)
         if root_agent is None:
-            first_id = next(iter(runtime.task_graph()), "")
-            root_agent = runtime.get_agent(first_id)
-
-        for tag, summary in runner.last_reports:
-            console.print(f"\n[bold green]\u2713 Agent {tag}[/]")
-            console.print(f"  {summary}\n")
+            root_agent = root
+        _print_outcome(root)
 
 
 def main() -> None:
     args = _parse_args()
-
-    if args.tui:
-        from .tui import main as tui_main
-        tui_main()
-        return
 
     runtime = build_runtime(args)
 

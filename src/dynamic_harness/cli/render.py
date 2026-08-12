@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from rich.text import Text as RichText
 from rich.tree import Tree as RichTree
 
 from ..core.events_format import format_event
@@ -24,41 +23,12 @@ def render_event(
     emoji: bool = False,
     show_args: bool = False,
 ) -> str | None:
-    """Event -> text line (no trailing newline). Single source for both UIs."""
+    """Event -> text line (no trailing newline). Single source for the UI + logs."""
     return format_event(event, emoji=emoji, show_args=show_args)
 
 
 def _status_color(status: str) -> str:
     return STATUS_COLORS.get(status, "grey50")
-
-
-def _label_parts(node: AgentNode) -> list[tuple[str, str]]:
-    parts: list[tuple[str, str]] = [
-        (f"  {node.short_id}  ", "bold"),
-        (node.short_description, ""),
-        (f" [{node.status}]", _status_color(node.status)),
-    ]
-    if node.usage:
-        parts.append((node.usage, "grey50"))
-    return parts
-
-
-def apply_tree(tree: Any, model: list[AgentNode]) -> None:
-    """Populate a Textual Tree from AgentNode view-models."""
-    tree.clear()
-    if not model:
-        tree.root.add(RichText(" No agents yet.", style="grey50"))
-        tree.root.add(RichText(" Enter a task to begin.", style="grey50"))
-        return
-    for node in model:
-        add_node(tree.root, node)
-
-
-def add_node(parent: Any, node: AgentNode) -> None:
-    label = RichText.assemble(*_label_parts(node))
-    child = parent.add(label)
-    for kid in node.children:
-        add_node(child, kid)
 
 
 def render_rich_tree(model: list[AgentNode], title: str = "Agent Tree") -> RichTree:

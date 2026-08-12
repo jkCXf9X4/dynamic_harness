@@ -9,16 +9,15 @@ from ..llm.provider import LLMProvider
 class AgentContext:
     """Owns an agent's turn accounting and conversation message buffer.
 
-    Encapsulates the machinery for committing turns, pruning staleness,
-    restoring pruned turns, and compressing the conversation. Keeping this
-    state and its invariants in one place means the Agent run-loop and the
-    context-management tools (`prune`, `restore`, `compress`) never have to
-    reach into each other's private fields.
+    Encapsulates committing turns, pruning stale turns (replacing them with a
+    PRUNED marker), restoring a pruned turn, and compressing the conversation.
+    Keeping this state and its invariants in one place means the run loop and
+    the context tools (`prune`, `restore`, `compress`) never reach into each
+    other's private fields.
     """
 
-    def __init__(self, *, active_turn_window: int = 50, max_pruned_retained: int = 100) -> None:
+    def __init__(self, *, active_turn_window: int = 50) -> None:
         self.active_turn_window = max(int(active_turn_window), 1)
-        self.max_pruned_retained = max(int(max_pruned_retained), 0)
         self.reset(None, None)
 
     def reset(self, system_prompt: str | None, user_message: str | None) -> None:
@@ -35,7 +34,6 @@ class AgentContext:
         self.turns: dict[str, list[dict[str, Any]]] = {}
         self.pruned: set[str] = set()
         self.prune_markers: dict[str, dict[str, Any]] = {}
-        self.in_flight_prune: set[str] = set()
 
     def append(self, message: dict[str, Any]) -> None:
         self.messages.append(message)
@@ -47,23 +45,9 @@ class AgentContext:
         self.turn_counter += 1
         self.turn_order.append(pid)
         self.turns[pid] = [assistant_msg] + list(results)
-        if pid in self.in_flight_prune:
-            self.in_flight_prune.discard(pid)
-            self._mark_turn_pruned(pid)
-        else:
-            self.messages.append(assistant_msg)
-            self.messages.extend(results)
+        self.messages.append(assistant_msg)
+        self.messages.extend(results)
         return pid
-
-    def _mark_turn_pruned(self, pid: str) -> None:
-        marker = {
-            "role": "assistant",
-            "content": self.make_prune_marker(pid),
-        }
-        self.messages.append(marker)
-        self.pruned.add(pid)
-        self.prune_markers[pid] = {"marker": marker, "index": len(self.messages) - 1}
-        self.evict_overflow()
 
     def make_prune_marker(self, pid: str) -> str:
         turn_msgs = self.turns[pid]
@@ -108,33 +92,10 @@ class AgentContext:
         active = [pid for pid in self.turn_order if pid not in self.pruned]
         return active[-self.active_turn_window:]
 
-    def evict_overflow(self) -> list[str]:
-        evicted: list[str] = []
-        if self.max_pruned_retained <= 0:
-            return evicted
-        while len(self.pruned) > self.max_pruned_retained:
-            candidate = next(
-                (p for p in self.turn_order if p in self.pruned),
-                None,
-            )
-            if candidate is None:
-                break
-            entry = self.prune_markers.pop(candidate, None)
-            if entry is not None:
-                marker = entry.get("marker")
-                if marker is not None:
-                    self.messages = [
-                        m for m in self.messages if m is not marker
-                    ]
-            self.pruned.discard(candidate)
-            self.turns.pop(candidate, None)
-            evicted.append(candidate)
-        return evicted
-
     # -- context management (used by prune/restore/compress tools) --------
 
     def prune(self, prune_ids: list[str] | str | None) -> dict[str, Any] | None:
-        """Drop whole committed turns, replacing them with PRUNED markers.
+        """Drop whole committed turns, replacing each with a PRUNED marker.
 
         Returns a dict describing what happened, or None when there was no
         work to do (the caller should still surface a guidance message via
@@ -155,23 +116,17 @@ class AgentContext:
                 ),
                 "turns_pruned": [],
                 "chars_saved": 0,
-                "evicted": [],
             }
 
-        next_turn = f"t{self.turn_counter}"
-        in_flight = [pid for pid in requested if pid == next_turn]
-        for pid in in_flight:
-            self.in_flight_prune.add(pid)
-
-        if not self.turns and not in_flight:
+        if not self.turns:
             return {"action": False, "message": "No committed turns to prune.",
-                    "turns_pruned": [], "chars_saved": 0, "evicted": []}
+                    "turns_pruned": [], "chars_saved": 0}
 
-        invalid = [pid for pid in requested if pid not in self.turns and pid != next_turn]
+        invalid = [pid for pid in requested if pid not in self.turns]
         already = [pid for pid in requested if pid in self.pruned]
         pending = [pid for pid in requested if pid in self.turns and pid not in self.pruned]
 
-        if not pending and not in_flight:
+        if not pending:
             notes = []
             if already:
                 notes.append(f"already pruned (use restore): {already}")
@@ -179,69 +134,39 @@ class AgentContext:
                 notes.append(f"unknown ids (see Context Observation): {invalid}")
             return {"action": False,
                     "message": "Nothing to prune. " + "; ".join(notes),
-                    "turns_pruned": [], "chars_saved": 0, "evicted": []}
+                    "turns_pruned": [], "chars_saved": 0}
 
-        remove: dict[int, str] = {}
-        for pid in pending:
-            for m in self.turns[pid]:
-                remove[id(m)] = pid
-
-        existing_marker_by_id = {
-            id(info["marker"]): pid
-            for pid, info in self.prune_markers.items()
-        }
+        target = {pid: self.turns[pid] for pid in pending}
+        remove_ids = {id(m): pid for pid, msgs in target.items() for m in msgs}
 
         new_messages: list[dict[str, Any]] = []
         marker_for: dict[str, dict[str, Any]] = {}
         i = 0
-        idx = 0
         messages = self.messages
         while i < len(messages):
             m = messages[i]
-            pid = remove.get(id(m))
+            pid = remove_ids.get(id(m))
             if pid is None:
                 new_messages.append(m)
-                old_pid = existing_marker_by_id.get(id(m))
-                if old_pid is not None:
-                    self.prune_markers[old_pid]["index"] = idx
                 i += 1
-                idx += 1
                 continue
-            turn_len = len(self.turns[pid])
-            marker = {
-                "role": "assistant",
-                "content": self.make_prune_marker(pid),
-            }
-            marker_for[pid] = {"marker": marker, "index": idx}
+            marker = {"role": "assistant", "content": self.make_prune_marker(pid)}
+            marker_for[pid] = marker
             new_messages.append(marker)
-            i += turn_len
-            idx += 1
+            i += len(target[pid])
 
         self.messages = new_messages
         for pid in pending:
             self.pruned.add(pid)
             self.prune_markers[pid] = marker_for[pid]
 
-        chars_saved = sum(
-            len(json.dumps(m)) for pid in pending for m in self.turns[pid]
-        )
-        evicted = self.evict_overflow()
+        chars_saved = sum(len(json.dumps(m)) for pid in pending for m in target[pid])
 
         notes = []
         if invalid:
             notes.append(f"unknown ids (see Context Observation): {invalid}")
         if already:
             notes.append(f"already pruned (use restore): {already}")
-        if evicted:
-            notes.append(
-                f"old retained turns permanently discarded "
-                f"(retention cap {self.max_pruned_retained}): {evicted}"
-            )
-        if in_flight:
-            notes.append(
-                f"{next_turn} (this response's turn) will be pruned at commit — "
-                f"its content stays recoverable via restore"
-            )
         suffix = ("; " + "; ".join(notes)) if notes else ""
         return {
             "action": True,
@@ -252,39 +177,19 @@ class AgentContext:
             ),
             "turns_pruned": pending,
             "chars_saved": chars_saved,
-            "evicted": evicted,
         }
 
     def restore(self, prune_id: str) -> str:
+        """Bring a pruned turn back, re-appending it at the end of the context."""
         prune_id = str(prune_id)
         entry = self.prune_markers.get(prune_id)
         if entry is None:
-            return (f"Nothing to restore for {prune_id!r}: it is not currently pruned "
-                    f"(or was evicted and is no longer retained).")
+            return (f"Nothing to restore for {prune_id!r}: it is not currently "
+                    f"pruned (or was discarded by a prior compression).")
         turn_msgs = self.turns[prune_id]
-        marker = entry["marker"]
-        messages = self.messages
-        target_idx: int | None = None
 
-        stored_idx = entry.get("index")
-        if stored_idx is not None and 0 <= stored_idx < len(messages) and messages[stored_idx] is marker:
-            target_idx = stored_idx
-        else:
-            for j, m in enumerate(messages):
-                if m is marker:
-                    target_idx = j
-                    break
-        if target_idx is None:
-            return (f"Cannot restore {prune_id!r}: its PRUNED marker is no longer present "
-                    f"in the context (likely removed by compression or eviction).")
-
-        self.messages = messages[:target_idx] + turn_msgs + messages[target_idx + 1:]
-        for pid, info in self.prune_markers.items():
-            if pid == prune_id:
-                continue
-            idx = info.get("index")
-            if idx is not None and idx > target_idx:
-                info["index"] = idx + (len(turn_msgs) - 1)
+        self.messages = [m for m in self.messages if m is not entry]
+        self.messages.extend(turn_msgs)
         self.pruned.discard(prune_id)
         self.prune_markers.pop(prune_id, None)
 
@@ -292,7 +197,7 @@ class AgentContext:
         n_tools = len(turn_msgs) - 1
         return (
             f"Restored turn {prune_id} (assistant + {n_tools} tool result(s), "
-            f"~{chars} chars) at its original position."
+            f"~{chars} chars) at the end of the context."
         )
 
     async def compress(self, llm: LLMProvider, compression_prompt: str) -> dict[str, Any]:
@@ -339,4 +244,3 @@ class AgentContext:
             "saved": saved,
             "summary": summary,
         }
-

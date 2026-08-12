@@ -36,7 +36,7 @@ class EnvironmentInfo:
 
 
 _SOFTWARE_PACKAGES = (
-    "pydantic", "openai", "httpx", "rich", "textual", "pathspec", "yaml", "dotenv",
+    "pydantic", "openai", "httpx", "rich", "pathspec", "yaml", "dotenv",
 )
 
 

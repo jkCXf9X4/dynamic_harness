@@ -20,48 +20,75 @@ class Commit(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-def _commit_path(root: Path, commit_id: str) -> Path:
-    return root / commit_id[:2] / commit_id / "commit.json"
-
-
 class Repository:
+    """Flat, append-only provenance store (one JSON line per commit).
+
+    Commits live in a single ``commits.jsonl`` file; the parent/child DAG is
+    rebuilt in memory on load. No sharding, no per-commit re-encoding.
+    """
+
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self._commits: dict[str, Commit] = {}
         self._task_commits: dict[str, str] = {}
-        self._load_existing()
+        self._journal = self.root / "commits.jsonl"
+        if self._journal.exists():
+            self._load()
 
-    def _load_existing(self) -> None:
-        for p in self.root.rglob("commit.json"):
-            data = p.read_text()
-            c = Commit.model_validate_json(data)
-            self._commits[c.id] = c
-            self._task_commits[c.task_id] = c.id
+    def _load(self) -> None:
+        with open(self._journal) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                c = Commit.model_validate_json(line)
+                self._commits[c.id] = c
+                self._task_commits[c.task_id] = c.id
+
+    def _flush(self) -> None:
+        """Rewrite the journal from the in-memory commit set (single source)."""
+        tmp = self._journal.with_suffix(".jsonl.tmp")
+        with open(tmp, "w") as f:
+            for c in self._commits.values():
+                f.write(c.model_dump_json() + "\n")
+        tmp.replace(self._journal)
 
     def commit(self, commit: Commit) -> Commit:
         self._commits[commit.id] = commit
         self._task_commits[commit.task_id] = commit.id
-        p = _commit_path(self.root, commit.id)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(commit.model_dump_json(indent=2))
-
-        parents_to_save: list[Commit] = []
         for pid in commit.parent_ids:
             parent = self._commits.get(pid)
             if parent and commit.id not in parent.child_ids:
                 parent.child_ids.append(commit.id)
-                parents_to_save.append(parent)
-
-        for parent in parents_to_save:
-            self._save(parent)
-
+        self._flush()
         return commit
 
-    def _save(self, commit: Commit) -> None:
-        p = _commit_path(self.root, commit.id)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(commit.model_dump_json(indent=2))
+    def adopt_children_by_task(
+        self, commit_id: str, child_task_ids: Sequence[str]
+    ) -> None:
+        """Link a commit to its children's commits by task id.
+
+        Agent hierarchies commit children *before* their parent, so this is
+        called after committing the parent to backfill the bidirectional links
+        and keep the tree intact.
+        """
+        own = self._commits.get(commit_id)
+        if own is None:
+            return
+        child_ids: list[str] = []
+        for tid in child_task_ids:
+            cid = self._task_commits.get(tid)
+            if cid is not None and cid != commit_id:
+                child_ids.append(cid)
+        for cid in child_ids:
+            if cid not in own.child_ids:
+                own.child_ids.append(cid)
+            child = self._commits.get(cid)
+            if child is not None and commit_id not in child.parent_ids:
+                child.parent_ids.append(commit_id)
+        if child_ids:
+            self._flush()
 
     def get(self, commit_id: str) -> Commit | None:
         return self._commits.get(commit_id)
@@ -78,34 +105,6 @@ class Repository:
             cid for tid in task_ids
             if (cid := self._task_commits.get(tid)) is not None
         ]
-
-    def adopt_children_by_task(
-        self, commit_id: str, child_task_ids: Sequence[str]
-    ) -> None:
-        """Link a commit to its children's commits by task id.
-
-        Agent hierarchies commit children *before* their parent (the parent
-        orchestrated them), so the parent's commit cannot reference the
-        children at child-commit time. Call this after committing the parent to
-        fill in the bidirectional parent/child linkage and keep the tree intact.
-        """
-        own = self._commits.get(commit_id)
-        if own is None:
-            return
-        child_ids: list[str] = []
-        for tid in child_task_ids:
-            cid = self._task_commits.get(tid)
-            if cid is not None and cid != commit_id:
-                child_ids.append(cid)
-        for cid in child_ids:
-            if cid not in own.child_ids:
-                own.child_ids.append(cid)
-            child = self._commits.get(cid)
-            if child is not None and commit_id not in child.parent_ids:
-                child.parent_ids.append(commit_id)
-                self._save(child)
-        if child_ids:
-            self._save(own)
 
     def log(self, limit: int = 50) -> Sequence[Commit]:
         sorted_commits = sorted(self._commits.values(), key=lambda c: c.timestamp, reverse=True)
@@ -137,3 +136,4 @@ class Repository:
         if self.root.exists():
             shutil.rmtree(self.root)
             self.root.mkdir(parents=True, exist_ok=True)
+            self._journal = self.root / "commits.jsonl"
