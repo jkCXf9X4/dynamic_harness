@@ -44,9 +44,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _install_ask_tool(runtime: Runtime) -> None:
-    async def _ask(*, agent: Agent, question: str) -> str:
+    async def _ask(*, ctx, question: str) -> str:
         console.print()
-        answer = Prompt.ask(f"[bold cyan]Agent {agent.id[:8]} asks:[/] {question}")
+        answer = Prompt.ask(f"[bold cyan]Agent {ctx.agent_id[:8]} asks:[/] {question}")
         return answer.strip()
     runtime.tool_registry.register(TOOL_ASK_DEF, _ask)
 
@@ -87,13 +87,11 @@ async def _run_with_live(runtime: Runtime, runner: AgentRunner, description: str
     runtime.on_failure(lambda aid, f: events.append(f"\u2717 {aid[:8]} fail: {f.error[:60]}"))
     runtime.on_activity(lambda e: events.append(render_event(e)) if render_event(e) else None)
 
-    with Live(_render, refresh_per_second=4, console=console) as live:
+    with Live(get_renderable=lambda: _render(runtime, events), refresh_per_second=4, console=console) as live:
         run_task = asyncio.create_task(runner.run(description, root_agent=root_agent))
         while not run_task.done():
-            live.update(_render(runtime, events))
             await asyncio.sleep(0.25)
         await run_task
-        live.update(_render(runtime, events))
 
 
 def _run_batch(runtime: Runtime, prompt: str) -> None:

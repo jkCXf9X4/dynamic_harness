@@ -11,6 +11,7 @@ from .context import AgentContext
 from .task import (
     ActivityEvent,
     ActivityEventType,
+    AgentOutcome,
     BudgetRequest,
     Escalation,
     Failure,
@@ -21,6 +22,7 @@ from .task import (
 
 if TYPE_CHECKING:
     from ..llm.provider import LLMProvider
+    from .environment import EnvironmentInfo
     from .runtime import Runtime
 
 
@@ -56,8 +58,7 @@ class Agent:
         self._has_run: bool = False
         self._iteration: int = 0
         self._recent_batches: deque[list[tuple[str, str]]] | None = None
-        self._last_report: ReportPayload | None = None
-        self._last_failure: Failure | None = None
+        self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()
 
@@ -74,10 +75,37 @@ class Agent:
         self._trace_store = runtime.trace_store
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
+        self._environment_info: EnvironmentInfo | None = None
+        self._environment_render: str = ""
+        self._observation_msg: dict[str, Any] | None = None
 
-    # -- context proxy accessors -----------------------------------------
-    # Public knobs (tunable after construction) live on the AgentContext;
-    # the run loop, tools, and tests all read/write through these.
+    # -- outcome accessors ----------------------------------------------------
+
+    @property
+    def last_report(self) -> ReportPayload | None:
+        return self.outcome.report
+
+    @property
+    def last_failure(self) -> Failure | None:
+        return self.outcome.failure
+
+    @property
+    def last_escalation(self) -> Escalation | None:
+        return self.outcome.escalation
+
+    @property
+    def message_count(self) -> int:
+        """Number of messages currently held in this agent's context."""
+        return len(self.context.messages)
+
+    @property
+    def iteration_count(self) -> int:
+        """Number of LLM iterations this agent has executed."""
+        return self._iteration
+
+    # -- context knobs -----------------------------------------------------
+    # Public tunable knobs (adjustable after construction) live on the
+    # AgentContext; the run loop and tools read/write through them.
 
     @property
     def active_turn_window(self) -> int:
@@ -95,38 +123,6 @@ class Agent:
     def max_pruned_retained(self, value: int) -> None:
         self.context.max_pruned_retained = max(int(value), 0)
 
-    @property
-    def _messages(self) -> list[dict[str, Any]]:
-        return self.context.messages
-
-    @_messages.setter
-    def _messages(self, value: list[dict[str, Any]]) -> None:
-        self.context.messages = value
-
-    @property
-    def _turn_counter(self) -> int:
-        return self.context.turn_counter
-
-    @property
-    def _turn_order(self) -> list[str]:
-        return self.context.turn_order
-
-    @property
-    def _turns(self) -> dict[str, list[dict[str, Any]]]:
-        return self.context.turns
-
-    @property
-    def _pruned(self) -> set[str]:
-        return self.context.pruned
-
-    @property
-    def _prune_markers(self) -> dict[str, dict[str, Any]]:
-        return self.context.prune_markers
-
-    @property
-    def _in_flight_prune(self) -> set[str]:
-        return self.context.in_flight_prune
-
     # -- LLM / environment -------------------------------------------------
 
     @property
@@ -137,17 +133,14 @@ class Agent:
     def guidelines(self) -> str:
         return AGENT_SYSTEM_PROMPT
 
+    def set_environment_info(self, info: EnvironmentInfo) -> None:
+        """Inject a runtime-detected environment description shown to the agent."""
+        self._environment_info = info
+        self._environment_render = info.render()
+
     @property
     def environment_info(self) -> str:
-        return (
-            "[Environment]\n"
-            "Python 3.11 | pip NOT available | pytest NOT installed\n"
-            "Working dir: project root with pyproject.toml\n"
-            "Packages: pydantic, openai, dotenv, pyyaml, httpx, rich, textual, pathspec\n"
-            ".optimize_benchmarks/ exists — do not recreate\n"
-            "Git available | os: linux\n"
-            "Do NOT attempt to install packages — use python3 -c for inline code\n"
-        )
+        return self._environment_render
 
     async def run(self) -> None:
         llm = self.llm
@@ -160,17 +153,18 @@ class Agent:
             user_message = f"[ROLE] {self.task.role}\n\n[TASK] {self.task.description}"
         self.context.reset(self._system_prompt or AGENT_SYSTEM_PROMPT, user_message)
         self._has_run = True
+        self._observation_msg = None
         self._iteration = 0
         self._recent_batches = deque(maxlen=self.repeated_call_limit)
         self._started_at = time.monotonic()
         try:
             await self._run_loop()
         except asyncio.CancelledError:
-            if not self._last_report and not self._last_failure:
+            if not self.last_report and not self.last_failure:
                 self.fail("Agent cancelled")
             raise
         except Exception as exc:
-            if not self._last_report and not self._last_failure:
+            if not self.last_report and not self.last_failure:
                 self.fail(f"Unhandled agent error: {exc}")
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
@@ -185,7 +179,7 @@ class Agent:
                 await self.run()
                 return
             self.task.status = TaskStatus.running
-            self._messages.append({"role": "user", "content": user_message})
+            self.context.messages.append({"role": "user", "content": user_message})
             await self._run_loop()
 
     async def _llm_call_with_retry(self, tools: list[dict], max_retries: int = 3) -> Any:
@@ -197,7 +191,7 @@ class Agent:
 
         for attempt in range(max_retries + 1):
             try:
-                return await llm.generate_with_tools(self._messages, tools)
+                return await llm.generate_with_tools(self.context.messages, tools)
             except Exception as e:
                 last_error = e
                 error_str = str(e).lower()
@@ -221,31 +215,9 @@ class Agent:
 
     # -- turn / context helpers (delegate to context) ---------------------
 
-    def _commit_turn(
-        self,
-        assistant_msg: dict[str, Any],
-        results: list[dict[str, Any]],
-    ) -> str:
-        return self.context.commit_turn(assistant_msg, results)
-
-    def _make_prune_marker(self, pid: str) -> str:
-        return self.context.make_prune_marker(pid)
-
-    def _turn_token_estimate(self, pid: str) -> int:
-        return self.context.turn_token_estimate(pid)
-
-    def _turn_tool_names(self, pid: str) -> str:
-        return self.context.turn_tool_names(pid)
-
-    def active_turn_ids(self) -> list[str]:
-        return self.context.active_turn_ids()
-
-    def evict_pruned_overflow(self) -> list[str]:
-        return self.context.evict_overflow()
-
     def _format_delegate_result(self, child: Agent) -> str:
         status = child.task.status.value
-        child._runtime.emit_activity(ActivityEvent(
+        self._event_bus.emit_activity(ActivityEvent(
             agent_id=child.parent.id if child.parent else "",
             event_type=ActivityEventType.DELEGATION_END,
             data={
@@ -258,16 +230,16 @@ class Agent:
             "status": status,
         }
 
-        if child._last_report:
-            r = child._last_report
+        if child.last_report:
+            r = child.last_report
             result["summary"] = r.summary[:500]
             if r.artifact_ids:
                 result["artifact_ids"] = r.artifact_ids
             if r.confidence is not None:
                 result["confidence"] = r.confidence
 
-        if child._last_failure:
-            result["failure"] = child._last_failure.error[:500]
+        if child.last_failure:
+            result["failure"] = child.last_failure.error[:500]
 
         return json.dumps(result, indent=2)
 
@@ -310,25 +282,42 @@ class Agent:
             return True
         return False
 
+    def _set_observation(self, prompt_tokens: int) -> None:
+        """Keep exactly one context-observation slot as the trailing message.
+
+        Observations are recomputed every turn and replaced in place; without
+        this the accumulator of stale observation blocks would grow O(n^2).
+        """
+        if self._observation_msg is not None:
+            try:
+                self.context.messages.remove(self._observation_msg)
+            except ValueError:
+                pass
+        self._observation_msg = {
+            "role": "system",
+            "content": self._context_observation(prompt_tokens),
+        }
+        self.context.messages.append(self._observation_msg)
+
     def _context_observation(self, prompt_tokens: int) -> str:
-        active_turns = self.active_turn_ids()
+        active_turns = self.context.active_turn_ids()
         if active_turns:
             turn_map = " · ".join(
-                f"{pid}:{self._turn_tool_names(pid)}"
-                f"(~{self._turn_token_estimate(pid)}tk)"
+                f"{pid}:{self.context.turn_tool_names(pid)}"
+                f"(~{self.context.turn_token_estimate(pid)}tk)"
                 for pid in active_turns
             )
             total_active = sum(
-                self._turn_token_estimate(pid) for pid in active_turns
+                self.context.turn_token_estimate(pid) for pid in active_turns
             )
         else:
             turn_map = "none"
             total_active = 0
-        next_turn = f"t{self._turn_counter}"
+        next_turn = f"t{self.context.turn_counter}"
         return (
             f"[Context Observation]\n"
             f"Turn: {self._iteration}\n"
-            f"Messages in context: {len(self._messages)}\n"
+            f"Messages in context: {len(self.context.messages)}\n"
             f"Estimated prompt tokens this agent: {prompt_tokens}\n"
             f"Active turn tokens: {total_active} (prune stale turns to cut this)\n"
             f"Recent committed turns (prune_id:tools~tokens): {turn_map}\n"
@@ -345,7 +334,7 @@ class Agent:
             event_type=ActivityEventType.ITERATION,
             data={
                 "turn": self._iteration,
-                "messages": len(self._messages),
+                "messages": len(self.context.messages),
                 "prompt_tokens": prompt_tokens,
             },
         ))
@@ -356,11 +345,11 @@ class Agent:
                 self.id,
                 prompt_tokens=response.usage.get("prompt_tokens", 0),
                 completion_tokens=response.usage.get("completion_tokens", 0),
-                message_count=len(self._messages),
+                message_count=len(self.context.messages),
             )
         ts = self._trace_store
         if ts:
-            ts.record_llm_request(self.id, list(self._messages))
+            ts.record_llm_request(self.id, list(self.context.messages))
 
     def _emit_llm_end(self, response: Any, tool_names: list[str]) -> None:
         self._event_bus.emit_activity(ActivityEvent(
@@ -458,13 +447,13 @@ class Agent:
             ):
                 if self._deferred_delegates is not None:
                     await self._gather_deferred_and_finalize(results)
-                self._commit_turn(assistant_msg, results)
+                self.context.commit_turn(assistant_msg, results)
                 return True
 
         if self._deferred_delegates is not None:
             await self._gather_deferred_and_finalize(results)
 
-        self._commit_turn(assistant_msg, results)
+        self.context.commit_turn(assistant_msg, results)
         return self._check_repeated_calls(response)
 
     def _check_repeated_calls(self, response: Any) -> bool:
@@ -506,7 +495,7 @@ class Agent:
                 return
 
             prompt_tokens = self._usage_tracker.get_usage(self.id).get("prompt_tokens", 0)
-            self._messages.append({"role": "system", "content": self._context_observation(prompt_tokens)})
+            self._set_observation(prompt_tokens)
             self._emit_iteration(prompt_tokens)
 
             response = await self._llm_call_with_retry(tools)
@@ -550,7 +539,7 @@ class Agent:
         for (tcid, child, _), outcome in zip(pending, outcomes):
             deferred_map[tcid] = child
             if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
-                if not child._last_report and not child._last_failure:
+                if not child.last_report and not child.last_failure:
                     child.fail(f"Child agent raised: {outcome}")
 
         for r in results:
@@ -600,8 +589,51 @@ class Agent:
     def generated_root(self) -> Any:
         return self._generated_root
 
+    @property
+    def artifact_store(self) -> Any:
+        return self._artifact_store
+
+    def latest_assistant_message(self) -> str:
+        """Last assistant text message in this agent's context (empty if none)."""
+        for msg in reversed(self.context.messages):
+            if msg.get("role") == "assistant" and msg.get("content"):
+                return msg["content"][:500]
+        return ""
+
+    async def run_delegate_tool(
+        self,
+        description: str,
+        *,
+        role: str | None = None,
+        system_prompt: str | None = None,
+        tool_call_id: str = "",
+    ) -> str:
+        """Create + run a sub-agent on behalf of the ``delegate`` tool.
+
+        When the agent is mid-batch (multiple delegations in one turn) the child
+        run is deferred and gathered by the run loop; otherwise it runs to
+        completion here.
+        """
+        child = self.delegate(description, role=role, system_prompt=system_prompt)
+        self.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.DELEGATION_START,
+            data={
+                "child_id": child.id,
+                "description": description[:200],
+                "role": role,
+            },
+        ))
+        task = asyncio.create_task(child.run())
+        self._runtime.track_agent_task(task)
+        if self._deferred_delegates is not None:
+            self._deferred_delegates.append((tool_call_id, child, task))
+            return json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
+        await task
+        return self._format_delegate_result(child)
+
     def report(self, payload: ReportPayload) -> None:
-        self._last_report = payload
+        self.outcome.report = payload
         self._runtime.deliver_report(self.id, payload)
 
     def request_more_budget(self, current_usage: int, requested: int, reason: str) -> None:
@@ -615,9 +647,10 @@ class Agent:
 
     def escalate(self, issue: str, **context: object) -> None:
         e = Escalation(task_id=self.task.id, issue=issue, context=context)
+        self.outcome.escalation = e
         self._runtime.deliver_escalation(self.id, e)
 
     def fail(self, error: str, trace: str | None = None) -> None:
         f = Failure(task_id=self.task.id, error=error, trace=trace)
-        self._last_failure = f
+        self.outcome.failure = f
         self._runtime.deliver_failure(self.id, f)

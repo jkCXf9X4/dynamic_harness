@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import json as _json
 from typing import TYPE_CHECKING
 
-from ..task import ActivityEvent, ActivityEventType, ReportPayload, TaskStatus
+from ..task import ReportPayload, TaskStatus
 from .registry import ToolDef
 
 if TYPE_CHECKING:
-    from ...core.agent import Agent
+    from ...core.tool_context import ToolContext
 
 
 TOOL_DELEGATE_DEF = ToolDef(
@@ -137,33 +136,18 @@ TOOL_READ_ARTIFACT_DEF = ToolDef(
 
 
 async def delegate(
-    *, agent: Agent, description: str,
+    *, ctx: ToolContext, description: str,
     role: str | None = None, system_prompt: str | None = None,
     _tool_call_id: str = "",
 ) -> str:
-    child = agent.delegate(description, role=role, system_prompt=system_prompt)
-    agent.emit_activity(ActivityEvent(
-        agent_id=agent.id,
-        event_type=ActivityEventType.DELEGATION_START,
-        data={
-            "child_id": child.id,
-            "description": description[:200],
-            "role": role,
-        },
-    ))
-    task = asyncio.create_task(child.run())
-    agent._runtime.track_agent_task(task)
-    if agent._deferred_delegates is not None:
-        agent._deferred_delegates.append((_tool_call_id, child, task))
-        return _json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
-
-    await task
-    return agent._format_delegate_result(child)
+    return await ctx.run_delegate_tool(
+        description, role=role, system_prompt=system_prompt, tool_call_id=_tool_call_id,
+    )
 
 
-async def report(*, agent: Agent, summary: str, artifact_ids: list[str] | None = None, files_written: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
-    agent.report(ReportPayload(
-        task_id=agent.task.id,
+async def report(*, ctx: ToolContext, summary: str, artifact_ids: list[str] | None = None, files_written: list[str] | None = None, confidence: float | None = None, technical_summary: str | None = None, full_report: str | None = None) -> str:
+    ctx.report(ReportPayload(
+        task_id=ctx.task_id,
         summary=summary,
         artifact_ids=artifact_ids or [],
         files_written=files_written or [],
@@ -174,24 +158,24 @@ async def report(*, agent: Agent, summary: str, artifact_ids: list[str] | None =
     return f"Reported: {summary[:100]}"
 
 
-async def escalate(*, agent: Agent, issue: str) -> str:
-    agent.escalate(issue)
+async def escalate(*, ctx: ToolContext, issue: str) -> str:
+    ctx.escalate(issue)
     return f"Escalated: {issue[:100]}"
 
 
-async def fail(*, agent: Agent, error: str) -> str:
-    agent.fail(error)
+async def fail(*, ctx: ToolContext, error: str) -> str:
+    ctx.fail(error)
     return f"Failed: {error[:100]}"
 
 
-async def ask(*, agent: Agent, question: str) -> str:
+async def ask(*, ctx: ToolContext, question: str) -> str:
     loop = asyncio.get_event_loop()
     answer = await loop.run_in_executor(None, lambda: input(f"\n[Agent asks] {question}\nYour response: "))
     return answer.strip()
 
 
-async def converse(*, agent: Agent, agent_id: str, message: str) -> str:
-    target = agent.get_other_agent(agent_id)
+async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
+    target = ctx.get_other_agent(agent_id)
     if not target:
         return f"Error: no agent found with ID {agent_id}"
     if target.task.status not in (TaskStatus.completed, TaskStatus.running):
@@ -200,19 +184,15 @@ async def converse(*, agent: Agent, agent_id: str, message: str) -> str:
             f"'{target.task.status.value}', cannot converse"
         )
 
-    await target.continue_with_input(message)
+    await ctx.continue_with_input(agent_id, message)
 
-    summary = ""
-    for msg in reversed(target._messages or []):
-        if msg.get("role") == "assistant" and msg.get("content"):
-            summary = msg["content"][:500]
-            break
+    summary = ctx.latest_assistant_message(agent_id)
     status = target.task.status.value
     return f"[Agent {agent_id[:8]}] {summary}\n(Status: {status})"
 
 
-async def read_artifact(*, agent: Agent, artifact_id: str) -> str:
-    artifact = agent._artifact_store.get(artifact_id)
+async def read_artifact(*, ctx: ToolContext, artifact_id: str) -> str:
+    artifact = ctx.artifact_store.get(artifact_id)
     if not artifact:
         return f"Error: no artifact found with ID '{artifact_id}'"
     views = artifact.views

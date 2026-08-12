@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..core.agent import Agent
+from ..core.events_format import format_event
 from ..core.runner import AgentRunner
 from ..core.runtime import Runtime
 from ..core.task import ActivityEvent, ActivityEventType, Failure, ReportPayload, Task
@@ -84,7 +85,7 @@ class Harness:
             model=config.get("model", "deepseek/deepseek-v4-flash"),
             base_url=config.get("base_url", "https://openrouter.ai/api/v1"),
             api_key=config.get("api_key", ""),
-            verify_ssl=config.get("verify_ssl", False),
+            verify_ssl=config.get("verify_ssl", True),
         )
         self._runtime.set_llm(llm)
 
@@ -108,35 +109,16 @@ class Harness:
             self._user_on_activity(event)
         if not self._verbose:
             return
-        d = event.data
-        et = event.event_type
-        eid = event.agent_id[:8]
-
-        if et == ActivityEventType.TOOL_CALL_START:
-            name = d.get("tool_name", "?")
-            logger.debug("  [%s] %s()", eid, name)
-        elif et == ActivityEventType.TOOL_CALL_END:
-            name = d.get("tool_name", "?")
-            rlen = d.get("result_length", 0)
-            logger.debug("  [%s] %s() \u2192 %s bytes", eid, name, rlen)
-        elif et == ActivityEventType.LLM_CALL_END:
-            tc = d.get("tool_calls", [])
-            pt = d.get("prompt_tokens", 0)
-            ct = d.get("completion_tokens", 0)
-            logger.debug("  [%s] LLM \u2192 %s (%s+%s tokens)", eid, ", ".join(tc) if tc else "text", pt, ct)
-        elif et == ActivityEventType.DELEGATION_START:
-            child = d.get("child_id", "?")[:8]
-            desc = (d.get("description", "") or "")[:60]
-            logger.info("  [%s] delegate \u2192 %s \"%s\"", eid, child, desc)
-        elif et == ActivityEventType.DELEGATION_END:
-            child = d.get("child_id", "?")[:8]
-            status = d.get("status", "?")
-            logger.info("  [%s] %s \u2192 %s", eid, child, status)
-        elif et == ActivityEventType.COMPRESSION:
-            saved = d.get("saved", 0)
-            logger.debug("  [%s] compressed (-%s msgs)", eid, saved)
-        elif et == ActivityEventType.SAFETY_WARNING:
-            logger.warning("  [%s] \u26a0 %s", eid, d.get("warning_type", ""))
+        line = format_event(event, emoji=False, show_args=True)
+        if line is None:
+            return
+        if event.event_type == ActivityEventType.SAFETY_WARNING:
+            logger.warning("%s %s", event.agent_id[:8], line.strip())
+        elif event.event_type in (ActivityEventType.DELEGATION_START,
+                                  ActivityEventType.DELEGATION_END):
+            logger.info("  %s", line.strip())
+        else:
+            logger.debug("  %s", line.strip())
 
     @property
     def runtime(self) -> Runtime:

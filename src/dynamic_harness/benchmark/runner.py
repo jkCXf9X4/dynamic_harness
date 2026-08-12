@@ -114,7 +114,7 @@ async def run_one(
         os.chdir(workspace)
 
     rt = runtime_factory()
-    if rt._llm is None:
+    if rt.provider is None:
         if chdir_workspace:
             os.chdir(started_in)
         raise BenchmarkRunError("runtime has no LLM set")

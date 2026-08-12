@@ -1,10 +1,9 @@
 ---
 title: "Tools Reference"
 category: api
-module: dynamic_harness.core.capabilities
+module: dynamic_harness.core.tools.registry
 classes:
   - ToolDef
-  - ToolCall
   - ToolResult
   - ToolRegistry
 summary: >
@@ -19,7 +18,7 @@ related:
 # Tools
 
 ```python
-from dynamic_harness.core.capabilities import ToolDef, ToolCall, ToolResult, ToolRegistry
+from dynamic_harness.core.tools import ToolDef, ToolResult, ToolRegistry
 ```
 
 ## ToolRegistry
@@ -189,7 +188,7 @@ Terminal tools (report, escalate, fail) set the agent's task status and stop the
 }
 ```
 
-**Implementation:** `httpx.AsyncClient.get(url, timeout=30)`. Raises on non-2xx status.
+**Implementation:** `httpx.AsyncClient` streaming GET (validates scheme/host and rejects literal loopback/private addresses), follows up to 3 redirects re-validating each hop, and caps the response at 200 KB. Raises on non-2xx status.
 
 ---
 
@@ -323,7 +322,7 @@ Terminates the agent with `TaskStatus.failed`.
 }
 ```
 
-**Implementation:** Uses `input()` to prompt the user via stdin. Blocks until response.
+**Implementation:** The default implementation prompts on stdin via `input()`. The Rich CLI and the Textual TUI install their own `ask` handler that routes the question through their own input UI.
 
 ---
 
@@ -415,9 +414,9 @@ Terminates the agent with `TaskStatus.failed`.
 ## Custom Tools
 
 ```python
-from dynamic_harness.core.capabilities import ToolDef, ToolRegistry
+from dynamic_harness.core.tools import ToolDef, ToolRegistry
 
-async def my_tool(*, agent, param1: str, param2: int = 0) -> str:
+async def my_tool(*, ctx, param1: str, param2: int = 0) -> str:
     return f"Processed {param1} with {param2}"
 
 my_def = ToolDef(
@@ -436,14 +435,17 @@ my_def = ToolDef(
 runtime.tool_registry.register(my_def, my_tool)
 ```
 
-Tool functions receive the calling `agent` as a keyword argument (for accessing `agent.id`, `agent.task`, `agent._runtime`, etc.) plus the declared parameters from the schema.
+Tool functions receive a `ToolContext` (`ctx`) — a narrow public interface built
+from the calling agent — as a keyword argument, plus the declared parameters from
+the schema. To create a `ToolContext` manually for a custom agent, use
+`ToolContext(agent)`.
 
 ## Initialization
 
 Default tools are registered by `register_default_tools()` which is called in `Runtime.__init__()`. For programmatic use:
 
 ```python
-from dynamic_harness.core.capabilities import register_default_tools
+from dynamic_harness.core.tools import register_default_tools
 
 registry = ToolRegistry()
 register_default_tools(registry)

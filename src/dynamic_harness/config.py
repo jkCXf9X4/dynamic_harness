@@ -16,6 +16,7 @@ class LLMProviderConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     provider_ignore: list[str] = Field(default_factory=list)
     provider_allow_fallbacks: bool = True
+    verify_ssl: bool = True
     price_input_per_mtok: float | None = Field(default=None, description="USD per 1M input tokens, if known")
     price_output_per_mtok: float | None = Field(default=None, description="USD per 1M output tokens, if known")
 
@@ -25,9 +26,19 @@ class SafetyConfig(BaseModel):
     repeated_call_limit: int = 5
 
 
+class AgentConfig(BaseModel):
+    environment_notes: list[str] = Field(
+        default_factory=list,
+        description="Extra environment instructions appended to every agent's "
+                    "context observation (e.g. 'pip is unavailable'). Kept empty "
+                    "by default so agents are never told false environment facts.",
+    )
+
+
 class HarnessConfig(BaseModel):
     llm: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:

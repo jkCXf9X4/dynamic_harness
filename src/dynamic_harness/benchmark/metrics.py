@@ -102,8 +102,8 @@ class MetricsCollector:
         for aid, agent in agents.items():
             if agent.parent is not None:
                 delegations += 1
-            message_count += len(agent._messages)
-            total_turns += agent._iteration
+            message_count += agent.message_count
+            total_turns += agent.iteration_count
             st = agent.task.status.value if agent.task.status else ""
             if st == "failed":
                 failures += 1

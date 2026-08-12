@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from ...core.agent import Agent
+    from ...core.tool_context import ToolContext
 
 
 ToolFunc = Callable[..., Awaitable[str]]
@@ -44,8 +45,13 @@ class ToolRegistry:
         if not entry:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error: unknown tool '{name}'")
         _, fn = entry
+        # Tools receive a ToolContext (built from the agent) rather than the
+        # agent itself, preserving the actor boundary.
+        from ..tool_context import ToolContext
+
+        ctx = agent if isinstance(agent, ToolContext) else ToolContext(agent)
         try:
-            content = await fn(agent=agent, **kwargs)
+            content = await fn(ctx=ctx, **kwargs)
         except Exception as e:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error executing {name}: {e}")
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -57,6 +58,27 @@ class Failure(BaseModel):
     task_id: str
     error: str
     trace: str | None = None
+
+
+@dataclass
+class AgentOutcome:
+    """Public, read-only summary of how an agent's run ended.
+
+    Consumers (AgentRunner, MetricsCollector, delegation formatting) read this
+    instead of reaching into private agent fields.
+    """
+
+    report: ReportPayload | None = None
+    failure: Failure | None = None
+    escalation: Escalation | None = None
+
+    @property
+    def is_terminal(self) -> bool:
+        return (
+            self.report is not None
+            or self.failure is not None
+            or self.escalation is not None
+        )
 
 
 class ActivityEventType(str, Enum):

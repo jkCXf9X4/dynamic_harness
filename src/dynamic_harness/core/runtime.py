@@ -9,6 +9,7 @@ from uuid import uuid4
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
 from .agent import Agent
+from .environment import EnvironmentInfo, build_environment_info
 from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
 from .task import ActivityEvent, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
@@ -47,6 +48,9 @@ class Runtime:
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
         self._active_turn_window = 50
         self._max_pruned_retained = 100
+        self._environment_info: EnvironmentInfo = build_environment_info(
+            notes=config.agent.environment_notes if config else []
+        )
 
         self.event_bus = EventBus()
         self.usage_tracker = UsageTracker()
@@ -111,6 +115,8 @@ class Runtime:
         self, task: Task, parent: Agent | None = None, agent_type: str | None = None
     ) -> Agent:
         agent_id = uuid4().hex[:12]
+        # The runtime owns the hierarchy; never trust a caller-supplied parent_id.
+        task.parent_id = parent.id if parent else None
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
             agent = cls(
@@ -128,6 +134,7 @@ class Runtime:
                 active_turn_window=self._active_turn_window,
                 max_pruned_retained=self._max_pruned_retained,
             )
+        agent.set_environment_info(self._environment_info)
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:
@@ -170,6 +177,15 @@ class Runtime:
             ),
         )
         self.repository.commit(commit)
+
+        # Agents commit children first; backfill the parent->children links so
+        # the provenance tree reflects the delegation hierarchy.
+        child_task_ids = [
+            self._agents[aid].task.id
+            for aid in self._task_graph.get(agent_id, [])
+            if aid in self._agents
+        ]
+        self.repository.adopt_children_by_task(commit.id, child_task_ids)
 
         self.event_bus.emit_report(agent_id, payload)
 

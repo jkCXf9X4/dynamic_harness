@@ -64,13 +64,13 @@ class AgentTest:
 
     @property
     def summary(self) -> str:
-        assert self.agent is not None and self.agent._last_report is not None
-        return self.agent._last_report.summary
+        assert self.agent is not None and self.agent.last_report is not None
+        return self.agent.last_report.summary
 
     @property
     def failure(self) -> str:
-        assert self.agent is not None and self.agent._last_failure is not None
-        return self.agent._last_failure.error
+        assert self.agent is not None and self.agent.last_failure is not None
+        return self.agent.last_failure.error
 
 
 @pytest.fixture

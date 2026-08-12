@@ -9,7 +9,7 @@ How to enable the agent to remove un-relevant context
 Ensure that the prune tool actually works
 
 ---
-Always normalize the prompt to ensure best results and make sure there is no unknowns that could influence the perceived quality of the results  
+Always evaluate the prompt to ensure best results and make sure there is no unknowns that could influence the perceived quality of the results  
 
 DO a complete and critical review of the codebase, look at architectural solutions, module/class boundaries and pattern/architectural alternatives for evaluating potential improvements
 
@@ -25,7 +25,7 @@ Make sure the tui works
 
 ---
 
-add something to ensure that prompt is normalized/adapted to the tooling
+add to system prompt to ensure that prompt is normalized/adapted to the tooling and ask if there is any clarification needed
 
 
 ---

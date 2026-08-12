@@ -32,8 +32,8 @@ async def test_runner_tracks_events_and_reports(runtime: Runtime) -> None:
     root = runtime.delegate(task, agent_type="LeafAgent")
     await root.run()
 
-    assert root._last_report is not None
-    assert "Leaf" in root._last_report.summary
+    assert root.last_report is not None
+    assert "Leaf" in root.last_report.summary
 
 
 @pytest.mark.asyncio
@@ -47,8 +47,8 @@ async def test_runner_tracks_failure_events(runtime: Runtime) -> None:
     root = runtime.delegate(task, agent_type="FailingAgent")
     await root.run()
 
-    assert root._last_failure is not None
-    assert "oops" in root._last_failure.error
+    assert root.last_failure is not None
+    assert "oops" in root.last_failure.error
     assert root.task.status.value == "failed"
 
 

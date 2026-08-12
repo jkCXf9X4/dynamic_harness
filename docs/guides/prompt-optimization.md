@@ -201,7 +201,7 @@ tail -n +2 .optimize_benchmarks/best_prompt.txt > src/dynamic_harness/core/agent
 - Some models emit the **identical** `write()` call repeatedly. The harness
   fails that sub-agent after 5 identical batches (safety), and the `write`
   tool now returns a `"No change: content identical..."` message on identical
-  content (`src/dynamic_harness/core/capabilities.py:_tool_write`) so agents
+  content (`src/dynamic_harness/core/tools/filesystem.py:write`) so agents
   recover instead of spinning.
 
 ## 8. Customizing the benchmark

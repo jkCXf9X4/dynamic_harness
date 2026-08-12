@@ -79,6 +79,34 @@ class Repository:
             if (cid := self._task_commits.get(tid)) is not None
         ]
 
+    def adopt_children_by_task(
+        self, commit_id: str, child_task_ids: Sequence[str]
+    ) -> None:
+        """Link a commit to its children's commits by task id.
+
+        Agent hierarchies commit children *before* their parent (the parent
+        orchestrated them), so the parent's commit cannot reference the
+        children at child-commit time. Call this after committing the parent to
+        fill in the bidirectional parent/child linkage and keep the tree intact.
+        """
+        own = self._commits.get(commit_id)
+        if own is None:
+            return
+        child_ids: list[str] = []
+        for tid in child_task_ids:
+            cid = self._task_commits.get(tid)
+            if cid is not None and cid != commit_id:
+                child_ids.append(cid)
+        for cid in child_ids:
+            if cid not in own.child_ids:
+                own.child_ids.append(cid)
+            child = self._commits.get(cid)
+            if child is not None and commit_id not in child.parent_ids:
+                child.parent_ids.append(commit_id)
+                self._save(child)
+        if child_ids:
+            self._save(own)
+
     def log(self, limit: int = 50) -> Sequence[Commit]:
         sorted_commits = sorted(self._commits.values(), key=lambda c: c.timestamp, reverse=True)
         return sorted_commits[:limit]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from dynamic_harness.core.agent import Agent
@@ -14,7 +16,7 @@ async def test_default_agent_runtime(runtime: Runtime) -> None:
     await root.run()
 
     assert root.task.status.value == "failed"
-    assert "No LLM provider configured" in root._last_failure.error
+    assert "No LLM provider configured" in root.last_failure.error
     assert runtime.agent_count() >= 1
 
 
@@ -86,3 +88,49 @@ async def test_unknown_agent_type_uses_default(runtime: Runtime) -> None:
     await root.run()
     assert root.task.status.value == "failed"
     assert runtime.agent_count() >= 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_children_reports_keep_repo_consistent(runtime: Runtime) -> None:
+    """Parallel children reporting simultaneously must not corrupt the repository
+    tree or lose provenance links."""
+
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary=f"leaf {self.task.description}",
+            ))
+
+    class BranchAgent(Agent):
+        async def run(self) -> None:
+            a = self.delegate("A", agent_type="LeafAgent")
+            b = self.delegate("B", agent_type="LeafAgent")
+            await asyncio.gather(a.run(), b.run())
+            self.report(ReportPayload(
+                task_id=self.task.id,
+                summary="branch",
+            ))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    runtime.register_agent_class("BranchAgent", BranchAgent)
+
+    root = runtime.delegate(Task(description="Root"), agent_type="BranchAgent")
+    await root.run()
+
+    root_commit = runtime.repository.commit_for_task(root.task.id)
+    assert root_commit is not None
+    assert len(root_commit.child_ids) == 2, f"expected 2 children, got {root_commit.child_ids}"
+
+    child_agents = [runtime.get_agent(c) for c in runtime.task_graph()[root.id]]
+    for child in child_agents:
+        assert child is not None
+        child_commit = runtime.repository.commit_for_task(child.task.id)
+        assert child_commit is not None
+        assert root_commit.id in child_commit.parent_ids
+
+    tree = runtime.repository.tree(root_commit.id)
+    assert root_commit.id in tree
+    assert set(tree[root_commit.id]) == set(root_commit.child_ids)
+    assert runtime.repository.count() == 3
+

@@ -10,7 +10,7 @@ class AgentRunner:
 
     Creates the root task via Runtime.delegate(), runs it with a direct
     await (the same pattern used by _tool_delegate for child agents), and
-    collects the result from the root agent's _last_report / _last_failure.
+    collects the result from the root agent's public outcome.
     """
 
     def __init__(self, runtime: Runtime) -> None:
@@ -35,10 +35,10 @@ class AgentRunner:
             root = root_agent
             await root.continue_with_input(description)
 
-        if root._last_report:
+        if root.last_report:
             tag = root.id[:8]
             self.events.append(f"{tag} report done")
-            self.last_reports.append((tag, root._last_report.summary))
-        if root._last_failure:
+            self.last_reports.append((tag, root.last_report.summary))
+        if root.last_failure:
             tag = root.id[:8]
-            self.events.append(f"{tag} fail: {root._last_failure.error}")
+            self.events.append(f"{tag} fail: {root.last_failure.error}")

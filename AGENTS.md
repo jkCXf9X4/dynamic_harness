@@ -6,8 +6,8 @@ summary: >
   architecture, key files, data models, tools, conventions, and extension
   points. Read this first before making any changes.
 model_refs:
-  - Task, TaskStatus, ReportPayload, Escalation, Failure, DelegateRequest, BudgetRequest
-  - Agent, Runtime, ToolRegistry, ToolDef, ToolCall, ToolResult
+  - Task, TaskStatus, ReportPayload, Escalation, Failure, BudgetRequest, AgentOutcome
+  - Agent, Runtime, ToolRegistry, ToolDef, ToolResult, ToolContext
   - ArtifactView, Artifact, ArtifactStore
   - Commit, Repository
   - LLMProvider, LLMConfig, LLMResponse, ToolCallData, ToolCallResponse
@@ -15,8 +15,12 @@ model_refs:
 api_modules:
   - dynamic_harness.core.task
   - dynamic_harness.core.agent
+  - dynamic_harness.core.context
+  - dynamic_harness.core.environment
+  - dynamic_harness.core.tool_context
   - dynamic_harness.core.runtime
-  - dynamic_harness.core.capabilities
+  - dynamic_harness.core.tools.registry
+  - dynamic_harness.core.events_format
   - dynamic_harness.core.runner
   - dynamic_harness.artifact.store
   - dynamic_harness.artifact.summary
@@ -51,18 +55,30 @@ src/dynamic_harness/
 ├── api/
 │   └── harness.py           → Harness (high-level programmatic Python API)
 ├── core/
-│   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop
-│   ├── capabilities.py      → ToolDef, ToolCall, ToolResult, ToolRegistry, 17 tool implementations
-│   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus)
-│   ├── task.py              → Task, ReportPayload, Escalation, Failure, DelegateRequest, ActivityEvent
+│   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop + outcome
+│   ├── context.py           → AgentContext (turns, prune/restore/compress)
+│   ├── environment.py       → EnvironmentInfo (runtime-detected, injected)
+│   ├── tool_context.py      → ToolContext (public interface handed to tool functions)
 │   ├── runner.py            → AgentRunner (pure lifecycle, no rendering)
-│   ├── events.py            → EventBus + typed activity-event payloads
+│   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus)
+│   ├── task.py              → Task, ReportPayload, Escalation, Failure, AgentOutcome, ActivityEvent
+│   ├── events.py            → EventBus (isolated handler dispatch)
+│   ├── events_format.py     → format_event() — single event→text source
 │   ├── usage.py             → UsageTracker (per-agent/total token tracking)
-│   ├── protocols.py         → Protocol definitions
-│   └── trace.py             → TraceStore (JSONL debug trace)
+│   ├── trace.py             → TraceStore (JSONL debug trace)
+│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 17 tools split by concern
+│       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
+│       ├── registration.py  → register_default_tools()
+│       ├── filesystem.py    → read, write, glob, grep, edit (+ sandbox helpers)
+│       ├── process.py       → bash
+│       ├── network.py       → webfetch
+│       ├── agents.py        → delegate, report, escalate, fail, ask, converse, read_artifact
+│       └── context.py       → compress, prune, restore
 ├── cli/
 │   ├── terminal.py          → DEFAULT CLI: Rich Live-rendered terminal (batch, -i REPL, --tui)
 │   ├── tui.py               → Textual TUI (most verbose mode; via --tui)
+│   ├── present.py           → AgentNode/Stats view-models (build_agent_tree, build_stats)
+│   ├── render.py            → engine adapters over present.py (Rich/Textual)
 │   └── common.py            → workspace_dir(), build_runtime()
 ├── artifact/
 │   ├── store.py             → ArtifactView, Artifact, ArtifactStore (progressive disclosure)
@@ -78,13 +94,21 @@ src/dynamic_harness/
     └── openai_provider.py    → OpenAIProvider (OpenAI/OpenRouter compatible)
 
 tests/
-├── test_agent.py             → Agent hierarchy, failure, report, sibling isolation
-├── test_agent_loop.py        → AgentRunner completion, events, cancellation
-├── test_agent_loop_detection.py → Safety: max iterations, repeated-call detection
-├── test_runtime.py           → Runtime task graph, artifacts, event handlers
-├── test_capabilities.py      → ToolRegistry + all 17 tool implementations
-├── test_artifact.py          → ArtifactStore progressive disclosure, file I/O
-└── test_repository.py        → Repository commits, parent/child, persistence
+├── backend/
+│   ├── test_agent.py             → Agent hierarchy, failure, report, sibling isolation
+│   ├── test_agent_loop.py        → AgentRunner completion, events, cancellation
+│   ├── test_agent_loop_detection.py → Safety: max iterations, repeated-call detection
+│   ├── test_runtime.py           → Runtime task graph, artifacts, event handlers, provenance
+│   ├── test_capabilities.py      → ToolRegistry + all 17 tool implementations
+│   ├── test_tool_interaction.py  → tool-level behavior (read/write/grep/glob/compress/prune/…)
+│   ├── test_artifact.py          → ArtifactStore progressive disclosure, file I/O
+│   ├── test_repository.py        → Repository commits, parent/child, persistence
+│   ├── test_e2e.py               → end-to-end report flows with rich views
+│   └── test_benchmark.py         → scoring/aggregation
+└── cli/
+    ├── test_present.py           → build_agent_tree / build_stats view-models
+    ├── test_tui_args.py          → TUI arg parsing
+    └── test_tui_smoke.py         → TUI headless smoke
 
 docs/
 ├── VISION.md                 → Architectural vision and success criteria
@@ -183,9 +207,9 @@ ReportPayload(
 - `get_usage(agent_id)` / `total_usage()` — per-agent / aggregate token usage
 - `reset(clear_handlers=False)` — clear state (event handlers only if `clear_handlers=True`)
 
-### ToolRegistry (`core/capabilities.py`)
+### ToolRegistry (`core/tools/registry.py`)
 - `register(tool_def: ToolDef, fn: ToolFunc)` — add a tool
-- `execute(name, tool_call_id, agent, **kwargs)` → ToolResult
+- `execute(name, tool_call_id, agent, **kwargs)` → ToolResult (hands tools a `ToolContext`)
 - `openai_schemas()` → list[dict] — OpenAI function-calling format
 - `list_tools()` → list[str]
 
@@ -203,7 +227,9 @@ ReportPayload(
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 15 Built-in Tools
+## 17 Built-in Tools
+
+Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
 | # | Tool | Parameters | Terminal? |
 |---|------|-----------|-----------|
@@ -252,7 +278,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 - **Async-first:** all agent execution is `async def`
 - **UUID-based IDs:** 12-char hex prefixes via `uuid4().hex[:12]`
 - **Tests** use `pytest` + `pytest-asyncio`; mock LLM providers for determinism
-- **New tools** are registered via `register_default_tools()` in `capabilities.py`
+- **New tools** are registered via `register_default_tools()` in `core/tools/registration.py`
 - **New CLI commands** go in `cli/tui.py`
 - Run tests: `pytest` from repo root
 
@@ -270,7 +296,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 | Need | Look in |
 |------|---------|
-| Add/modify a tool | `core/capabilities.py` |
+| Add/modify a tool | `core/tools/` (registry + registration + per-concern module) |
 | Change agent behavior | `core/agent.py` (AGENT_SYSTEM_PROMPT or _run_loop) |
 | Change runtime lifecycle | `core/runtime.py` |
 | Change data models | `core/task.py` |

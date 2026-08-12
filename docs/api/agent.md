@@ -172,12 +172,17 @@ Key rules enforced in the prompt:
 
 See `docs/agent_methodology_guidelines.md` for the full detailed methodology.
 
-## Internal State
+## Public State
 
 ```python
-agent._messages: list[dict] | None          # Conversation history
-agent._iteration: int                        # Current turn count
-agent._recent_batches: deque                 # Sliding window for repeated-call detection
-agent._last_report: ReportPayload | None     # Set on terminal report()
-agent._last_failure: Failure | None          # Set on terminal fail()
+agent.context                 # AgentContext — turn/prune/restore/compress state
+agent.context.messages        # Conversation history (list[dict])
+agent.outcome                 # AgentOutcome — report | failure | escalation
+agent.last_report             # ReportPayload | None — set on terminal report()
+agent.last_failure            # Failure | None — set on terminal fail()
+agent.last_escalation         # Escalation | None — set on escalate()
+agent.message_count           # int — messages in this agent's context
+agent.iteration_count         # int — LLM iterations executed
 ```
+
+Full agent lifecycle details in `docs/concepts/agent-lifecycle.md`.

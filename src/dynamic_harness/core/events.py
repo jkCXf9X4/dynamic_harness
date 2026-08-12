@@ -1,8 +1,24 @@
 from __future__ import annotations
 
+import logging
 from typing import Callable
 
 from .task import Failure, ReportPayload, Escalation, BudgetRequest, ActivityEvent
+
+logger = logging.getLogger(__name__)
+
+
+def _dispatch(handlers: list[Callable], *args) -> None:
+    """Fire handlers, isolating any handler failure from the agent loop.
+
+    Event handlers are UI/logging glue; a bug in one must never propagate back
+    and force-fail the agent that emitted the event.
+    """
+    for h in list(handlers):
+        try:
+            h(*args)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("event handler error: %s", exc)
 
 
 class EventBus:
@@ -14,24 +30,19 @@ class EventBus:
         self._failure_handlers: list[Callable[[str, Failure], None]] = []
 
     def emit_activity(self, event: ActivityEvent) -> None:
-        for h in self._activity_handlers:
-            h(event)
+        _dispatch(self._activity_handlers, event)
 
     def emit_report(self, agent_id: str, payload: ReportPayload) -> None:
-        for h in self._report_handlers:
-            h(agent_id, payload)
+        _dispatch(self._report_handlers, agent_id, payload)
 
     def emit_budget_request(self, agent_id: str, req: BudgetRequest) -> None:
-        for h in self._budget_handlers:
-            h(agent_id, req)
+        _dispatch(self._budget_handlers, agent_id, req)
 
     def emit_escalation(self, agent_id: str, esc: Escalation) -> None:
-        for h in self._escalation_handlers:
-            h(agent_id, esc)
+        _dispatch(self._escalation_handlers, agent_id, esc)
 
     def emit_failure(self, agent_id: str, fail: Failure) -> None:
-        for h in self._failure_handlers:
-            h(agent_id, fail)
+        _dispatch(self._failure_handlers, agent_id, fail)
 
     def on_activity(self, handler: Callable[[ActivityEvent], None]) -> None:
         self._activity_handlers.append(handler)

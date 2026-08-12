@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 from .registry import ToolDef
 
 if TYPE_CHECKING:
-    from ...core.agent import Agent
+    from ...core.tool_context import ToolContext
+
+MAX_READ_CHARS = 400_000
 
 
 TOOL_READ_DEF = ToolDef(
@@ -80,8 +82,21 @@ TOOL_EDIT_DEF = ToolDef(
 )
 
 
-def resolve_safe_path(path: str, agent: Agent) -> Path:
-    sandbox = agent.generated_root or Path.cwd()
+def is_hidden(path: str | Path) -> bool:
+    p = Path(path)
+    for part in p.parts:
+        if part.startswith("."):
+            return True
+    return False
+
+
+def sandbox_root(ctx: ToolContext) -> Path:
+    """The workspace an agent is allowed to operate in (read/glob/grep)."""
+    return ctx.generated_root or Path.cwd()
+
+
+def resolve_safe_path(path: str, ctx: ToolContext) -> Path:
+    sandbox = ctx.generated_root or Path.cwd()
     p = Path(path)
     if p.is_absolute():
         resolved = p.resolve()
@@ -100,20 +115,26 @@ def is_hidden(path: str | Path) -> bool:
     return False
 
 
-async def read(*, agent: Agent, path: str) -> str:
+async def read(*, ctx: ToolContext, path: str) -> str:
     try:
-        safe = resolve_safe_path(path, agent)
+        safe = resolve_safe_path(path, ctx)
     except ValueError as e:
         return f"Error: {e}"
-    return safe.read_text()
+    text = safe.read_text()
+    if len(text) > MAX_READ_CHARS:
+        text = text[:MAX_READ_CHARS] + (
+            f"\n\n[TRUNCATED: file larger than {MAX_READ_CHARS} chars; "
+            f"read the first {MAX_READ_CHARS}. Use token_offset to paginate.]"
+        )
+    return text
 
 
-async def write(*, agent: Agent, path: str, content: str) -> str:
+async def write(*, ctx: ToolContext, path: str, content: str) -> str:
     try:
-        safe = resolve_safe_path(path, agent)
+        safe = resolve_safe_path(path, ctx)
     except ValueError as e:
         return f"Error: {e}"
-    lock = await agent.workspace_lock(safe)
+    lock = await ctx.workspace_lock(str(safe))
     async with lock:
         safe.parent.mkdir(parents=True, exist_ok=True)
         previous = safe.read_text() if safe.exists() else None
@@ -127,9 +148,12 @@ async def write(*, agent: Agent, path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {path}"
 
 
-async def glob(*, agent: Agent, pattern: str) -> str:
-    matches = _glob.glob(pattern, recursive=True)
-    _filter = agent.get_gitignore_filter()
+async def glob(*, ctx: ToolContext, pattern: str) -> str:
+    search = Path(pattern)
+    if not search.is_absolute():
+        search = sandbox_root(ctx) / search
+    matches = _glob.glob(str(search), recursive=True)
+    _filter = ctx.gitignore_filter()
     filtered = [m for m in matches if not _filter(m) and not is_hidden(m)]
     if filtered:
         return _json.dumps(sorted(filtered), indent=2)
@@ -137,11 +161,16 @@ async def glob(*, agent: Agent, pattern: str) -> str:
     return _json.dumps(sorted(visible), indent=2)
 
 
-async def grep(*, agent: Agent, pattern: str, include: str | None = None, path: str | None = None) -> str:
-    search_path = Path(path or ".")
+async def grep(*, ctx: ToolContext, pattern: str, include: str | None = None, path: str | None = None) -> str:
+    if path:
+        search_path = Path(path)
+        if not search_path.is_absolute():
+            search_path = sandbox_root(ctx) / search_path
+    else:
+        search_path = sandbox_root(ctx)
     if not search_path.is_dir():
         return f"Error: {search_path} is not a directory"
-    _filter = agent.get_gitignore_filter()
+    _filter = ctx.gitignore_filter()
     matches: list[str] = []
     errors: int = 0
     for f in search_path.rglob(include or "*"):
@@ -170,12 +199,12 @@ async def grep(*, agent: Agent, pattern: str, include: str | None = None, path: 
     return "\n".join(result_parts)
 
 
-async def edit(*, agent: Agent, path: str, old_string: str, new_string: str) -> str:
+async def edit(*, ctx: ToolContext, path: str, old_string: str, new_string: str) -> str:
     try:
-        safe = resolve_safe_path(path, agent)
+        safe = resolve_safe_path(path, ctx)
     except ValueError as e:
         return f"Error: {e}"
-    lock = await agent.workspace_lock(safe)
+    lock = await ctx.workspace_lock(str(safe))
     async with lock:
         content = safe.read_text()
         if old_string not in content:

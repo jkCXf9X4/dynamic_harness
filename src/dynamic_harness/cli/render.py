@@ -5,8 +5,8 @@ from typing import Any
 from rich.text import Text as RichText
 from rich.tree import Tree as RichTree
 
+from ..core.events_format import format_event
 from ..core.task import ActivityEvent, TaskStatus
-from .format_event import format_event
 from .present import AgentNode, Stats
 
 STATUS_COLORS: dict[str, str] = {

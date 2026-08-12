@@ -215,7 +215,7 @@ async def test_compress_tool_nothing_to_compress(runtime: Runtime) -> None:
 @pytest.mark.asyncio
 async def test_compress_tool_no_llm(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
-    agent._messages = [
+    agent.context.messages = [
         {"role": "system", "content": "system"},
         {"role": "user", "content": "question"},
         {"role": "assistant", "content": "answer"},
@@ -232,10 +232,10 @@ def _commit_turn(agent: Agent, *, tools: bool = True, content: str = "reasoning"
     results: list[dict[str, object]] = []
     if tools:
         assistant_msg["tool_calls"] = [
-            {"id": f"call_{agent._turn_counter}", "type": "function", "function": {"name": "bash", "arguments": "{}"}},
+            {"id": f"call_{agent.context.turn_counter}", "type": "function", "function": {"name": "bash", "arguments": "{}"}},
         ]
-        results.append({"role": "tool", "tool_call_id": f"call_{agent._turn_counter}", "content": "output of a tool call"})
-    agent._commit_turn(assistant_msg, results)
+        results.append({"role": "tool", "tool_call_id": f"call_{agent.context.turn_counter}", "content": "output of a tool call"})
+    agent.context.commit_turn(assistant_msg, results)
 
 
 @pytest.mark.asyncio
@@ -243,14 +243,14 @@ async def test_prune_removes_turn_and_leaves_marker(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
     _commit_turn(agent)
     _commit_turn(agent)
-    assert len(agent._messages) == 4
+    assert len(agent.context.messages) == 4
 
     result = await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
     assert "t0" in result.content
-    assert agent._pruned == {"t0"}
-    assert len(agent._messages) == 3
-    assert any("PRUNED t0" in str(m.get("content")) for m in agent._messages)
-    assert len(agent._turns["t0"]) == 2
+    assert agent.context.pruned == {"t0"}
+    assert len(agent.context.messages) == 3
+    assert any("PRUNED t0" in str(m.get("content")) for m in agent.context.messages)
+    assert len(agent.context.turns["t0"]) == 2
 
 
 @pytest.mark.asyncio
@@ -261,10 +261,10 @@ async def test_prune_is_pair_atomic_no_dangling_tool_results(runtime: Runtime) -
     await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
 
     live_ids = set()
-    for m in agent._messages:
+    for m in agent.context.messages:
         for tc in m.get("tool_calls") or []:
             live_ids.add(tc["id"])
-    dangling = [m["tool_call_id"] for m in agent._messages if m.get("role") == "tool" and m["tool_call_id"] not in live_ids]
+    dangling = [m["tool_call_id"] for m in agent.context.messages if m.get("role") == "tool" and m["tool_call_id"] not in live_ids]
     assert dangling == []
 
 
@@ -291,14 +291,14 @@ async def test_restore_returns_pruned_turn(runtime: Runtime) -> None:
     _commit_turn(agent)
     _commit_turn(agent)
     await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
-    assert len(agent._messages) == 3
+    assert len(agent.context.messages) == 3
 
     result = await runtime.tool_registry.execute("restore", "tc2", agent=agent, prune_id="t0")
     assert "Restored turn t0" in result.content
-    assert "t0" not in agent._pruned
-    assert len(agent._messages) == 4
-    assert all(not ("PRUNED t0" in str(m.get("content"))) for m in agent._messages)
-    assert len(agent._turns["t0"]) == 2
+    assert "t0" not in agent.context.pruned
+    assert len(agent.context.messages) == 4
+    assert all(not ("PRUNED t0" in str(m.get("content"))) for m in agent.context.messages)
+    assert len(agent.context.turns["t0"]) == 2
 
 
 @pytest.mark.asyncio
@@ -317,7 +317,7 @@ async def test_prune_accepts_single_string_input(runtime: Runtime) -> None:
     _commit_turn(agent)
     result = await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids="t0")
     assert "t0" in result.content
-    assert agent._pruned == {"t0"}
+    assert agent.context.pruned == {"t0"}
 
 
 @pytest.mark.asyncio
@@ -326,13 +326,13 @@ async def test_restore_errors_when_marker_missing(runtime: Runtime) -> None:
     _commit_turn(agent)
     _commit_turn(agent)
     await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
-    agent._messages = [m for m in agent._messages if not str(m.get("content", "")).startswith("[PRUNED")]
-    assert len(agent._messages) == 2
+    agent.context.messages = [m for m in agent.context.messages if not str(m.get("content", "")).startswith("[PRUNED")]
+    assert len(agent.context.messages) == 2
 
     result = await runtime.tool_registry.execute("restore", "tc2", agent=agent, prune_id="t0")
     assert "no longer present" in result.content
-    assert "t0" in agent._pruned
-    assert len(agent._messages) == 2
+    assert "t0" in agent.context.pruned
+    assert len(agent.context.messages) == 2
 
 
 @pytest.mark.asyncio
@@ -343,12 +343,12 @@ async def test_prune_evicts_old_retained_turns_at_cap(runtime: Runtime) -> None:
         _commit_turn(agent)
     await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0", "t1", "t2", "t3"])
 
-    assert len(agent._pruned) <= 2
-    assert "t0" not in agent._pruned
-    assert "t0" not in agent._turns
-    assert "t0" not in agent._prune_markers
-    assert "t3" in agent._pruned
-    assert "t3" in agent._turns
+    assert len(agent.context.pruned) <= 2
+    assert "t0" not in agent.context.pruned
+    assert "t0" not in agent.context.turns
+    assert "t0" not in agent.context.prune_markers
+    assert "t3" in agent.context.pruned
+    assert "t3" in agent.context.turns
 
 
 @pytest.mark.asyncio
@@ -359,17 +359,17 @@ async def test_restore_uses_stored_index_reorders_markers(runtime: Runtime) -> N
     await runtime.tool_registry.execute("prune", "tc1", agent=agent, prune_ids=["t0"])
     await runtime.tool_registry.execute("prune", "tc2", agent=agent, prune_ids=["t1"])
 
-    order = [str(m.get("content", "")) for m in agent._messages if str(m.get("content", "")).startswith("[PRUNED")]
+    order = [str(m.get("content", "")) for m in agent.context.messages if str(m.get("content", "")).startswith("[PRUNED")]
     assert order[0].startswith("[PRUNED t0")
     assert order[1].startswith("[PRUNED t1")
 
     await runtime.tool_registry.execute("restore", "tc3", agent=agent, prune_id="t0")
 
-    order = [str(m.get("content", "")) for m in agent._messages if str(m.get("content", "")).startswith("[PRUNED")]
+    order = [str(m.get("content", "")) for m in agent.context.messages if str(m.get("content", "")).startswith("[PRUNED")]
     assert len(order) == 1
     assert order[0].startswith("[PRUNED t1")
-    assert "t0" not in agent._pruned
-    assert "t1" in agent._pruned
+    assert "t0" not in agent.context.pruned
+    assert "t1" in agent.context.pruned
 
 
 def test_active_turn_window_is_configurable(tmp: Path) -> None:

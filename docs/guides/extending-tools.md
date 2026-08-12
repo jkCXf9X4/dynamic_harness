@@ -19,10 +19,10 @@ Custom tools extend what agents can do. Tools are registered with the `ToolRegis
 ## Minimal Custom Tool
 
 ```python
-from dynamic_harness.core.capabilities import ToolDef, ToolRegistry
+from dynamic_harness.core.tools import ToolDef, ToolRegistry
 
-async def my_hello_tool(*, agent, name: str) -> str:
-    return f"Hello, {name}! (from agent {agent.id[:8]})"
+async def my_hello_tool(*, ctx, name: str) -> str:
+    return f"Hello, {name}! (from agent {ctx.agent_id[:8]})"
 
 tool_def = ToolDef(
     name="hello",
@@ -47,46 +47,44 @@ runtime.tool_registry.register(tool_def, my_hello_tool)
 All tool functions follow this pattern:
 
 ```python
-async def tool_name(*, agent: Agent, param1: type, param2: type = default) -> str:
-    # agent parameter is injected automatically
+async def tool_name(*, ctx, param1: type, param2: type = default) -> str:
+    # ctx (ToolContext) parameter is injected automatically
     # All schema parameters appear as keyword arguments
     return "Tool output as string"
 ```
 
 ### Key Rules
 
-1. **`agent` is always the first keyword argument** — injected automatically, provides access to `agent.id`, `agent.task`, `agent._runtime`, etc.
+1. **`ctx` (a `ToolContext`) is always the first keyword argument** — the registry builds it from the calling agent. It exposes `ctx.agent_id`, `ctx.task_id`, `ctx.generated_root`, `ctx.gitignore_filter()`, `ctx.workspace_lock(path)`, `ctx.repo_lock()`, `ctx.llm`, `ctx.emit_activity(event)`, `ctx.report(payload)`, `ctx.escalate(issue)`, `ctx.fail(error)`, `ctx.run_delegate_tool(...)`, `ctx.get_other_agent(id)`, `ctx.artifact_store`, and the context-management calls (`ctx.compress()`, `ctx.prune(...)`, `ctx.restore(...)`).
 2. **Return type is always `str`** — the string becomes the tool result fed back to the LLM
 3. **Async required** — all tool functions must be `async def`
 4. **Parameters match the schema** — parameter names and types must correspond to `input_schema.properties`
 
 ## Accessing Runtime Services
 
-The `agent` parameter gives access to everything the agent can see:
+The `ctx` parameter gives access to everything a tool is allowed to see — it is a
+narrow public façade, so tools cannot reach into agent/runtime private state:
 
 ```python
-async def my_tool(*, agent, query: str) -> str:
-    # Access the runtime
-    runtime = agent._runtime
-
-    # Read from artifact store
-    artifacts = runtime.artifact_store
-
-    # Check token usage
-    usage = runtime.get_usage(agent.id)
+async def my_tool(*, ctx, query: str) -> str:
+    # Read from artifact store (owned by the runtime)
+    artifacts = ctx.artifact_store
 
     # Get the LLM
-    llm = agent.llm
+    llm = ctx.llm
 
-    # Get parent/children
-    parent = agent.parent
-    children = agent.children
+    # Emit an activity event (for the CLI/TUI/logs)
+    ctx.emit_activity(event)
 
-    # Read/write files (directly, without the read/write tool)
-    content = (Path("/some/path")).read_text()
+    # File sandbox root (where read/write tools operate)
+    root = ctx.generated_root
 
     return f"Processed query: {query}"
 ```
+
+> Note: to keep the boundary clean, tools do **not** receive the `Agent` directly.
+> If you need agent/task/usage data in a tool, surface it as a public accessor on
+> `Agent` and add a matching accessor on `ToolContext`.
 
 ## Tool Definition Schema
 
@@ -126,15 +124,15 @@ Supported JSON Schema types:
 Tools that stop the agent loop must call one of the agent's terminal methods:
 
 ```python
-async def my_approve(*, agent, decision: str) -> str:
+async def my_approve(*, ctx, decision: str) -> str:
     if decision == "approved":
-        agent.report(ReportPayload(
-            task_id=agent.task.id,
-            summary=f"Work approved by agent {agent.id[:8]}",
+        ctx.report(ReportPayload(
+            task_id=ctx.task_id,
+            summary=f"Work approved by agent {ctx.agent_id[:8]}",
         ))
         return "Approved and completed"
     else:
-        agent.fail(f"Decision rejected: {decision}")
+        ctx.fail(f"Decision rejected: {decision}")
         return "Rejected"
 ```
 
@@ -156,7 +154,7 @@ TOOL_DB_QUERY = ToolDef(
     },
 )
 
-async def _tool_db_query(*, agent, query: str, limit: int = 100) -> str:
+async def _tool_db_query(*, ctx, query: str, limit: int = 100) -> str:
     conn = sqlite3.connect("file:data.db?mode=ro", uri=True)
     try:
         import json
@@ -187,13 +185,13 @@ TOOL_NOTIFY = ToolDef(
     },
 )
 
-async def _tool_notify(*, agent, channel: str, message: str, severity: str = "info") -> str:
+async def _tool_notify(*, ctx, channel: str, message: str, severity: str = "info") -> str:
     # Write notification to a log file (example)
-    log_path = agent._runtime.generated_root or Path("/tmp")
+    log_path = ctx.generated_root or Path("/tmp")
     notifications = log_path / "notifications.jsonl"
 
     entry = {
-        "agent_id": agent.id,
+        "agent_id": ctx.agent_id,
         "channel": channel,
         "severity": severity,
         "message": message,
@@ -248,7 +246,7 @@ subclass or a dedicated registry. If you need a fully custom set of defaults,
 you can also build your own registry:
 
 ```python
-from dynamic_harness.core.capabilities import ToolRegistry, register_default_tools
+from dynamic_harness.core.tools import ToolRegistry, register_default_tools
 
 my_registry = ToolRegistry()
 register_default_tools(my_registry)

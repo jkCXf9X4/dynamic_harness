@@ -136,6 +136,27 @@ class TUI(App[None]):
         self._current_agent_task: asyncio.Task | None = None
         self._root_agent: Agent | None = None
         self._tree_dirty: bool = False
+        self._ask_future: asyncio.Future | None = None
+        self._install_ask_tool()
+
+    def _install_ask_tool(self) -> None:
+        async def _ask(*, ctx, question: str) -> str:
+            loop = asyncio.get_running_loop()
+            fut: asyncio.Future = loop.create_future()
+            self._ask_future = fut
+            self.write_output("output-prompt", f"[Agent asks] {question}\n")
+            self.write_output(
+                "output-label",
+                "Type your answer and press Enter (or enter 'cancel' to abort):\n",
+            )
+            try:
+                answer = await asyncio.shield(fut)
+            finally:
+                self._ask_future = None
+            return answer.strip()
+
+        from ..core.tools.agents import TOOL_ASK_DEF
+        self.runtime.tool_registry.register(TOOL_ASK_DEF, _ask)
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -191,6 +212,12 @@ class TUI(App[None]):
     def on_prompt_submitted(self, event: PromptTextArea.Submitted) -> None:
         text = event.text.strip()
         if not text:
+            return
+
+        if self._ask_future is not None:
+            fut = self._ask_future
+            self._ask_future = None
+            fut.set_result("cancel" if text.lower() == "cancel" else text)
             return
 
         if text.lower() in ("exit", "quit"):

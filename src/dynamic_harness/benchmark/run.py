@@ -76,7 +76,7 @@ def main() -> None:
         model=config.llm.model,
         base_url=config.llm.base_url,
         api_key=api_key,
-        verify_ssl=False,
+        verify_ssl=config.llm.verify_ssl,
         provider_ignore=config.llm.provider_ignore or None,
         provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
     )

@@ -6,7 +6,7 @@ from ..task import ActivityEvent, ActivityEventType
 from .registry import ToolDef
 
 if TYPE_CHECKING:
-    from ...core.agent import Agent
+    from ...core.tool_context import ToolContext
 
 
 TOOL_COMPRESS_DEF = ToolDef(
@@ -62,27 +62,16 @@ TOOL_RESTORE_DEF = ToolDef(
 )
 
 
-COMPRESSION_PROMPT = """\
-You are a context compression engine. Condense the following agent
-conversation into a single concise paragraph. Preserve:
-- The original task and goals
-- Key findings, decisions, and code changes
-- Open questions and unresolved issues
-- Current state and next steps
-
-Output ONLY the summary paragraph, no preamble."""
-
-
-async def compress(*, agent: Agent) -> str:
-    if not agent._messages or len(agent._messages) < 3:
+async def compress(*, ctx: ToolContext) -> str:
+    if not ctx.messages or len(ctx.messages) < 3:
         return "Nothing to compress."
-    llm = agent.llm
+    llm = ctx.llm
     if not llm:
         return "No LLM available for compression."
 
-    result = await agent.context.compress(llm, COMPRESSION_PROMPT)
-    agent.emit_activity(ActivityEvent(
-        agent_id=agent.id,
+    result = await ctx.compress()
+    ctx.emit_activity(ActivityEvent(
+        agent_id=ctx.agent_id,
         event_type=ActivityEventType.COMPRESSION,
         data={
             "before": result.get("before", 0),
@@ -93,12 +82,12 @@ async def compress(*, agent: Agent) -> str:
     return result["message"]
 
 
-async def prune(*, agent: Agent, prune_ids: list[str] | str | None = None) -> str:
-    result = agent.context.prune(prune_ids)
+async def prune(*, ctx: ToolContext, prune_ids: list[str] | str | None = None) -> str:
+    result = ctx.prune(prune_ids)
     assert result is not None
     if result.get("action"):
-        agent.emit_activity(ActivityEvent(
-            agent_id=agent.id,
+        ctx.emit_activity(ActivityEvent(
+            agent_id=ctx.agent_id,
             event_type=ActivityEventType.COMPRESSION,
             data={
                 "turns_pruned": result["turns_pruned"],
@@ -109,5 +98,5 @@ async def prune(*, agent: Agent, prune_ids: list[str] | str | None = None) -> st
     return result["message"]
 
 
-async def restore(*, agent: Agent, prune_id: str) -> str:
-    return agent.context.restore(prune_id)
+async def restore(*, ctx: ToolContext, prune_id: str) -> str:
+    return ctx.restore(prune_id)

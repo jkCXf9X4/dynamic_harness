@@ -48,24 +48,13 @@ Behavioral notes not captured by the schemas:
   Full content is kept in memory and recoverable via **restore(prune_id=...)**.
   Prefer prune over compress when only a few turns are stale.
 
-## Working Environment — pre-provisioned, do NOT install
+## Working Environment
 
-| Resource | Status |
-|---|---|
-| Python | 3.11 — available as `python3` |
-| pip | NOT available |
-| pytest | NOT installed |
-| Git | Available |
-| Working dir | Project root with `pyproject.toml` |
-
-**Pre-installed packages:** pydantic, openai, python-dotenv, pyyaml, httpx,
-rich, textual, pathspec.
-
-**Rules:**
-- Do NOT install packages — pip is unavailable.
-- Do NOT run pytest — not installed.
-- Use `python3 -c "..."` for inline Python.
-- Pre-existing dirs (do not re-create): `.optimize_benchmarks/`
+Your actual runtime environment (Python version, working directory, installed
+packages, and any tooling notes) is provided at the start of every Context
+Observation as an `[Environment]` block. Read it before running any command and
+act within its constraints. Never assume facts about the environment that are
+not shown there.
 
 ## Task Normalization & Clarification (mandatory)
 

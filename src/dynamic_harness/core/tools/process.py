@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import shlex as _shlex
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .registry import ToolDef
 
 if TYPE_CHECKING:
-    from ...core.agent import Agent
+    from ...core.tool_context import ToolContext
 
 
 TOOL_BASH_DEF = ToolDef(
@@ -26,16 +27,37 @@ TOOL_BASH_DEF = ToolDef(
 )
 
 
-async def bash(*, agent: Agent, command: str, timeout: int = 30000) -> str:
+_READ_ONLY_COMMANDS = {
+    "ls", "cat", "head", "tail", "grep", "find", "pwd", "which",
+    "python3", "python", "echo", "env", "printenv", "wc", "sort", "uniq",
+}
+_READ_ONLY_GIT_SUBCOMMANDS = {
+    "status", "log", "show", "diff", "branch", "config", "stash", "blame", "rev-parse",
+}
+
+
+def _is_read_only(args: list[str]) -> bool:
+    """Heuristic: does this command only read, so no repo lock is needed?"""
+    if not args:
+        return True
+    base = Path(args[0]).name
+    if base in _READ_ONLY_COMMANDS:
+        return True
+    if base == "git" and len(args) > 1 and args[1] in _READ_ONLY_GIT_SUBCOMMANDS:
+        return True
+    return False
+
+
+async def bash(*, ctx: ToolContext, command: str, timeout: int = 30000) -> str:
     try:
         args = _shlex.split(command)
     except ValueError as e:
         return f"Error: invalid command syntax: {e}"
 
-    cwd = agent.generated_root
+    cwd = ctx.generated_root
     repo_lock = None
-    if args:
-        repo_lock = agent.repo_lock()
+    if args and not _is_read_only(args):
+        repo_lock = ctx.repo_lock()
         await repo_lock.acquire()
     try:
         proc = await asyncio.create_subprocess_exec(

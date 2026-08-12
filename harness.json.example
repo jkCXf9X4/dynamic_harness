@@ -3,10 +3,16 @@
     "model": "deepseek/deepseek-v4-flash-0731",
     "base_url": "https://openrouter.ai/api/v1",
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": true
+    "provider_allow_fallbacks": true,
+    "verify_ssl": true
   },
   "safety": {
     "max_iterations": 500,
     "repeated_call_limit": 5
+  },
+  "agent": {
+    "environment_notes": [
+      "Working dir is project root; run `pytest` from there."
+    ]
   }
 }

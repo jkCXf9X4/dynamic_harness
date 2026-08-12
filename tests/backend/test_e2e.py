@@ -133,8 +133,8 @@ async def test_e2e_multi_agent_rich_artifact_views(runtime: Runtime) -> None:
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert root._last_report is not None
-    assert root._last_report.confidence == 0.92
+    assert root.last_report is not None
+    assert root.last_report.confidence == 0.92
 
     commits = runtime.repository.log()
     assert len(commits) >= 3
@@ -336,8 +336,8 @@ async def test_e2e_headless_runner_with_rich_report(runtime: Runtime) -> None:
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert root._last_report is not None
-    assert root._last_report.confidence == 0.88
+    assert root.last_report is not None
+    assert root.last_report.confidence == 0.88
 
     commits = runtime.repository.log()
     assert len(commits) >= 1
@@ -437,8 +437,8 @@ async def test_e2e_m_flag_integration(runtime: Runtime) -> None:
     await root.run()
 
     assert root.task.status.value == "completed"
-    assert root._last_report is not None
-    assert "Audit executed" in root._last_report.summary
+    assert root.last_report is not None
+    assert "Audit executed" in root.last_report.summary
 
 
 @pytest.mark.asyncio

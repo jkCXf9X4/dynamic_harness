@@ -227,8 +227,8 @@ async def test_agent_reads_file_and_reports(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read greeting.txt and report")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._last_report is not None
-    assert "Hello" in agent._last_report.summary
+    assert agent.last_report is not None
+    assert "Hello" in agent.last_report.summary
 
 
 @pytest.mark.asyncio
@@ -252,7 +252,7 @@ async def test_agent_write_then_read_then_report(runtime: Runtime) -> None:
     await agent.run()
     assert agent.task.status.value == "completed"
     assert "data-123" in f.read_text()
-    assert "data-123" in agent._last_report.summary
+    assert "data-123" in agent.last_report.summary
 
 
 @pytest.mark.asyncio
@@ -270,7 +270,7 @@ async def test_agent_delegates_and_reports(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Delegate a subtask and report")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._last_report is not None
+    assert agent.last_report is not None
 
 
 @pytest.mark.asyncio
@@ -289,8 +289,8 @@ async def test_agent_continues_on_tool_error(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read a nonexistent file")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._last_report is not None
-    assert "doesn't exist" in agent._last_report.summary or "The file" in agent._last_report.summary
+    assert agent.last_report is not None
+    assert "doesn't exist" in agent.last_report.summary or "The file" in agent.last_report.summary
 
 
 @pytest.mark.asyncio
@@ -408,9 +408,9 @@ async def test_agent_pages_through_file_with_token_offset(runtime: Runtime) -> N
     agent = _make_agent(runtime, "Read large.txt in chunks and report")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert "Section 000" in agent._last_report.summary
-    assert "Section 001" in agent._last_report.summary
-    assert "Section 002" in agent._last_report.summary
+    assert "Section 000" in agent.last_report.summary
+    assert "Section 001" in agent.last_report.summary
+    assert "Section 002" in agent.last_report.summary
 
 
 @pytest.mark.asyncio
@@ -464,7 +464,7 @@ async def test_agent_reasoning_through_paginated_data(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read treasure.txt page by page and report the treasure location")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert "B-7" in agent._last_report.summary
+    assert "B-7" in agent.last_report.summary
 
 
 # ── Compress tool ────────────────────────────────────────────────────
@@ -472,7 +472,7 @@ async def test_agent_reasoning_through_paginated_data(runtime: Runtime) -> None:
 @pytest.mark.asyncio
 async def test_compress_tool_with_messages(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "test")
-    agent._messages = [
+    agent.context.messages = [
         {"role": "system", "content": "system"},
         {"role": "user", "content": "user"},
         {"role": "assistant", "content": "assistant"},
@@ -499,15 +499,15 @@ async def test_agent_prunes_then_restores_turn(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read old.txt and new.txt")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert "OLD-CONTENT" in agent._last_report.summary
-    assert "OLD-CONTENT" in json.dumps(agent._messages)
-    assert all(not str(m.get("content", "")).startswith("[PRUNED") for m in agent._messages)
+    assert "OLD-CONTENT" in agent.last_report.summary
+    assert "OLD-CONTENT" in json.dumps(agent.context.messages)
+    assert all(not str(m.get("content", "")).startswith("[PRUNED") for m in agent.context.messages)
 
     live_ids = set()
-    for m in agent._messages:
+    for m in agent.context.messages:
         for tc in m.get("tool_calls") or []:
             live_ids.add(tc["id"])
-    dangling = [m["tool_call_id"] for m in agent._messages if m.get("role") == "tool" and m["tool_call_id"] not in live_ids]
+    dangling = [m["tool_call_id"] for m in agent.context.messages if m.get("role") == "tool" and m["tool_call_id"] not in live_ids]
     assert dangling == []
 
 
@@ -523,10 +523,10 @@ async def test_agent_prune_removes_turn_from_context(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read data.txt")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert any(str(m.get("content", "")).startswith("[PRUNED t0") for m in agent._messages)
-    assert all(m.get("role") != "tool" or "DATA-CONTENT" not in str(m.get("content", "")) for m in agent._messages)
-    assert agent._pruned == {"t0"}
-    assert len(agent._turns["t0"]) == 2
+    assert any(str(m.get("content", "")).startswith("[PRUNED t0") for m in agent.context.messages)
+    assert all(m.get("role") != "tool" or "DATA-CONTENT" not in str(m.get("content", "")) for m in agent.context.messages)
+    assert agent.context.pruned == {"t0"}
+    assert len(agent.context.turns["t0"]) == 2
 
 
 @pytest.mark.asyncio
@@ -542,12 +542,12 @@ async def test_compress_resets_prune_bookkeeping(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read data.txt")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._pruned == set()
-    assert agent._prune_markers == {}
-    assert agent._turn_order == ["t2"]
-    assert set(agent._turns) == {"t2"}
-    assert "DATA-CONTENT" not in str(agent._messages)
-    assert any(str(m.get("content", "")).startswith("[Context compressed]") for m in agent._messages)
+    assert agent.context.pruned == set()
+    assert agent.context.prune_markers == {}
+    assert agent.context.turn_order == ["t2"]
+    assert set(agent.context.turns) == {"t2"}
+    assert "DATA-CONTENT" not in str(agent.context.messages)
+    assert any(str(m.get("content", "")).startswith("[Context compressed]") for m in agent.context.messages)
 
 
 @pytest.mark.asyncio
@@ -564,11 +564,11 @@ async def test_agent_prunes_in_flight_turn_same_response(runtime: Runtime) -> No
     agent = _make_agent(runtime, "Read data.txt")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._pruned == {"t0"}
-    assert any(str(m.get("content", "")).startswith("[PRUNED t0") for m in agent._messages)
-    assert all(m.get("role") != "tool" or "DATA-CONTENT" not in str(m.get("content", "")) for m in agent._messages)
-    assert len(agent._turns["t0"]) == 3
-    assert agent._in_flight_prune == set()
+    assert agent.context.pruned == {"t0"}
+    assert any(str(m.get("content", "")).startswith("[PRUNED t0") for m in agent.context.messages)
+    assert all(m.get("role") != "tool" or "DATA-CONTENT" not in str(m.get("content", "")) for m in agent.context.messages)
+    assert len(agent.context.turns["t0"]) == 3
+    assert agent.context.in_flight_prune == set()
 
 
 @pytest.mark.asyncio
@@ -586,8 +586,8 @@ async def test_agent_in_flight_prune_then_restore(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "Read data.txt")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._pruned == set()
-    assert "DATA-CONTENT" in json.dumps(agent._messages)
+    assert agent.context.pruned == set()
+    assert "DATA-CONTENT" in json.dumps(agent.context.messages)
 
 
 @pytest.mark.asyncio
@@ -604,9 +604,9 @@ async def test_prune_unknown_in_flight_id_keeps_marker_bookkeeping(runtime: Runt
     agent = _make_agent(runtime, "Read data.txt")
     await agent.run()
     assert agent.task.status.value == "completed"
-    assert agent._pruned == {"t0"}
-    assert len(agent._messages) >= 1
-    assert agent._in_flight_prune == set()
+    assert agent.context.pruned == {"t0"}
+    assert len(agent.context.messages) >= 1
+    assert agent.context.in_flight_prune == set()
 
 
 # ── Converse tool (covered by existing tests in test_capabilities.py) ──

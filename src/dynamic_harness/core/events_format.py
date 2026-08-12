@@ -1,6 +1,12 @@
+"""Single source for turning an ``ActivityEvent`` into a human-readable line.
+
+Both the Rich terminal, the Textual TUI and the programmatic `Harness` logger
+render events through here so the event->text mapping lives in exactly one place.
+"""
+
 from __future__ import annotations
 
-from ..core.task import ActivityEvent, ActivityEventType
+from .task import ActivityEvent, ActivityEventType
 
 W = "\U0001f527"   # wrench (tool)
 CK = "\u2705"      # check (tool result)
@@ -18,8 +24,8 @@ def format_event(
 ) -> str | None:
     """Render an ActivityEvent into a single line (no trailing newline).
 
-    Used by both the Rich terminal and the Textual TUI so the event->text
-    mapping lives in exactly one place.
+    Returns ``None`` for events that have no useful one-line representation
+    (e.g. per-iteration bookkeeping).
     """
     eid = event.agent_id[:8]
     d = event.data
@@ -63,7 +69,13 @@ def format_event(
         wtype = d.get("warning_type", "")
         if wtype == "max_iterations":
             return f"{lead(WARN if emoji else '')}\u26a0 max iterations ({d.get('iteration', 0)}/{d.get('limit', 0)})"
-        return f"{lead(WARN if emoji else '')}\u26a0 repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})"
+        if wtype in ("repeated_calls",):
+            return f"{lead(WARN if emoji else '')}\u26a0 repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})"
+        if wtype == "timeout":
+            return f"{lead(WARN if emoji else '')}\u26a0 timeout ({d.get('timeout_seconds', 0)}s after {d.get('iteration', 0)} iters)"
+        if wtype == "agent_error":
+            return f"{lead(WARN if emoji else '')}\u26a0 agent error: {str(d.get('error', ''))[:120]}"
+        return f"{lead(WARN if emoji else '')}\u26a0 {wtype}"
     elif et == ActivityEventType.ITERATION:
         return None
     return None
