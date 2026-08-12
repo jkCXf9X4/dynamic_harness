@@ -149,7 +149,11 @@ class Agent:
             raise
         except Exception as exc:
             if not self.last_report and not self.last_failure:
-                self.fail(f"Unhandled agent error: {exc}")
+                self.fail(f"Unhandled agent error: {exc}", trace=type(exc).__name__)
+            else:
+                ts = self._trace_store
+                if ts:
+                    ts.record_event(self.id, "agent_error", error=str(exc))
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.SAFETY_WARNING,
@@ -618,4 +622,7 @@ class Agent:
     def fail(self, error: str, trace: str | None = None) -> None:
         f = Failure(task_id=self.task.id, error=error, trace=trace)
         self.outcome.failure = f
+        ts = self._trace_store
+        if ts:
+            ts.record_event(self.id, "fail", error=error, trace=trace)
         self._runtime.deliver_failure(self.id, f)

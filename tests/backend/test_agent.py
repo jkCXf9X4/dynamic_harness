@@ -71,6 +71,38 @@ async def test_agent_failure(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_failure_recorded_to_trace(tmp) -> None:
+    import json as _json
+    from dynamic_harness.core.trace import TraceStore
+
+    traced = Runtime(
+        artifact_root=tmp / "artifacts",
+        repo_root=tmp / "repo",
+        trace_root=tmp / "traces",
+        generated_root=tmp,
+    )
+
+    class FailingAgent(Agent):
+        async def run(self) -> None:
+            try:
+                raise RuntimeError("Intentional failure")
+            except Exception as e:
+                self.fail(str(e))
+
+    traced.register_agent_class("FailingAgent", FailingAgent)
+    root = traced.delegate(Task(description="Fail"), agent_type="FailingAgent")
+    await root.run()
+
+    assert root.task.status.value == "failed"
+    trace_file = tmp / "traces" / root.id / "trace.jsonl"
+    assert trace_file.exists()
+    entries = [_json.loads(line) for line in trace_file.read_text().splitlines()]
+    fail_entries = [e for e in entries if e["type"] == "event" and e["event"] == "fail"]
+    assert len(fail_entries) == 1
+    assert "Intentional failure" in fail_entries[0]["error"]
+
+
+@pytest.mark.asyncio
 async def test_agent_has_no_sibling_visibility(runtime: Runtime) -> None:
     class LeafAgent(Agent):
         async def run(self) -> None:

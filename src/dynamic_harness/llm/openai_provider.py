@@ -26,8 +26,9 @@ class OpenAIProvider(LLMProvider):
         verify_ssl: bool = True,
         provider_ignore: list[str] | None = None,
         provider_allow_fallbacks: bool = True,
+        timeout: httpx.Timeout | float = 120.0,
     ) -> None:
-        http_client = httpx.AsyncClient(verify=verify_ssl)
+        http_client = httpx.AsyncClient(verify=verify_ssl, timeout=timeout)
         self._http_client = http_client
         self.client = AsyncOpenAI(
             base_url=base_url,
