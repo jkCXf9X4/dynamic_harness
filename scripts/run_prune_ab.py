@@ -42,10 +42,12 @@ class AbCollector(MetricsCollector):
     def _count_tool_calls(self, runtime) -> dict[str, int]:
         counts = {"prune": 0, "restore": 0, "compress": 0, "read": 0, "bash": 0}
         for _aid, agent in runtime.all_agents().items():
-            msgs = list(agent._messages)
-            for turn in agent._turns.values():
+            seen: set[int] = set()
+            msgs = list(agent.context.messages)
+            for turn in agent.context.turns.values():
                 for m in turn:
-                    if m not in msgs:
+                    if id(m) not in seen:
+                        seen.add(id(m))
                         msgs.append(m)
             for m in msgs:
                 for tc in m.get("tool_calls") or []:
