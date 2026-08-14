@@ -12,7 +12,7 @@ from .agent import Agent
 from .environment import EnvironmentInfo, build_environment_info
 from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
-from .task import ActivityEvent, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
+from .task import ActivityEvent, ActivityEventType, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
 from .trace import TraceStore
 from .usage import UsageTracker
 
@@ -47,6 +47,10 @@ class Runtime:
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
         self._active_turn_window = (config.agent.active_turn_window if config else 50)
+        self._self_heal_mode = config.self_heal.mode if config else True
+        self._self_heal_max_resumes = config.self_heal.max_resumes if config else 1
+        self._self_heal_max_fresh = config.self_heal.max_fresh_retries if config else 1
+        self._heal_counts: dict[str, dict[str, int]] = {}
         self._environment_info: EnvironmentInfo = build_environment_info(
             notes=config.agent.environment_notes if config else []
         )
@@ -120,21 +124,169 @@ class Runtime:
         system_prompt: str | None = None,
         agent_type: str | None = None,
         root_agent: Agent | None = None,
+        expected_outputs: list[str] | None = None,
     ) -> Agent:
         """The single path to run an agent task.
 
         Fresh task: delegates a new root agent with ``description`` and runs it.
-        ``root_agent``: resumes an existing agent with the new message
-        (``continue_with_input``). Returns the agent; read ``agent.outcome`` /
-        ``agent.last_report`` for the result.
+        ``expected_outputs`` (optional) lists on-disk files the agent must
+        produce; they are used as the deliverable check for self-heal. If the
+        run ends in failure, or finishes without producing its deliverable, a
+        bounded self-heal policy (docs/concepts/self-healing.md) may resume it
+        once (blunt) or spawn a fresh worker (rot). ``root_agent``: resumes an
+        existing agent with the new message (``continue_with_input``). Returns
+        the (possibly healed) agent; read ``agent.outcome`` / ``agent.last_report``
+        for the result.
         """
         if root_agent is not None:
             await root_agent.continue_with_input(description)
             return root_agent
         task = Task(description=description, role=role, system_prompt=system_prompt)
         root = self.delegate(task, agent_type=agent_type)
+        root._expected_outputs = list(expected_outputs) if expected_outputs else None
         await root.run()
+        root = await self._recover(root)
         return root
+
+    # -- self-heal (docs/concepts/self-healing.md) ------------------------
+
+    def _heal_counts_for(self, agent_id: str) -> dict[str, int]:
+        return self._heal_counts.setdefault(agent_id, {"resume": 0, "fresh": 0})
+
+    def _emit_heal(self, agent: Agent, action: str, diagnosis: str, attempt: int) -> None:
+        self.event_bus.emit_activity(ActivityEvent(
+            agent_id=agent.id,
+            event_type=ActivityEventType.SELF_HEAL,
+            data={"action": action, "diagnosis": diagnosis, "attempt": attempt},
+        ))
+
+    def _diagnose(self, agent: Agent) -> str:
+        """Rot (poisoned context → fresh worker) vs blunt (healthy → resume)."""
+        return "rot" if agent.is_rot() else "blunt"
+
+    def _has_deliverable(self, agent: Agent) -> bool:
+        """True when the agent produced its required on-disk deliverable.
+
+        If ``expected_outputs`` were declared for the run, they must all exist
+        on disk. Otherwise, fall back to the system contract: a report that
+        declares written files or saved artifact IDs. A prose-only report (no
+        files, no artifacts) is not a deliverable.
+        """
+        outputs = getattr(agent, "_expected_outputs", None)
+        if outputs is not None:
+            return all(Path(p).exists() for p in outputs)
+        r = agent.last_report
+        return bool(r and (r.artifact_ids or r.files_written))
+
+    def _resume_nudge(self, agent: Agent) -> str:
+        if agent.last_failure is None:
+            outputs = getattr(agent, "_expected_outputs", None)
+            if outputs:
+                return (
+                    f"You finished your previous turn but did not write the "
+                    f"required output file(s): {', '.join(outputs)}. Resume NOW "
+                    f"from your current context: write exactly these files to "
+                    f"disk via write(), verify they parse, then call report() "
+                    f"declaring the artifact_ids / files_written."
+                )
+            return (
+                f"You finished your previous turn but did not write a deliverable "
+                f"to disk (no files were written and no artifact was saved). "
+                f"Resume NOW from your current context: write your findings to "
+                f"disk via write(), then call report() declaring the "
+                f"artifact_ids / files_written."
+            )
+        err = agent.last_failure.error or "the previous attempt failed"
+        return (
+            f"A previous attempt of this task failed with: {err}. "
+            f"Resume your current work and correct the failure — do not repeat "
+            f"the same mistake — then write your deliverable(s) to disk and "
+            f"complete the task to a final report."
+        )
+
+    def _fresh_restart(self, agent: Agent) -> Agent:
+        """Spawn a fresh worker over the same task, carrying the failure reason."""
+        task = agent.task
+        if agent.last_failure:
+            reason = agent.last_failure.error or "the prior attempt failed"
+            note = (
+                f"[Note: a prior attempt failed — {reason}. Begin from a clean "
+                f"slate and complete the task; do not repeat the prior failure.]"
+            )
+        else:
+            outputs = getattr(agent, "_expected_outputs", None)
+            if outputs:
+                note = (
+                    f"[Note: a prior attempt finished without writing "
+                    f"{', '.join(outputs)}. Begin from a clean slate and complete "
+                    f"the task, writing those files and reporting them.]"
+                )
+            else:
+                note = (
+                    f"[Note: a prior attempt finished without producing an "
+                    f"on-disk deliverable. Begin from a clean slate and complete "
+                    f"the task, writing your findings to disk and reporting them.]"
+                )
+        desc = f"{task.description}\n\n{note}"
+        new_task = Task(
+            description=desc,
+            role=task.role,
+            system_prompt=task.system_prompt,
+            metadata=dict(task.metadata),
+            parent_id=task.parent_id,
+        )
+        return self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)
+
+    async def _recover(self, agent: Agent) -> Agent:
+        """Bounded, diagnosis-driven recovery. Returns the effective agent.
+
+        Heals two unsatisfactory terminations: a failure, and a report that
+        produced no on-disk deliverable (missing expected output / no declared
+        files or artifacts). Escalations are never healed. See
+        docs/concepts/self-healing.md.
+        """
+        # No LLM → nothing to resume; leave the agent as-is.
+        if not self._self_heal_mode or self._llm is None:
+            return agent
+        if agent.task.status is TaskStatus.escalated:
+            return agent
+        if agent.last_failure is None and self._has_deliverable(agent):
+            return agent  # healthy
+
+        counts = self._heal_counts_for(agent.id)
+        diagnosis = self._diagnose(agent)
+
+        def _healed(a: Agent) -> bool:
+            # A terminal report that carries an on-disk deliverable. Keyed on the
+            # report (not the absence of failure) because a resumed agent keeps
+            # its earlier `last_failure` even after it successfully reports.
+            return a.last_report is not None and self._has_deliverable(a)
+
+        # Layer 1: resume the same agent once on a blunt miss (salvage context).
+        if diagnosis == "blunt" and counts["resume"] < self._self_heal_max_resumes:
+            counts["resume"] += 1
+            self._emit_heal(agent, "resume", diagnosis, counts["resume"])
+            try:
+                await agent.continue_with_input(self._resume_nudge(agent))
+            except Exception:
+                pass  # fall through to a fresh worker if resuming errored
+            if _healed(agent):
+                return agent  # healed
+
+        # Layer 3: fresh worker on rot (or when resume didn't heal).
+        if not _healed(agent) and counts["fresh"] < self._self_heal_max_fresh:
+            counts["fresh"] += 1
+            self._emit_heal(agent, "fresh", diagnosis, counts["fresh"])
+            fresh = self._fresh_restart(agent)
+            try:
+                await fresh.run()
+            except Exception:
+                pass
+            return fresh
+
+        # Layer 4: escalate / leave the failed agent in place (bounded out).
+        return agent
+
 
     async def aclose(self) -> None:
         if self._llm:
@@ -162,6 +314,7 @@ class Runtime:
                 active_turn_window=self._active_turn_window,
             )
         agent.set_environment_info(self._environment_info)
+        agent.agent_type = agent_type
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:
@@ -288,6 +441,10 @@ class Runtime:
     def record_retry(self, agent_id: str) -> None:
         self._agent_retries[agent_id] = self._agent_retries.get(agent_id, 0) + 1
 
+    def get_heal_count(self, agent_id: str, key: str) -> int:
+        """Healed-action count (``resume`` / ``fresh``) for an agent id."""
+        return self._heal_counts.get(agent_id, {}).get(key, 0)
+
     def track_agent_task(self, task: asyncio.Task[Any]) -> None:
         """Track a spawned agent run task (used by the delegate tool) so reset()
         can cancel in-flight work."""
@@ -312,5 +469,6 @@ class Runtime:
             self.trace_store.clear()
         self._path_locks.clear()
         self._agent_retries.clear()
+        self._heal_counts.clear()
         if clear_handlers:
             self.event_bus.clear()

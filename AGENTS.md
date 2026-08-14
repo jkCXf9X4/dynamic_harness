@@ -113,6 +113,10 @@ docs/
 ├── api/                      → Module-level API reference
 ├── guides/                   → How-to guides for common workflows
 └── concepts/                 → Architectural deep-dives
+    ├── agent-lifecycle.md
+    ├── artifact-system.md
+    ├── delegation-model.md
+    └── self-healing.md        → Layered failure-recovery policy (resume / fresh / escalate)
 ```
 
 ## Architecture Principles

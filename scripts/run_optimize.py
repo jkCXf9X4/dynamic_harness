@@ -73,15 +73,28 @@ def _runtime(config) -> Runtime:
     return rt
 
 
-async def _run_generation(config, llm, prompt_path: Path) -> None:
-    """Run a generation agent that writes variant JSON to disk."""
+async def _run_generation(
+    config,
+    llm,
+    prompt_path: Path,
+    out_path: Path,
+) -> None:
+    """Run a generation agent that writes variant JSON to disk.
+
+    Reliability is delegated to the harness self-heal policy
+    (docs/concepts/self-healing.md): the Runtime's expected-outputs check
+    resumes / re-delegates the agent if it finishes without writing
+    ``out_path``, or failed. Here we only verify the file appeared.
+    """
     rt = _runtime(config)
     rt.set_llm(llm)
     rt.on_activity(on_activity)
     prompt = prompt_path.read_text()
-    await rt.run(prompt)
+    await rt.run(prompt, expected_outputs=[str(out_path)])
     if rt.trace_store:
         rt.trace_store.clear()
+    if not out_path.exists():
+        raise RuntimeError(f"generation failed to produce {out_path}")
 
 
 def _load_variants(path: Path, prefix: str) -> dict[str, str | None]:
@@ -153,7 +166,7 @@ async def main() -> None:
     print("\n=== ROUND 1: generate 5 variants ===", flush=True)
     ROUND1_VARIANTS.unlink(missing_ok=True)
     t0 = time.monotonic()
-    await _run_generation(config, llm, Path("prompts/generate_variants.prompt"))
+    await _run_generation(config, llm, Path("prompts/generate_variants.prompt"), ROUND1_VARIANTS)
     variants1 = _load_variants(ROUND1_VARIANTS, "v")
     print(f"Round 1 generation done in {time.monotonic()-t0:.0f}s: {list(variants1)}", flush=True)
 
@@ -180,7 +193,7 @@ async def main() -> None:
     tmp_prompt_file = OUT_DIR / "_refine.prompt"
     tmp_prompt_file.write_text(refine_prompt)
     t0 = time.monotonic()
-    await _run_generation(config, llm, tmp_prompt_file)
+    await _run_generation(config, llm, tmp_prompt_file, ROUND2_VARIANTS)
     tmp_prompt_file.unlink(missing_ok=True)
     variants2 = _load_variants(ROUND2_VARIANTS, "n")
     print(f"Round 2 refinement done in {time.monotonic()-t0:.0f}s: {list(variants2)}", flush=True)

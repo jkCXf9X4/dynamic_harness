@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from .runtime import Runtime
 
 
+ROT_ITERATION_THRESHOLD = 40
+
+
 class Agent:
     def __init__(
         self,
@@ -56,6 +59,17 @@ class Agent:
         self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()
+
+        # Registry-name of this agent's class (None for the base Agent). Used by
+        # self-heal to restart a failed agent as the same agent_type.
+        self.agent_type: str | None = None
+        # On-disk outputs this agent must produce (set by Runtime.run). Self-heal
+        # uses them as the deliverable check when provided.
+        self._expected_outputs: list[str] | None = None
+        # Rot discriminators: set when the loop stopped because the *context*
+        # itself is the problem (repeated identical calls / a safety limit).
+        self._repeated_calls_detected: bool = False
+        self._terminated_by_safety: bool = False
 
         self.context = AgentContext(
             active_turn_window=active_turn_window,
@@ -96,6 +110,20 @@ class Agent:
     def iteration_count(self) -> int:
         """Number of LLM iterations this agent has executed."""
         return self._iteration
+
+    def is_rot(self) -> bool:
+        """True when the agent stopped because its *context* is the problem.
+
+        Poisoned/shallow-rot indicators: repeated identical tool calls, a safety
+        limit (max iterations / timeout), or so many iterations that the context
+        has grown unbounded. Self-heal uses this to prefer a fresh worker over
+        resuming a poisoned context.
+        """
+        return (
+            self._repeated_calls_detected
+            or self._terminated_by_safety
+            or self._iteration >= ROT_ITERATION_THRESHOLD
+        )
 
     # -- context knobs -----------------------------------------------------
     # Public tunable knobs (adjustable after construction) live on the
@@ -240,6 +268,7 @@ class Agent:
             and self._started_at is not None
             and time.monotonic() - self._started_at > self._safety_timeout_seconds
         ):
+            self._terminated_by_safety = True
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.SAFETY_WARNING,
@@ -255,6 +284,7 @@ class Agent:
             )
             return True
         if self._iteration > self._safety_max_iterations:
+            self._terminated_by_safety = True
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.SAFETY_WARNING,
@@ -438,6 +468,7 @@ class Agent:
             len(self._recent_batches) == self.repeated_call_limit
             and all(sig == batch_sig for sig in self._recent_batches)
         ):
+            self._repeated_calls_detected = True
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.SAFETY_WARNING,
@@ -510,6 +541,12 @@ class Agent:
             if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
                 if not child.last_report and not child.last_failure:
                     child.fail(f"Child agent raised: {outcome}")
+
+        # Self-heal: recover failed children (resume-once or fresh worker) so the
+        # parent format step below reflects the healed result, not the failure.
+        for tcid, child in list(deferred_map.items()):
+            if child.last_failure is not None:
+                deferred_map[tcid] = await self._runtime._recover(child)
 
         for r in results:
             tcid = r["tool_call_id"]
@@ -599,6 +636,8 @@ class Agent:
             self._deferred_delegates.append((tool_call_id, child, task))
             return json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
         await task
+        if child.last_failure is not None:
+            child = await self._runtime._recover(child)
         return self._format_delegate_result(child)
 
     def report(self, payload: ReportPayload) -> None:

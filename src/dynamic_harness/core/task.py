@@ -90,6 +90,7 @@ class ActivityEventType(str, Enum):
     DELEGATION_END = "delegation_end"
     COMPRESSION = "compression"
     SAFETY_WARNING = "safety_warning"
+    SELF_HEAL = "self_heal"
     ITERATION = "iteration"
 
 

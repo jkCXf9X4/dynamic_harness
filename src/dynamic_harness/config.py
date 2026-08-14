@@ -26,6 +26,20 @@ class SafetyConfig(BaseModel):
     repeated_call_limit: int = 5
 
 
+class SelfHealConfig(BaseModel):
+    """Bounded, diagnosis-driven recovery for agent runs that end in failure.
+
+    ``max_resumes`` bounds Layer 1 (resume the same agent with a corrective
+    nudge — salvages a healthy context). ``max_fresh_retries`` bounds Layer 3
+    (spawn a fresh worker over the same task when the context is poisoned / rot).
+    See docs/concepts/self-healing.md.
+    """
+
+    mode: bool = True
+    max_resumes: int = Field(default=1, ge=0)
+    max_fresh_retries: int = Field(default=1, ge=0)
+
+
 class AgentConfig(BaseModel):
     environment_notes: list[str] = Field(
         default_factory=list,
@@ -42,6 +56,7 @@ class AgentConfig(BaseModel):
 class HarnessConfig(BaseModel):
     llm: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    self_heal: SelfHealConfig = Field(default_factory=SelfHealConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
 
 

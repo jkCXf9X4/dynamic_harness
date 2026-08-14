@@ -23,6 +23,13 @@ Generate 5 variant system prompts for the agent in this repository.
    an exact count; a correct, complete prompt beats one truncated to hit a limit.
    Decide the
    length that best serves each focus.
+   MAKE LARGER ALTERATIONS: Do not just rephrase the seed. Rebuild each variant
+   with substantial, structurally distinct changes — different section order,
+   different emphasis/priorities, condensed or expanded prose, changed rule
+   granularity, and different overall length where it serves the focus. Two
+   variants should rarely read as near-duplicates. Bold, opinionated rewrites
+   that genuinely change agent behavior are strongly preferred over cosmetic
+   rewordings that preserve the seed's structure.
 3) Write ALL 5 variants to .optimize_benchmarks/variants.json as a JSON object:
    {"v1": "<full text>", "v2": "<full text>", ..., "v5": "<full text>"}
 4) Verify the JSON parses and contains exactly 5 variants.
