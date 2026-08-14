@@ -41,11 +41,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _install_ask_tool(runtime: Runtime) -> None:
+def _install_ask_tool(runtime: Runtime, ask_queue: asyncio.Queue[str] | None = None) -> None:
     async def _ask(*, ctx, question: str) -> str:
-        console.print()
-        answer = Prompt.ask(f"[bold cyan]Agent {ctx.agent_id[:8]} asks:[/] {question}")
-        return answer.strip()
+        if ask_queue is None:
+            console.print()
+            answer = Prompt.ask(f"[bold cyan]Agent {ctx.agent_id[:8]} asks:[/] {question}")
+            return answer.strip()
+        await ask_queue.put(question)
+        return (await ask_queue.get()).strip()
     runtime.tool_registry.register(TOOL_ASK_DEF, _ask)
 
 
@@ -85,9 +88,18 @@ async def _run_with_live(runtime: Runtime, description: str, root_agent: Agent |
     runtime.on_failure(lambda aid, f: events.append(f"\u2717 {aid[:8]} fail: {f.error[:60]}"))
     runtime.on_activity(lambda e: events.append(render_event(e)) if render_event(e) else None)
 
+    ask_queue: asyncio.Queue[str] = asyncio.Queue()
+    _install_ask_tool(runtime, ask_queue)
+
     with Live(get_renderable=lambda: _render(runtime, events), refresh_per_second=4, console=console) as live:
         run_task = asyncio.create_task(runtime.run(description, root_agent=root_agent))
         while not run_task.done():
+            while not ask_queue.empty():
+                question: str = ask_queue.get_nowait()
+                live.stop()
+                console.print()
+                Prompt.ask(f"[bold cyan]Agent asks:[/] {question}")
+                live.start()
             await asyncio.sleep(0.25)
     root = await run_task
     return root
@@ -102,7 +114,6 @@ def _print_outcome(root: Agent) -> None:
 
 
 def _run_batch(runtime: Runtime, prompt: str) -> None:
-    _install_ask_tool(runtime)
     root = asyncio.run(_run_with_live(runtime, prompt))
     _print_outcome(root)
 
@@ -111,7 +122,6 @@ def _run_batch(runtime: Runtime, prompt: str) -> None:
 
 
 async def _run_interactive_async(runtime: Runtime) -> None:
-    _install_ask_tool(runtime)
     console.print("[bold]Dynamic Harness \u2014 Interactive Terminal[/]")
     console.print("Type a task, or /help for commands.\n")
 

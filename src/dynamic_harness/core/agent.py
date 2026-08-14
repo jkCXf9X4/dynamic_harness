@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .context import AgentContext
-from .prompts import AGENT_SYSTEM_PROMPT, ObservationInputs, build_observation, build_user_message
+from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, ObservationInputs, build_observation, build_user_message
 from .task import (
     ActivityEvent,
     ActivityEventType,
@@ -75,6 +75,8 @@ class Agent:
             active_turn_window=active_turn_window,
         )
 
+        self._focus = FocusLedger(objective=task.description or "")
+
         self._runtime = runtime
         self._event_bus = runtime.event_bus
         self._tool_registry = runtime.tool_registry
@@ -136,6 +138,48 @@ class Agent:
     @active_turn_window.setter
     def active_turn_window(self, value: int) -> None:
         self.context.active_turn_window = max(int(value), 1)
+
+    # -- focus / reminders -------------------------------------------------
+
+    @property
+    def focus(self) -> FocusLedger:
+        """The agent's runtime-held focus state, re-stated every turn.
+
+        Independent of the (prompt-optimized) system prompt; used to re-anchor
+        long-running agents on objective / acceptance / deliverable.
+        """
+        return self._focus
+
+    def set_focus(
+        self,
+        *,
+        objective: str | None = None,
+        acceptance: list[str] | None = None,
+        deliverable: str | None = None,
+        pending: list[str] | None = None,
+        done: list[str] | None = None,
+        pulse_interval: int | None = None,
+    ) -> None:
+        """Update the focus ledger that is re-stated to the agent each turn."""
+        if objective is not None:
+            self._focus.objective = objective
+        if acceptance is not None:
+            self._focus.acceptance = list(acceptance)
+        if deliverable is not None:
+            self._focus.deliverable = deliverable
+        if pending is not None:
+            self._focus.pending = list(pending)
+        if done is not None:
+            self._focus.done = list(done)
+        if pulse_interval is not None:
+            self._focus.pulse_interval = max(int(pulse_interval), 1)
+
+    def mark_focus_done(self, item: str) -> None:
+        """Record a completed scope item (removed from pending, shown as done)."""
+        if item not in self._focus.done:
+            self._focus.done.append(item)
+        if item in self._focus.pending:
+            self._focus.pending.remove(item)
 
     # -- LLM / environment -------------------------------------------------
 
@@ -331,6 +375,7 @@ class Agent:
             next_turn_id=f"t{self.context.turn_counter}",
             environment_text=self.environment_info,
             task_description=self.task.description,
+            focus=self._focus,
         ))
 
     def _emit_iteration(self, prompt_tokens: int) -> None:

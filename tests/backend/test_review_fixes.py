@@ -13,6 +13,7 @@ import pytest
 from dynamic_harness.config import HarnessConfig
 from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.environment import build_environment_info
+from dynamic_harness.core.prompts import FocusLedger, render_focus
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
 
@@ -77,3 +78,61 @@ async def test_single_observation_slot(runtime: Runtime) -> None:
     obs = [m for m in agent.context.messages if m.get("role") == "system"]
     assert len(obs) == 1
     assert "[Environment]" in obs[0]["content"]
+
+
+def test_focus_renders_full_then_condensed() -> None:
+    """Reminders pulse full detail, then collapse to objective+deliverable."""
+    focus = FocusLedger(
+        objective="Refactor module X",
+        acceptance=["all tests green", "no new deps"],
+        deliverable="write refactor.md and report()",
+        pending=["step 3"],
+        done=["step 1", "step 2"],
+        pulse_interval=5,
+    )
+    full = render_focus(focus, iteration=1)
+    assert "[Focus] Objective: Refactor module X" in full
+    assert "Acceptance:" in full
+    assert "Remaining: step 3" in full
+    assert "Done so far:" in full
+    assert "Deliverable:" in full
+
+    between = render_focus(focus, iteration=3)
+    assert "[Focus] Objective:" in between
+    assert "Deliverable:" in between
+    assert "Acceptance:" not in between
+    assert "Remaining:" not in between
+
+    pulsed = render_focus(focus, iteration=10)
+    assert "Acceptance:" in pulsed
+
+
+def test_focus_rendered_into_observation_preserves_single_slot(runtime: Runtime) -> None:
+    """Focus lands in the observation without creating extra messages."""
+    agent = runtime.delegate(Task(description="Long memory task"))
+    agent.set_focus(
+        acceptance=["a", "b"],
+        deliverable="write out.txt and report()",
+        pending=["p"],
+        pulse_interval=10,
+    )
+    agent._set_observation(prompt_tokens=5)
+    obs = [m for m in agent.context.messages if m.get("role") == "system"]
+    assert len(obs) == 1
+    assert "[Focus] Objective: Long memory task" in obs[0]["content"]
+    assert "Deliverable: write out.txt and report()" in obs[0]["content"]
+    # On the first turn, full acceptance detail is shown.
+    assert "Acceptance: a; b" in obs[0]["content"]
+
+
+def test_focus_is_runtime_state_not_prompt_text(runtime: Runtime) -> None:
+    """Reminders are rendered by code, independent of the (optimizable) prompt."""
+    agent = runtime.delegate(Task(description="O", system_prompt="OPTIMIZED_TEXT"))
+    agent.set_focus(objective="O", deliverable="D")
+    agent._set_observation(prompt_tokens=5)
+    obs = [m for m in agent.context.messages if m.get("role") == "system"]
+    rendered = obs[0]["content"]
+    # Focus is injected even though the system prompt is externally optimized;
+    # nothing about it lives in the prompt body itself.
+    assert "[Focus] Objective: O" in rendered
+    assert "Deliverable: D" in rendered
