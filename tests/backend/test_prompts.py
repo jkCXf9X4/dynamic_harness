@@ -30,19 +30,28 @@ def test_orchestrator_prompt_is_role_driven() -> None:
     """The delegation-only directive comes from role, not from being root."""
     base = "plain base prompt"
     with_role = build_system_prompt(base, role=ORCHESTRATOR_ROLE)
-    assert "TOP-LEVEL ORCHESTRATOR" in with_role
+    assert "ORCHESTRATOR" in with_role
     assert base in with_role
 
     # A worker with no role must NOT receive the orchestrator directive.
     no_role = build_system_prompt(base, role=None)
     assert no_role == base
-    assert "TOP-LEVEL" not in no_role
+    assert "ORCHESTRATOR" not in no_role
 
     # A different role is scoped but is not an orchestrator, and must not
     # inherit the [ROLE]/scope double tag.
     other = build_system_prompt(base, role="Security Auditor")
-    assert "TOP-LEVEL" not in other
+    assert "ORCHESTRATOR" not in other
     assert "Security Auditor" in other
+
+
+def test_orchestrator_prompt_is_depth_neutral() -> None:
+    """An orchestrator may sit at any depth (sub-orchestrators supported)."""
+    p = ORCHESTRATOR_SYSTEM_PROMPT.lower()
+    assert "top-level" not in p
+    assert "root agent" not in p
+    assert "any depth" in p or "orchestrator" in p
+    assert "report up" in p
 
 
 def test_role_tag_omitted_when_no_role() -> None:
@@ -76,7 +85,18 @@ def test_verification_language_reconciled_with_context_economics() -> None:
 def test_orchestrator_role_in_production_prompt() -> None:
     """The shipped prompt wired up for orchestrator behavior."""
     built = build_system_prompt(AGENT_SYSTEM_PROMPT, role=ORCHESTRATOR_ROLE)
-    assert "TOP-LEVEL ORCHESTRATOR" in built
+    assert "ORCHESTRATOR" in built
+
+
+def test_delegate_tool_documents_sub_orchestrator() -> None:
+    """The delegate tool points at 'orchestrator' for forced deeper decomposition."""
+    from dynamic_harness.core.tools.agents import TOOL_DELEGATE_DEF
+
+    doc = TOOL_DELEGATE_DEF.description
+    schema = TOOL_DELEGATE_DEF.input_schema["properties"]["role"]["description"]
+    assert "orchestrator" in doc.lower()
+    assert "'orchestrator'" in schema or '"orchestrator"' in schema
+    assert "sub-orchestrator" in doc.lower() + schema.lower()
 
 
 def test_runtime_run_does_not_force_orchestrator(runtime: Runtime) -> None:

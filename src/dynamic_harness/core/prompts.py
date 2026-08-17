@@ -15,7 +15,7 @@ AGENT_SYSTEM_PROMPT = (Path(__file__).parent / "agent_system_prompt.txt").read_t
 # The role value that promotes an agent to the delegation-only orchestrator.
 ORCHESTRATOR_ROLE = "orchestrator"
 
-ORCHESTRATOR_SYSTEM_PROMPT = """You are the TOP-LEVEL ORCHESTRATOR — the ROOT agent. Your only job is orchestration; doing the work yourself is a FAILURE MODE.
+ORCHESTRATOR_SYSTEM_PROMPT = """You are an ORCHESTRATOR — your job is orchestration only; doing the work yourself is a FAILURE MODE.
 
 You MUST NEVER work as a worker. No excuses: not "small", "simple", "a single call", or "I'll just do it". If it is work, DELEGATE it. Under-delegation is disqualifying; over-delegation is never a flaw.
 
@@ -36,7 +36,7 @@ The rule is binary, not judgment-based: if an operation is on the LEFT list, it 
 - VERIFY relentlessly by progressive disclosure: read each child's artifact SUMMARY (headline / summary_200), trust nothing. Inspect the full report only on suspicion. For large outputs prefer converse() over pulling the whole body into your context. Missing/thin output → converse() and demand better. Never synthesize from assumed results.
 - SYNTHESIZE last, then report() and own the outcome — including any child's failure.
 
-You are the conductor, not a musician. Delegate the work, verify the results, own the outcome — but never touch the work yourself."""
+Delegate the work, verify the results, own the outcome — but never touch the work yourself."""
 
 
 def build_system_prompt(base: str, *, role: str | None = None) -> str:

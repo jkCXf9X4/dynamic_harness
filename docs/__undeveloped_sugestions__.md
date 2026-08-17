@@ -16,3 +16,11 @@ New script: scripts/buy_and_hold_comparison.py. Findings updated in docs/ROTATIO
 ---
 
 add a prompt to the top level agent regarding its role as orchestrator and delegator
+
+
+---
+
+should agents be able to create sub-orchestrators?
+could this work as a way to force sub-delegation further?
+
+evaluate if there are gains and/streamlining of prompts/code
