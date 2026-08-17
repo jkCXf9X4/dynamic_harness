@@ -1,36 +1,18 @@
 
-Always normalize the prompt to ensure best results and make sure there is no unknowns that could influence the perceived quality of the results  
-
----
 
 
 How to enable the agent to remove un-relevant context
 
-Ensure that the prune tool actually works
-
----
-Always evaluate the prompt to ensure best results and make sure there is no unknowns that could influence the perceived quality of the results  
-
-DO a complete and critical review of the codebase, look at architectural solutions, module/class boundaries and pattern/architectural alternatives for evaluating potential improvements
-
-Prioritize ease of working and understandable solutions over smart and compact and ensure that modules and classes are of reasonable size and abstraction
-Its ok to do large changes to the code base, no need to persist interfaces---this is an experimental software 
-
-Store the review as markdown in a separate file for tracking
-
---- 
-
-Make sure the tui works 
-
+Can we replace parts of the context continuously?
 
 ---
 
-add to system prompt to ensure that prompt is normalized/adapted to the tooling and ask if there is any clarification needed
+when pasting in a text, it starts execution if there is an enter within the pasted text and misses the pasted text after the newline
 
+Also flagged a data caveat: bonds_global shows −99.99% (likely a bad/zero price point in the cached series).
+
+New script: scripts/buy_and_hold_comparison.py. Findings updated in docs/ROTATION_BACKTRACE.md.
 
 ---
-Always normalize the prompt to ensure best results and make sure there is no unknowns that could influence the perceived quality of the results  
 
-Do a critical review of internal module boundaries to ensure that modules and classes are of reasonable size and abstraction
-
-Its ok to do large changes to the code base, no need to persist interfaces---this is an experimental software 
+add a prompt to the top level agent regarding its role as orchestrator and delegator

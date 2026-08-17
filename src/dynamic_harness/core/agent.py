@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import time
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import httpx
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    InternalServerError,
+    RateLimitError,
+)
 
 from .context import AgentContext
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, ObservationInputs, build_observation, build_user_message
@@ -213,6 +223,13 @@ class Agent:
         self._iteration = 0
         self._recent_batches = deque(maxlen=self.repeated_call_limit)
         self._started_at = time.monotonic()
+        await self._run_guarded()
+
+    async def _run_guarded(self) -> None:
+        """Run the tool-calling loop, converting any uncaught error into a
+        graceful failure so the run (and the interactive session around it)
+        survives instead of crashing the process. Shared by ``run()`` and the
+        interactive ``continue_with_input()`` resume path."""
         try:
             await self._run_loop()
         except asyncio.CancelledError:
@@ -240,7 +257,7 @@ class Agent:
                 return
             self.task.status = TaskStatus.running
             self.context.messages.append({"role": "user", "content": user_message})
-            await self._run_loop()
+            await self._run_guarded()
 
     async def _llm_call_with_retry(self, tools: list[dict], max_retries: int = 3) -> Any:
         llm = self.llm
@@ -254,24 +271,47 @@ class Agent:
                 return await llm.generate_with_tools(self.context.messages, tools)
             except Exception as e:
                 last_error = e
-                error_str = str(e).lower()
-                is_retryable = any(
-                    keyword in error_str
-                    for keyword in (
-                        "rate_limit", "rate limit", "429", "too many requests",
-                        "server_error", "500", "502", "503", "504",
-                        "timeout", "temporary", "connection", "network",
-                        "overloaded", "capacity",
-                        "expecting value", "jsondecode", "anticipate_processing_error",
-                    )
-                )
-                if not is_retryable or attempt >= max_retries:
+                if not self._is_retryable(e) or attempt >= max_retries:
                     raise
                 self._runtime.record_retry(self.id)
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
                 await asyncio.sleep(delay)
 
         raise last_error  # type: ignore[misc]
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        """True for transient failures (timeouts, connection drops, rate limits,
+        server errors) that are safe to retry. Classifies by exception type where
+        possible, falling back to message/keyword matching for unknown providers.
+        """
+        for cls in (
+            APITimeoutError,
+            APIConnectionError,
+            RateLimitError,
+            InternalServerError,
+            httpx.TimeoutException,
+            httpx.TransportError,
+        ):
+            if isinstance(exc, cls):
+                return True
+        # Server-side status errors (5xx) are transient regardless of message.
+        if isinstance(exc, APIStatusError):
+            status = getattr(exc, "status_code", None)
+            if status is not None and 500 <= status < 600:
+                return True
+
+        error_str = str(exc).lower()
+        return any(
+            keyword in error_str
+            for keyword in (
+                "rate_limit", "rate limit", "429", "too many requests",
+                "server_error", "500", "502", "503", "504",
+                "timeout", "timed out", "temporary", "connection", "network",
+                "overloaded", "capacity",
+                "expecting value", "jsondecode", "anticipate_processing_error",
+            )
+        )
 
     # -- turn / context helpers (delegate to context) ---------------------
 

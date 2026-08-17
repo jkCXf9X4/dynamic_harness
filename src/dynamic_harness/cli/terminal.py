@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import select
 import sys
 import termios
 import tty
@@ -65,7 +66,12 @@ def _utf8_char(fd: int, lead: int) -> str:
 
 
 def _read_input(prompt: str) -> str:
-    """Read a line (or multi-line via Ctrl+J) with arrow-key cursor editing."""
+    """Read a line (or multi-line via Ctrl+J/paste) with arrow-key cursor editing.
+
+    Bracketed paste is enabled up front so a pasted newline can never be
+    mistaken for Enter: pasted bytes arrive wrapped in ``\\x1b[200~`` /
+    ``\\x1b[201~`` and are inserted literally.
+    """
     if not sys.stdin.isatty():
         return input(prompt)
 
@@ -76,23 +82,32 @@ def _read_input(prompt: str) -> str:
     pos = 0
     saved = ""
     hist_nav: int | None = None
+    pasting = False
     try:
         tty.setraw(fd)
-        sys.stdout.write("\r\n\x1b[s")
+        sys.stdout.write("\r\n\x1b[s\x1b[?2004h")
+        sys.stdout.flush()
         _render_input(prompt, text, pos)
         while True:
             raw = os.read(fd, 1)
             if not raw:
                 continue
             b = raw[0]
-            if b == 0x0D:  # Enter -> submit
-                sys.stdout.write("\r\n")
-                break
+            if b == 0x0D:  # Enter (submit) or pasted newline
+                if pasting or select.select([fd], [], [], 0)[0]:
+                    # A CR inside a paste, or one followed by more buffered
+                    # input, is a line break -- never a submit.
+                    text.insert(pos, "\n")
+                    pos += 1
+                    hist_nav = None
+                else:
+                    sys.stdout.write("\r\n")
+                    break
             elif b == 0x03:  # Ctrl+C
                 raise KeyboardInterrupt
             elif b == 0x04:  # Ctrl+D
                 raise EOFError
-            elif b == 0x0A:  # Ctrl+J -> new line
+            elif b == 0x0A:  # LF (Ctrl+J / pasted newline) -> new line
                 text.insert(pos, "\n")
                 pos += 1
                 hist_nav = None
@@ -109,6 +124,13 @@ def _read_input(prompt: str) -> str:
                 if not s2:
                     continue
                 c = s2[0]
+                if c == 0x32:  # '2' -> 200~/201~ bracketed-paste marker
+                    s3 = os.read(fd, 1)
+                    s4 = os.read(fd, 1)
+                    s5 = os.read(fd, 1)
+                    if s3 == b"0" and s5 == b"~":
+                        pasting = s4 == b"0"  # 200~ start / 201~ end
+                        continue
                 if c == 0x41:  # up
                     if hist_nav is None:
                         saved = "".join(text)
@@ -150,6 +172,7 @@ def _read_input(prompt: str) -> str:
                 hist_nav = None
             _render_input(prompt, text, pos)
     finally:
+        sys.stdout.write("\x1b[?2004l")
         sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
     return "".join(text)
