@@ -141,7 +141,11 @@ class Runtime:
         if root_agent is not None:
             await root_agent.continue_with_input(description)
             return root_agent
-        task = Task(description=description, role=role, system_prompt=system_prompt)
+        task = Task(
+            description=description,
+            role=role,
+            system_prompt=system_prompt,
+        )
         root = self.delegate(task, agent_type=agent_type)
         root._expected_outputs = list(expected_outputs) if expected_outputs else None
         await root.run()

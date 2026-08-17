@@ -19,6 +19,30 @@ class ToolDef(BaseModel):
     input_schema: dict[str, Any]
 
 
+# Tools an orchestrator IS allowed: orchestration + verification + its own
+# context management (compress/prune/restore only manage its own memory).
+# Anything else (read/write/glob/grep/edit/bash/webfetch) is worker work that
+# an orchestrator physically cannot invoke — closing the "what counts as work"
+# loophole in code, not just in prompt text.
+ORCHESTRATOR_ALLOWED_TOOLS: frozenset[str] = frozenset({
+    "delegate", "converse", "ask", "read_artifact",
+    "report", "escalate", "fail",
+    "compress", "prune", "restore",
+})
+
+
+ROLE_TOOL_OVERRIDES: dict[str, frozenset[str]] = {
+    "orchestrator": ORCHESTRATOR_ALLOWED_TOOLS,
+}
+
+
+def tools_for_role(role: str | None) -> frozenset[str] | None:
+    """Return the explicit allow-list for a role, or None for no restriction."""
+    if role is None:
+        return None
+    return ROLE_TOOL_OVERRIDES.get(role)
+
+
 class ToolResult:
     def __init__(self, tool_call_id: str, content: str) -> None:
         self.tool_call_id = tool_call_id
@@ -41,6 +65,18 @@ class ToolRegistry:
     async def execute(self, name: str, tool_call_id: str, agent: Agent, **kwargs: Any) -> ToolResult:
         token_limit: int = kwargs.pop("token_limit", 100)
         token_offset: int = kwargs.pop("token_offset", 0)
+
+        allowed = tools_for_role(getattr(agent, "role", None))
+        if allowed is not None and name not in allowed:
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                content=(
+                    f"Error: tool '{name}' is not allowed for role "
+                    f"'{getattr(agent, 'role', None)}'. Orchestrators may only use: "
+                    f"{', '.join(sorted(allowed))}. Delegate this work instead."
+                ),
+            )
+
         entry = self._tools.get(name)
         if not entry:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error: unknown tool '{name}'")
@@ -68,9 +104,12 @@ class ToolRegistry:
             )
         return ToolResult(tool_call_id=tool_call_id, content=content)
 
-    def openai_schemas(self) -> list[dict]:
+    def openai_schemas(self, role: str | None = None) -> list[dict]:
+        allowed = tools_for_role(role)
         result: list[dict] = []
         for td, _ in self._tools.values():
+            if allowed is not None and td.name not in allowed:
+                continue
             schema = dict(td.input_schema)
             schema["properties"] = dict(schema.get("properties", {}))
             schema["properties"]["token_limit"] = {

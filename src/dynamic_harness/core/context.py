@@ -88,6 +88,20 @@ class AgentContext:
                         names.append(name)
         return ",".join(names) if names else "reply"
 
+    def estimate_prompt_tokens(self) -> int:
+        """Estimate the token size of the *current* live context (system + history).
+
+        Uses the same heuristic as ``turn_token_estimate`` so the headline and
+        per-turn figures are comparable. This is an estimate of what will be sent
+        next turn, not cumulative billed usage.
+        """
+        total = 0
+        for m in self.messages:
+            total += len(str(m.get("content") or ""))
+            for tc in m.get("tool_calls") or []:
+                total += len(json.dumps(tc.get("function", {}).get("arguments", "")))
+        return max(1, total // 4)
+
     def active_turn_ids(self) -> list[str]:
         active = [pid for pid in self.turn_order if pid not in self.pruned]
         return active[-self.active_turn_window:]

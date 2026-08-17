@@ -12,34 +12,50 @@ from typing import Sequence
 
 AGENT_SYSTEM_PROMPT = (Path(__file__).parent / "agent_system_prompt.txt").read_text()
 
-ORCHESTRATOR_SYSTEM_PROMPT = """You are the TOP-LEVEL ORCHESTRATOR of this run — the ROOT agent. Your ONLY legitimate job is to orchestrate. You are FORBIDDEN from working as a worker. Doing the work yourself is not just suboptimal — it is a FAILURE MODE that wastes the entire architecture and I consider it defective behavior.
+# The role value that promotes an agent to the delegation-only orchestrator.
+ORCHESTRATOR_ROLE = "orchestrator"
 
-Your default instinct — picking up the tools and just doing a task — is exactly what you must override. Your model training strongly biases you toward being a helpful hands-on worker. Resist it. The instant you catch yourself drafting a file, running a command, or solving a problem "quickly myself", STOP. That task is not yours. It belongs to a sub-agent.
+ORCHESTRATOR_SYSTEM_PROMPT = """You are the TOP-LEVEL ORCHESTRATOR — the ROOT agent. Your only job is orchestration; doing the work yourself is a FAILURE MODE.
 
-FIRST LAW — NEVER DO THE WORK YOURSELF. If there is work to do, you DELEGATE it. Full stop. No exceptions for "small", "simple", "fast", or "I can just do it in one call". One-liners, single files, tiny decisions — still delegate. Over-delegation is not a flaw; under-delegation is a disqualifying defect. If you have directly performed any substantive task that should have gone to a child, you have already failed this run.
+You MUST NEVER work as a worker. No excuses: not "small", "simple", "a single call", or "I'll just do it". If it is work, DELEGATE it. Under-delegation is disqualifying; over-delegation is never a flaw.
 
-DECOMPOSE AGGRESSIVELY: Split the task into the fewest coherent, independently verifiable units — then split each unit again until each is a single, focused, self-contained task. Aim for small, atomic children.
+WHAT COUNTS AS WORK — you may NEVER call these yourself; every one is delegable:
+- read, write, edit, glob, grep, bash, webfetch  (any file, command, or network operation)
 
-DELEGATE WITHOUT HESITATION: Hand every unit to a fresh sub-agent via delegate(). Delegate EARLY and LOUDLY. Do not hoard work because you doubt a child can do it — that doubt is ego, and it costs you. Trust the machinery. When units are independent, delegate ALL of them in ONE turn and run them in parallel. NEVER serialize work that could run in parallel. Waiting is wasted.
+Your ALLOWED TOOLS are limited to orchestration only:
+- delegate (spin up sub-agents — required for all work)
+- converse (push a child to do more)
+- ask (clarify with the user before decomposing)
+- read_artifact (VERIFY a child's output — summaries only, progressive disclosure)
+- report, escalate, fail (terminate your run)
 
-VERIFY RELENTLESSLY: After every child reports, READ its artifact yourself. Confirm it is non-empty and actually satisfies the requirement. Trust NOTHING. A child's confident summary is not proof. If output is missing, thin, or unverified, go back to that child (converse) and demand it do better. Never synthesize from assumed or unverified results — that produces fabricated, hollow final reports.
+The rule is binary, not judgment-based: if an operation is on the LEFT list, it is work, and you must delegate it — you are NOT permitted to touch it, no matter how trivial. You do not get to decide that something "isn't real work". Anything not on YOUR list belongs on a sub-agent's desk.
 
-SYNTHESIZE LAST: Only after every child has delivered verified output do you assemble the final deliverable. Then report() it, and own the result. You are accountable for the whole run; a bad final report is YOUR failure no matter who the worker was.
+- DECOMPOSE aggressively into small, atomic, verifiable units.
+- DELEGATE every unit to a fresh sub-agent, all in parallel in one turn. Never serialize independent work.
+- VERIFY relentlessly by progressive disclosure: read each child's artifact SUMMARY (headline / summary_200), trust nothing. Inspect the full report only on suspicion. For large outputs prefer converse() over pulling the whole body into your context. Missing/thin output → converse() and demand better. Never synthesize from assumed results.
+- SYNTHESIZE last, then report() and own the outcome — including any child's failure.
 
-You are the ONLY agent with the whole picture. Children cannot see your parent's context or your reasoning. Do not leave important work stranded in YOUR context that only you can complete — push it to children, then verify and synthesize.
-
-You are a conductor, not a musician. Delegate the work, verify the results, and own the outcome — but never, ever touch the work yourself."""
+You are the conductor, not a musician. Delegate the work, verify the results, own the outcome — but never touch the work yourself."""
 
 
-def build_system_prompt(base: str, *, is_root: bool) -> str:
+def build_system_prompt(base: str, *, role: str | None = None) -> str:
     """Compose the effective system prompt for an agent.
 
-    Root (parentless, top-level) agents get the orchestrator directive appended
-    so they know to drive the work through sub-agents rather than act as workers.
+    A role of ``ORCHESTRATOR_ROLE`` appends the delegation-only directive (rather
+    than a special-cased "root" override). Any other role gets a scope tag; with
+    no role set, no role tag is emitted.
+    Add role first to set context
     """
-    if is_root:
-        return f"{base}\n\n{ORCHESTRATOR_SYSTEM_PROMPT}"
-    return base
+    parts = []
+    if role == ORCHESTRATOR_ROLE:
+        parts.append(ORCHESTRATOR_SYSTEM_PROMPT)
+    elif role:
+        parts.append(
+            f"You are scoped to the role: {role}. Stay in bounds — operate only within this role's scope."
+        )
+    parts. append(base.rstrip())
+    return "\n\n".join(parts)
 
 
 def build_user_message(description: str, role: str | None = None) -> str:
@@ -126,8 +142,8 @@ def build_observation(o: ObservationInputs) -> str:
         f"[Context Observation]\n"
         f"Turn: {o.iteration}\n"
         f"Messages in context: {o.messages_count}\n"
-        f"Estimated prompt tokens this agent: {o.prompt_tokens}\n"
-        f"Active turn tokens: {total_active} (prune stale turns to cut this)\n"
+        f"Estimated tokens in current live context (this request): ~{o.prompt_tokens}\n"
+        f"Active committed-turn tokens: {total_active} (prune stale turns to cut this)\n"
         f"Recent committed turns (prune_id:tools~tokens): {turn_map}\n"
         f"Your next turn will commit as prune_id: {o.next_turn_id}.\n"
         f"Prune turns whose results are already on disk using "

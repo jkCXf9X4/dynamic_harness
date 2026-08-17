@@ -18,6 +18,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 from ..core.agent import Agent
+from ..core.prompts import ORCHESTRATOR_ROLE
 from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from .common import build_runtime
@@ -248,7 +249,9 @@ async def _run_with_live(runtime: Runtime, description: str, root_agent: Agent |
     _install_ask_tool(runtime, ask_queue)
 
     with Live(get_renderable=lambda: _render(runtime, events), refresh_per_second=4, console=console) as live:
-        run_task = asyncio.create_task(runtime.run(description, root_agent=root_agent))
+        run_task = asyncio.create_task(
+            runtime.run(description, role=ORCHESTRATOR_ROLE, root_agent=root_agent)
+        )
         while not run_task.done():
             while not ask_queue.empty():
                 question: str = ask_queue.get_nowait()

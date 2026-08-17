@@ -57,7 +57,9 @@ class Agent:
         self.id = agent_id
         self.task = task
         self.parent = parent
+
         self.children: list[Agent] = []
+
         self._system_prompt = system_prompt or task.system_prompt
         self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
@@ -201,6 +203,11 @@ class Agent:
     def guidelines(self) -> str:
         return AGENT_SYSTEM_PROMPT
 
+    @property
+    def role(self) -> str | None:
+        """The agent's task role (drives tool-scoping, e.g. the orchestrator)."""
+        return self.task.role
+
     def set_environment_info(self, info: EnvironmentInfo) -> None:
         """Inject a runtime-detected environment description shown to the agent."""
         self._environment_info = info
@@ -219,7 +226,7 @@ class Agent:
         user_message = build_user_message(self.task.description, self.task.role)
         system_prompt = build_system_prompt(
             self._system_prompt or AGENT_SYSTEM_PROMPT,
-            is_root=self.parent is None,
+            role=self.task.role,
         )
         self.context.reset(system_prompt, user_message)
         self._has_run = True
@@ -576,14 +583,14 @@ class Agent:
         return False
 
     async def _run_loop(self) -> None:
-        tools = self._tool_registry.openai_schemas()
+        tools = self._tool_registry.openai_schemas(role=self.task.role)
 
         while True:
             self._iteration += 1
             if self._safety_check():
                 return
 
-            prompt_tokens = self._usage_tracker.get_usage(self.id).get("prompt_tokens", 0)
+            prompt_tokens = self.context.estimate_prompt_tokens()
             self._set_observation(prompt_tokens)
             self._emit_iteration(prompt_tokens)
 

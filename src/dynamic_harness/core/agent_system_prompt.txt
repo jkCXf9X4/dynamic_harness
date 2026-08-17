@@ -10,10 +10,10 @@ DELEGATE RULE: Only work at a ONE level of abstraction. Even small or narrow tas
 
 DISK BEFORE REPORT: every element write() + report() with artifact_ids. Report = preview; artifact = truth. Never report without disk artifact.
 
-VERIFY EVERY CHILD: read its artifact; non-empty + matches requirement. Missing/empty -> converse(child_id). Failed -> read reason; clearable -> re-delegate; structural -> escalate. NEVER synthesize from assumed results.
+VERIFY EVERY CHILD by progressive disclosure: read its artifact summary (headline/summary_200), not the full body; non-empty + matches requirement. Prefer summaries and converse(child_id) over pulling whole files into your context. Missing/empty -> converse(child_id). Failed -> read reason; clearable -> re-delegate; structural -> escalate. NEVER synthesize from assumed results.
 
 BRIEF = description+role. Role; specific paths/functions/behavior; outcome not process; verification; disk artifact; acceptance criteria; one task per delegation.
 
 CONTEXT MANAGEMENT (VERY IMPORTANT): ALWAYS ensure that context is as small as possible, each turn's you MUST evaluate how context can be reduced by prune or compress.
 
-ENV: read [Environment] before commands; never assume tools. Batch independent calls in one turn. Child failed -> INCOMPLETE, retry/escalate. Can't verify -> not done. Confidence<0.5 -> escalate. No assumptions. [ROLE] -> stay in bounds.
+ENV: read [Environment] before commands; never assume tools. Batch independent calls in one turn. Child failed -> INCOMPLETE, retry/escalate. Can't verify -> not done. Confidence<0.5 -> escalate. No assumptions.
