@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
+import sys
+import termios
+import tty
 from pathlib import Path
 
 from rich.console import Console
@@ -20,6 +24,135 @@ from .present import build_agent_tree, build_stats
 from .render import render_event, render_rich_tree
 
 console = Console()
+
+_HISTORY: list[str] = []
+
+
+def _render_input(prompt: str, text: list[str], pos: int) -> None:
+    """Redraw a multi-line editable prompt anchored at the saved cursor position."""
+    text_str = "".join(text)
+    lines = text_str.split("\n")
+    before = text_str[:pos]
+    line_idx = before.count("\n")
+    col = len(before.split("\n")[-1]) + (len(prompt) if line_idx == 0 else 0) + 1
+
+    sys.stdout.write("\x1b[?25l")      # hide cursor during redraw
+    sys.stdout.write("\x1b[u\x1b[J")   # restore to anchor, clear from there down
+    sys.stdout.write(prompt + lines[0])
+    for extra in lines[1:]:
+        sys.stdout.write("\r\n" + extra)
+    up = (len(lines) - 1) - line_idx
+    if up:
+        sys.stdout.write(f"\x1b[{up}A")
+    sys.stdout.write("\r")
+    if col > 1:
+        sys.stdout.write(f"\x1b[{col - 1}C")
+    sys.stdout.write("\x1b[?25h")      # show cursor at edit position
+    sys.stdout.flush()
+
+
+def _utf8_char(fd: int, lead: int) -> str:
+    if 0xC0 <= lead <= 0xDF:
+        n = 1
+    elif 0xE0 <= lead <= 0xEF:
+        n = 2
+    elif 0xF0 <= lead <= 0xF7:
+        n = 3
+    else:
+        n = 0
+    data = bytes([lead]) + os.read(fd, n)
+    return data.decode("utf-8", "replace")
+
+
+def _read_input(prompt: str) -> str:
+    """Read a line (or multi-line via Ctrl+J) with arrow-key cursor editing."""
+    if not sys.stdin.isatty():
+        return input(prompt)
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    prompt = console.render_str(prompt).plain
+    text: list[str] = []
+    pos = 0
+    saved = ""
+    hist_nav: int | None = None
+    try:
+        tty.setraw(fd)
+        sys.stdout.write("\r\n\x1b[s")
+        _render_input(prompt, text, pos)
+        while True:
+            raw = os.read(fd, 1)
+            if not raw:
+                continue
+            b = raw[0]
+            if b == 0x0D:  # Enter -> submit
+                sys.stdout.write("\r\n")
+                break
+            elif b == 0x03:  # Ctrl+C
+                raise KeyboardInterrupt
+            elif b == 0x04:  # Ctrl+D
+                raise EOFError
+            elif b == 0x0A:  # Ctrl+J -> new line
+                text.insert(pos, "\n")
+                pos += 1
+                hist_nav = None
+            elif b in (0x7F, 0x08):  # backspace
+                if pos > 0:
+                    del text[pos - 1]
+                    pos -= 1
+                hist_nav = None
+            elif b == 0x1B:  # escape sequence
+                seq = os.read(fd, 1)
+                if not seq or seq[0] != 0x5B:  # expect '['
+                    continue
+                s2 = os.read(fd, 1)
+                if not s2:
+                    continue
+                c = s2[0]
+                if c == 0x41:  # up
+                    if hist_nav is None:
+                        saved = "".join(text)
+                        hist_nav = len(_HISTORY)
+                    if hist_nav > 0:
+                        hist_nav -= 1
+                        text[:] = list(_HISTORY[hist_nav])
+                        pos = len(text)
+                elif c == 0x42:  # down
+                    if hist_nav is not None:
+                        hist_nav += 1
+                        if hist_nav >= len(_HISTORY):
+                            hist_nav = None
+                            text[:] = list(saved)
+                        else:
+                            text[:] = list(_HISTORY[hist_nav])
+                        pos = len(text)
+                elif c == 0x43:  # right
+                    if pos < len(text):
+                        pos += 1
+                elif c == 0x44:  # left
+                    if pos > 0:
+                        pos -= 1
+                elif c == 0x48:  # home
+                    pos = 0
+                elif c == 0x46:  # end
+                    pos = len(text)
+                elif c == 0x33:  # delete (3~)
+                    os.read(fd, 1)
+                    if pos < len(text):
+                        del text[pos]
+            elif b >= 0x80:
+                text.insert(pos, _utf8_char(fd, b))
+                pos += 1
+                hist_nav = None
+            else:
+                text.insert(pos, chr(b))
+                pos += 1
+                hist_nav = None
+            _render_input(prompt, text, pos)
+    finally:
+        sys.stdout.flush()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    return "".join(text)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -129,7 +262,7 @@ async def _run_interactive_async(runtime: Runtime) -> None:
 
     while True:
         try:
-            text = Prompt.ask("[bold]>>>[/]")
+            text = _read_input("[bold]>>>[/]")
         except (EOFError, KeyboardInterrupt):
             console.print()
             break
@@ -137,6 +270,7 @@ async def _run_interactive_async(runtime: Runtime) -> None:
         text = text.strip()
         if not text:
             continue
+        _HISTORY.append(text)
         if text.lower() in ("exit", "quit"):
             break
         if text.startswith("/"):
