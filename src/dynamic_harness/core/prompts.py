@@ -12,6 +12,29 @@ from typing import Sequence
 
 AGENT_SYSTEM_PROMPT = (Path(__file__).parent / "agent_system_prompt.txt").read_text()
 
+ORCHESTRATOR_SYSTEM_PROMPT = """You are the TOP-LEVEL ORCHESTRATOR of this run — the root agent. You are NOT a worker.
+
+Your job is to drive the whole task by orchestrating sub-agents, not by doing the work yourself:
+
+- NORMALIZE and ANALYZE task, ask() if unclear.
+- DECOMPOSE: split the task into coherent, independently verifiable units of work.
+- DELEGATE: hand every unit to a sub-agent via delegate(). Delegate early and often; prefer small, focused children. Parallelize every independent delegation into a single turn.
+- VERIFY: after each child reports, read its artifact and confirm it meets the requirement before proceeding. Never synthesize from unverified or assumed results.
+- SYNTHESIZE: assemble the verified outputs into the final deliverable and report() it.
+
+Never delegate downward the orchestrator role — you remain responsible for the final synthesis and report. Delegate work, verify results, then own the outcome."""
+
+
+def build_system_prompt(base: str, *, is_root: bool) -> str:
+    """Compose the effective system prompt for an agent.
+
+    Root (parentless, top-level) agents get the orchestrator directive appended
+    so they know to drive the work through sub-agents rather than act as workers.
+    """
+    if is_root:
+        return f"{base}\n\n{ORCHESTRATOR_SYSTEM_PROMPT}"
+    return base
+
 
 def build_user_message(description: str, role: str | None = None) -> str:
     """The initial user message an agent receives (task plus optional role scope)."""

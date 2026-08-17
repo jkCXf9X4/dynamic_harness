@@ -18,7 +18,7 @@ from openai import (
 )
 
 from .context import AgentContext
-from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, ObservationInputs, build_observation, build_user_message
+from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, ObservationInputs, build_observation, build_system_prompt, build_user_message
 from .task import (
     ActivityEvent,
     ActivityEventType,
@@ -217,7 +217,11 @@ class Agent:
             return
 
         user_message = build_user_message(self.task.description, self.task.role)
-        self.context.reset(self._system_prompt or AGENT_SYSTEM_PROMPT, user_message)
+        system_prompt = build_system_prompt(
+            self._system_prompt or AGENT_SYSTEM_PROMPT,
+            is_root=self.parent is None,
+        )
+        self.context.reset(system_prompt, user_message)
         self._has_run = True
         self._observation_msg = None
         self._iteration = 0
