@@ -4,6 +4,7 @@
     "base_url": "https://openrouter.ai/api/v1",
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
     "provider_allow_fallbacks": true,
+    "provider_force": null,
     "verify_ssl": true
   },
   "safety": {

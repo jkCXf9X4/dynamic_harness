@@ -224,7 +224,7 @@ ReportPayload(
 
 ### LLMProvider (`llm/provider.py`)
 - `LLMProvider` (ABC) with `generate()`, `generate_with_tools()`, `generate_structured()`
-- `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks)`
+- `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
 ## 17 Built-in Tools

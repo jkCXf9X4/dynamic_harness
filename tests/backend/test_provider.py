@@ -19,6 +19,7 @@ class TestLLMConfig:
         assert cfg.max_tokens is None
         assert cfg.provider_ignore == []
         assert cfg.provider_allow_fallbacks is True
+        assert cfg.provider_force is None
 
     def test_custom_values(self) -> None:
         cfg = LLMConfig(
@@ -27,12 +28,14 @@ class TestLLMConfig:
             max_tokens=4096,
             provider_ignore=["openai"],
             provider_allow_fallbacks=False,
+            provider_force="DeepInfra",
         )
         assert cfg.model == "custom-model"
         assert cfg.temperature == 0.7
         assert cfg.max_tokens == 4096
         assert cfg.provider_ignore == ["openai"]
         assert cfg.provider_allow_fallbacks is False
+        assert cfg.provider_force == "DeepInfra"
 
 
 class TestLLMResponse:

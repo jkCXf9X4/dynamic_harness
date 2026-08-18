@@ -26,6 +26,7 @@ class OpenAIProvider(LLMProvider):
         verify_ssl: bool = True,
         provider_ignore: list[str] | None = None,
         provider_allow_fallbacks: bool = True,
+        provider_force: str | None = None,
         timeout: httpx.Timeout | float = 120.0,
     ) -> None:
         http_client = httpx.AsyncClient(verify=verify_ssl, timeout=timeout)
@@ -38,8 +39,18 @@ class OpenAIProvider(LLMProvider):
         self.default_model = model
         self._provider_ignore = provider_ignore or []
         self._provider_allow_fallbacks = provider_allow_fallbacks
+        self._provider_force = provider_force
 
     def _build_extra_body(self, cfg: LLMConfig) -> dict | None:
+        force = cfg.provider_force or self._provider_force
+        if force:
+            return {
+                "provider": {
+                    "order": [force],
+                    "allow_fallbacks": False,
+                    "ignore": cfg.provider_ignore or self._provider_ignore,
+                }
+            }
         ignore = cfg.provider_ignore or self._provider_ignore
         if not ignore:
             return None

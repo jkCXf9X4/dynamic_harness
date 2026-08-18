@@ -39,6 +39,7 @@ class LLMConfig:
     max_tokens: int | None = None
     provider_ignore: list[str] = field(default_factory=list)
     provider_allow_fallbacks: bool = True
+    provider_force: str | None = None
 ```
 
 ### `LLMResponse` (simple generation)
@@ -135,6 +136,7 @@ OpenAIProvider(
     verify_ssl: bool = True,
     provider_ignore: list[str] | None = None,    # OpenRouter providers to exclude
     provider_allow_fallbacks: bool = True,       # Allow OpenRouter fallback routing
+    provider_force: str | None = None,           # Pin a single OpenRouter provider (disables fallbacks)
 )
 ```
 
@@ -157,7 +159,8 @@ export OPENAI_API_KEY=sk-...                   # Fallback key
     "model": "deepseek/deepseek-v4-flash-0731",
     "base_url": "https://openrouter.ai/api/v1",
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": true
+    "provider_allow_fallbacks": true,
+    "provider_force": "DeepInfra"
   },
   "safety": {
     "max_iterations": 500,

@@ -16,6 +16,10 @@ class LLMProviderConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     provider_ignore: list[str] = Field(default_factory=list)
     provider_allow_fallbacks: bool = True
+    provider_force: str | None = Field(
+        default=None,
+        description="OpenRouter provider slug to pin exclusively (disables fallbacks).",
+    )
     verify_ssl: bool = True
     price_input_per_mtok: float | None = Field(default=None, description="USD per 1M input tokens, if known")
     price_output_per_mtok: float | None = Field(default=None, description="USD per 1M output tokens, if known")

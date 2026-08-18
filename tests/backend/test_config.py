@@ -43,6 +43,7 @@ class TestHarnessConfig:
         assert lpc.base_url == "https://openrouter.ai/api/v1"
         assert lpc.provider_ignore == []
         assert lpc.provider_allow_fallbacks is True
+        assert lpc.provider_force is None
 
     def test_partial_config_merge(self) -> None:
         cfg = HarnessConfig.model_validate({"llm": {"model": "custom-model"}})

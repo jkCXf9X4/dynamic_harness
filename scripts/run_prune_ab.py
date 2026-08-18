@@ -127,6 +127,7 @@ async def main() -> None:
         verify_ssl=False,
         provider_ignore=config.llm.provider_ignore or None,
         provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
+        provider_force=config.llm.provider_force,
     )
     print(f"LLM: {config.llm.model} | base: {config.llm.base_url}", flush=True)
 

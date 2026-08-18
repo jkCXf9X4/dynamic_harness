@@ -69,6 +69,7 @@ def build_runtime(
                 verify_ssl=config.llm.verify_ssl,
                 provider_ignore=config.llm.provider_ignore or None,
                 provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
+                provider_force=config.llm.provider_force,
             )
             rt.set_llm(llm)
     return rt

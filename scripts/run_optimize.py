@@ -60,6 +60,7 @@ def _make_llm(config, api_key: str) -> OpenAIProvider:
         verify_ssl=config.llm.verify_ssl,
         provider_ignore=config.llm.provider_ignore or None,
         provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
+        provider_force=config.llm.provider_force,
     )
 
 

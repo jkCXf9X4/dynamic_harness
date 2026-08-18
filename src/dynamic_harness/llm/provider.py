@@ -12,6 +12,7 @@ class LLMConfig:
     max_tokens: int | None = None
     provider_ignore: list[str] = field(default_factory=list)
     provider_allow_fallbacks: bool = True
+    provider_force: str | None = None
 
 
 @dataclass

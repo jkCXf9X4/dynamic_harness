@@ -85,6 +85,7 @@ class Harness:
             base_url=config.get("base_url", "https://openrouter.ai/api/v1"),
             api_key=config.get("api_key", ""),
             verify_ssl=config.get("verify_ssl", True),
+            provider_force=config.get("provider_force"),
         )
         self._runtime.set_llm(llm)
 
