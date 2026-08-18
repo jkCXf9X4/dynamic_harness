@@ -17,6 +17,28 @@ def _extract_json(text: str) -> object:
     return json.loads(text)
 
 
+def _extract_usage(usage: object | None) -> dict | None:
+    """Surface provider prompt-cache info (``cached_tokens``) alongside raw counts.
+
+    The OpenAI-compatible usage object exposes ``prompt_tokens_details`` on
+    providers that report it (OpenAI automatic caching, OpenRouter, Ollama, ...).
+    Without this the cache hit count is silently dropped and we can't see whether
+    the design is actually reusing the conversation prefix across turns.
+    """
+    if usage is None:
+        return None
+    out: dict = {
+        "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+        "completion_tokens": getattr(usage, "completion_tokens", 0),
+    }
+    details = getattr(usage, "prompt_tokens_details", None)
+    if details is not None:
+        cached = getattr(details, "cached_tokens", None)
+        if cached is not None:
+            out["cached_tokens"] = int(cached)
+    return out
+
+
 class OpenAIProvider(LLMProvider):
     def __init__(
         self,
@@ -40,28 +62,33 @@ class OpenAIProvider(LLMProvider):
         self._provider_ignore = provider_ignore or []
         self._provider_allow_fallbacks = provider_allow_fallbacks
         self._provider_force = provider_force
+        # ``session_id`` is an OpenRouter-specific field; OpenAI's native API
+        # rejects unknown body keys, so only forward it to OpenRouter.
+        self._is_openrouter = base_url is not None and "openrouter" in base_url.lower()
 
     def _build_extra_body(self, cfg: LLMConfig) -> dict | None:
+        body: dict = {}
         force = cfg.provider_force or self._provider_force
         if force:
-            return {
-                "provider": {
-                    "order": [force],
-                    "allow_fallbacks": False,
-                    "ignore": cfg.provider_ignore or self._provider_ignore,
+            body["provider"] = {
+                "order": [force],
+                "allow_fallbacks": False,
+                "ignore": cfg.provider_ignore or self._provider_ignore,
+            }
+        else:
+            ignore = cfg.provider_ignore or self._provider_ignore
+            if ignore:
+                body["provider"] = {
+                    "ignore": ignore,
+                    "allow_fallbacks": cfg.provider_allow_fallbacks
+                    if cfg.provider_ignore
+                    else self._provider_allow_fallbacks,
                 }
-            }
-        ignore = cfg.provider_ignore or self._provider_ignore
-        if not ignore:
-            return None
-        return {
-            "provider": {
-                "ignore": ignore,
-                "allow_fallbacks": cfg.provider_allow_fallbacks
-                if cfg.provider_ignore
-                else self._provider_allow_fallbacks,
-            }
-        }
+        # OpenRouter: a per-conversation session pins every turn to one provider
+        # so its prompt cache stays warm across the whole agent run.
+        if self._is_openrouter and cfg.session_id:
+            body["session_id"] = cfg.session_id
+        return body or None
 
     async def generate(self, system: str, user: str, config: LLMConfig | None = None) -> LLMResponse:
         cfg = config or LLMConfig(model=self.default_model)
@@ -83,10 +110,7 @@ class OpenAIProvider(LLMProvider):
         return LLMResponse(
             content=choice.message.content or "",
             model=cfg.model,
-            usage={
-                "prompt_tokens": resp.usage.prompt_tokens,
-                "completion_tokens": resp.usage.completion_tokens,
-            } if resp.usage else None,
+            usage=_extract_usage(resp.usage),
         )
 
     async def generate_with_tools(
@@ -134,10 +158,7 @@ class OpenAIProvider(LLMProvider):
             content=msg.content,
             tool_calls=tool_calls,
             model=cfg.model,
-            usage={
-                "prompt_tokens": resp.usage.prompt_tokens,
-                "completion_tokens": resp.usage.completion_tokens,
-            } if resp.usage else None,
+            usage=_extract_usage(resp.usage),
         )
 
     async def generate_structured(

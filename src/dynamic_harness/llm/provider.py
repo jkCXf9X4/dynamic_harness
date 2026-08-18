@@ -13,6 +13,11 @@ class LLMConfig:
     provider_ignore: list[str] = field(default_factory=list)
     provider_allow_fallbacks: bool = True
     provider_force: str | None = None
+    # Stable per-conversation identifier forwarded to providers that support
+    # session-pinned routing/caching (OpenRouter ``session_id``). Agents reuse
+    # the value across every turn so all requests of one conversation hit the
+    # same provider with a warm prompt cache.
+    session_id: str | None = None
 
 
 @dataclass
@@ -38,6 +43,11 @@ class ToolCallResponse:
 
 
 class LLMProvider(ABC):
+    # Model used when a call carries no explicit LLMConfig. Providers should set
+    # this at construction so callers can build per-call configs without knowing
+    # the resolved model.
+    default_model: str = "gpt-4o"
+
     @abstractmethod
     async def generate(self, system: str, user: str, config: LLMConfig | None = None) -> LLMResponse: ...
 

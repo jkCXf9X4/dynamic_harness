@@ -106,15 +106,22 @@ def test_runtime_run_does_not_force_orchestrator(runtime: Runtime) -> None:
 
 
 def test_agent_context_estimates_live_prompt_tokens(runtime: Runtime) -> None:
-    """The observation token figure is a live estimate, not cumulative usage."""
+    """The token estimate is a live figure of the current context, not cumulative
+    usage; and the conversation is pure append-only (no per-turn observation)."""
     agent = runtime.delegate(Task(description="T"))
     agent.context.reset("[system]", "[user] T")
     assert agent.context.messages  # system + user seeded
-    estimate = agent.context.estimate_prompt_tokens()
-    assert estimate >= 1
-    obs = agent._context_observation(estimate)
-    assert "Estimated tokens in current live context" in obs
-    assert "~" in obs
+    base = agent.context.estimate_prompt_tokens()
+    assert base >= 1
+    # Appending a turn raises the live estimate.
+    agent.context.append({"role": "assistant", "content": "a" * 80})
+    agent.context.append({"role": "tool", "content": "r" * 80, "tool_call_id": "x"})
+    assert agent.context.estimate_prompt_tokens() > base
+    # No observation message is ever part of the history.
+    assert not any(
+        isinstance(m.get("content"), str) and "Context Observation" in m["content"]
+        for m in agent.context.messages
+    )
 
 
 @pytest.mark.asyncio

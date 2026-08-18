@@ -424,12 +424,14 @@ class Runtime:
         *,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
+        cached_tokens: int = 0,
         message_count: int = 0,
     ) -> None:
         await self.usage_tracker.record_usage(
             agent_id,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
             message_count=message_count,
         )
 

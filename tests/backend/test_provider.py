@@ -20,6 +20,7 @@ class TestLLMConfig:
         assert cfg.provider_ignore == []
         assert cfg.provider_allow_fallbacks is True
         assert cfg.provider_force is None
+        assert cfg.session_id is None
 
     def test_custom_values(self) -> None:
         cfg = LLMConfig(
@@ -29,6 +30,7 @@ class TestLLMConfig:
             provider_ignore=["openai"],
             provider_allow_fallbacks=False,
             provider_force="DeepInfra",
+            session_id="conv-42",
         )
         assert cfg.model == "custom-model"
         assert cfg.temperature == 0.7
@@ -36,6 +38,7 @@ class TestLLMConfig:
         assert cfg.provider_ignore == ["openai"]
         assert cfg.provider_allow_fallbacks is False
         assert cfg.provider_force == "DeepInfra"
+        assert cfg.session_id == "conv-42"
 
 
 class TestLLMResponse:

@@ -18,7 +18,8 @@ from openai import (
 )
 
 from .context import AgentContext
-from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, ObservationInputs, build_observation, build_system_prompt, build_user_message
+from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
+from ..llm.provider import LLMConfig
 from .task import (
     ActivityEvent,
     ActivityEventType,
@@ -57,6 +58,12 @@ class Agent:
         self.id = agent_id
         self.task = task
         self.parent = parent
+
+        # Stable per-conversation id forwarded to providers that support
+        # session-pinned routing/caching (OpenRouter ``session_id``). Reused on
+        # every LLM call of this agent so the prompt cache stays warm across
+        # turns, instead of being invalidated by provider re-routing.
+        self.session_id: str = agent_id
 
         self.children: list[Agent] = []
 
@@ -99,7 +106,6 @@ class Agent:
         self._generated_root = runtime.generated_root
         self._environment_info: EnvironmentInfo | None = None
         self._environment_render: str = ""
-        self._observation_msg: dict[str, Any] | None = None
 
     # -- outcome accessors ----------------------------------------------------
 
@@ -224,13 +230,13 @@ class Agent:
             return
 
         user_message = build_user_message(self.task.description, self.task.role)
-        system_prompt = build_system_prompt(
-            self._system_prompt or AGENT_SYSTEM_PROMPT,
-            role=self.task.role,
-        )
+        base = self._system_prompt or AGENT_SYSTEM_PROMPT
+        system_prompt = build_system_prompt(base, role=self.task.role)
+        steerage = self._build_steerage()
+        if steerage:
+            system_prompt = f"{system_prompt}\n\n{steerage}"
         self.context.reset(system_prompt, user_message)
         self._has_run = True
-        self._observation_msg = None
         self._iteration = 0
         self._recent_batches = deque(maxlen=self.repeated_call_limit)
         self._started_at = time.monotonic()
@@ -270,16 +276,22 @@ class Agent:
             self.context.messages.append({"role": "user", "content": user_message})
             await self._run_guarded()
 
-    async def _llm_call_with_retry(self, tools: list[dict], max_retries: int = 3) -> Any:
+    async def _llm_call_with_retry(
+        self, tools: list[dict], messages: list[dict[str, Any]] | None = None, max_retries: int = 3
+    ) -> Any:
         llm = self.llm
         assert llm is not None
+        msgs = messages if messages is not None else self.context.messages
+        # Session-pinned config: keep every request of this conversation on the
+        # same provider/cache via the agent's stable session_id.
+        cfg = LLMConfig(model=llm.default_model, session_id=self.session_id)
 
         base_delay = 1.0
         last_error: Exception | None = None
 
         for attempt in range(max_retries + 1):
             try:
-                return await llm.generate_with_tools(self.context.messages, tools)
+                return await llm.generate_with_tools(msgs, tools, config=cfg)
             except Exception as e:
                 last_error = e
                 if not self._is_retryable(e) or attempt >= max_retries:
@@ -395,39 +407,23 @@ class Agent:
             return True
         return False
 
-    def _set_observation(self, prompt_tokens: int) -> None:
-        """Keep exactly one context-observation slot as the trailing message.
+    def _build_steerage(self) -> str:
+        """Static, cache-friendly context block folded into the system prompt.
 
-        Observations are recomputed every turn and replaced in place; without
-        this the accumulator of stale observation blocks would grow O(n^2).
+        Environment and focus reminders are stable for the life of a run, so
+        baking them into the leading system message (once, at reset) rather than
+        emitting a changing per-turn observation message keeps the conversation
+        prefix byte-identical. That byte-identity is what lets the provider's
+        prompt cache extend across the whole history — a per-turn observation
+        message was empirically shown to zero out the cache entirely.
         """
-        if self._observation_msg is not None:
-            try:
-                self.context.messages.remove(self._observation_msg)
-            except ValueError:
-                pass
-        self._observation_msg = {
-            "role": "system",
-            "content": self._context_observation(prompt_tokens),
-        }
-        self.context.messages.append(self._observation_msg)
-
-    def _context_observation(self, prompt_tokens: int) -> str:
-        active = self.context.active_turn_ids()
-        active_turns = [
-            (pid, self.context.turn_tool_names(pid), self.context.turn_token_estimate(pid))
-            for pid in active
-        ]
-        return build_observation(ObservationInputs(
-            iteration=self._iteration,
-            messages_count=len(self.context.messages),
-            prompt_tokens=prompt_tokens,
-            active_turns=active_turns,
-            next_turn_id=f"t{self.context.turn_counter}",
-            environment_text=self.environment_info,
-            task_description=self.task.description,
-            focus=self._focus,
-        ))
+        blocks: list[str] = []
+        focus_text = render_focus(self._focus, iteration=1)
+        if focus_text:
+            blocks.append(focus_text)
+        if self.environment_info:
+            blocks.append(self.environment_info)
+        return "\n\n".join(blocks)
 
     def _emit_iteration(self, prompt_tokens: int) -> None:
         self._event_bus.emit_activity(ActivityEvent(
@@ -440,17 +436,18 @@ class Agent:
             },
         ))
 
-    async def _record_usage_and_trace(self, response: Any) -> None:
+    async def _record_usage_and_trace(self, response: Any, sent_messages: list[dict[str, Any]]) -> None:
         if response.usage:
             await self._usage_tracker.record_usage(
                 self.id,
                 prompt_tokens=response.usage.get("prompt_tokens", 0),
                 completion_tokens=response.usage.get("completion_tokens", 0),
-                message_count=len(self.context.messages),
+                cached_tokens=response.usage.get("cached_tokens", 0),
+                message_count=len(sent_messages),
             )
         ts = self._trace_store
         if ts:
-            ts.record_llm_request(self.id, list(self.context.messages))
+            ts.record_llm_request(self.id, list(sent_messages))
 
     def _emit_llm_end(self, response: Any, tool_names: list[str]) -> None:
         self._event_bus.emit_activity(ActivityEvent(
@@ -591,11 +588,11 @@ class Agent:
                 return
 
             prompt_tokens = self.context.estimate_prompt_tokens()
-            self._set_observation(prompt_tokens)
             self._emit_iteration(prompt_tokens)
 
-            response = await self._llm_call_with_retry(tools)
-            await self._record_usage_and_trace(response)
+            sent = list(self.context.messages)
+            response = await self._llm_call_with_retry(tools, sent)
+            await self._record_usage_and_trace(response, sent)
 
             if response.tool_calls:
                 if await self._handle_tool_calls(response):

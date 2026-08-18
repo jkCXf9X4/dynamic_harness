@@ -14,6 +14,7 @@ class UsageTracker:
         *,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
+        cached_tokens: int = 0,
         message_count: int = 0,
     ) -> None:
         lock = self._usage_locks.setdefault(agent_id, asyncio.Lock())
@@ -24,12 +25,14 @@ class UsageTracker:
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "total_tokens": 0,
+                    "cached_tokens": 0,
                     "message_count": 0,
                 },
             )
             prev["prompt_tokens"] += prompt_tokens
             prev["completion_tokens"] += completion_tokens
             prev["total_tokens"] += prompt_tokens + completion_tokens
+            prev["cached_tokens"] += cached_tokens
             prev["message_count"] = message_count
             self._agent_usage[agent_id] = prev
 
@@ -40,16 +43,23 @@ class UsageTracker:
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
+                "cached_tokens": 0,
                 "message_count": 0,
             },
         )
 
     def total_usage(self) -> dict:
-        total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        total = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+        }
         for u in self._agent_usage.values():
             total["prompt_tokens"] += u.get("prompt_tokens", 0)
             total["completion_tokens"] += u.get("completion_tokens", 0)
             total["total_tokens"] += u.get("total_tokens", 0)
+            total["cached_tokens"] += u.get("cached_tokens", 0)
         return total
 
     def clear(self) -> None:

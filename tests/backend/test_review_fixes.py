@@ -69,15 +69,23 @@ def test_webfetch_rejects_restricted_hosts() -> None:
     assert _validate_url("https://example.com/x") is None
 
 
-async def test_single_observation_slot(runtime: Runtime) -> None:
-    """Only one context-observation message is kept, regardless of turns."""
+async def test_no_per_turn_observation_message(runtime: Runtime) -> None:
+    """Steerage (env/focus) is folded into a STABLE leading system message so the
+    conversation payload stays pure append-only and prompt caching survives."""
     agent = runtime.delegate(Task(description="T"))
     agent.set_environment_info(build_environment_info())
-    agent._set_observation(prompt_tokens=10)
-    agent._set_observation(prompt_tokens=20)
-    obs = [m for m in agent.context.messages if m.get("role") == "system"]
-    assert len(obs) == 1
-    assert "[Environment]" in obs[0]["content"]
+    agent.set_focus(objective="obj", deliverable="deliv")
+
+    steerage = agent._build_steerage()
+    assert "[Environment]" in steerage
+    assert "[Focus] Objective: obj" in steerage
+    assert "Deliverable: deliv" in steerage
+
+    # There is no per-turn observation message anywhere in the payload contract.
+    assert not any(
+        isinstance(m.get("content"), str) and "Context Observation" in m["content"]
+        for m in agent.context.messages
+    )
 
 
 def test_focus_renders_full_then_condensed() -> None:
@@ -107,8 +115,9 @@ def test_focus_renders_full_then_condensed() -> None:
     assert "Acceptance:" in pulsed
 
 
-def test_focus_rendered_into_observation_preserves_single_slot(runtime: Runtime) -> None:
-    """Focus lands in the observation without creating extra messages."""
+def test_focus_folded_into_system_prompt(runtime: Runtime) -> None:
+    """Focus lands in the static system-prompt steerage (cacheable), not a
+    per-turn observation message."""
     agent = runtime.delegate(Task(description="Long memory task"))
     agent.set_focus(
         acceptance=["a", "b"],
@@ -116,23 +125,22 @@ def test_focus_rendered_into_observation_preserves_single_slot(runtime: Runtime)
         pending=["p"],
         pulse_interval=10,
     )
-    agent._set_observation(prompt_tokens=5)
-    obs = [m for m in agent.context.messages if m.get("role") == "system"]
-    assert len(obs) == 1
-    assert "[Focus] Objective: Long memory task" in obs[0]["content"]
-    assert "Deliverable: write out.txt and report()" in obs[0]["content"]
-    # On the first turn, full acceptance detail is shown.
-    assert "Acceptance: a; b" in obs[0]["content"]
+    steerage = agent._build_steerage()
+    assert "[Focus] Objective: Long memory task" in steerage
+    assert "Deliverable: write out.txt and report()" in steerage
+    # At reset (iteration 1) full acceptance detail is shown once.
+    assert "Acceptance: a; b" in steerage
 
 
 def test_focus_is_runtime_state_not_prompt_text(runtime: Runtime) -> None:
-    """Reminders are rendered by code, independent of the (optimizable) prompt."""
+    """Reminders are rendered by code and appended to the system prompt,
+    independent of the (optimizable) prompt body itself."""
     agent = runtime.delegate(Task(description="O", system_prompt="OPTIMIZED_TEXT"))
     agent.set_focus(objective="O", deliverable="D")
-    agent._set_observation(prompt_tokens=5)
-    obs = [m for m in agent.context.messages if m.get("role") == "system"]
-    rendered = obs[0]["content"]
-    # Focus is injected even though the system prompt is externally optimized;
-    # nothing about it lives in the prompt body itself.
-    assert "[Focus] Objective: O" in rendered
-    assert "Deliverable: D" in rendered
+    steerage = agent._build_steerage()
+    # "OPTIMIZED_TEXT" is the externally-optimizable prompt; the focus reminders
+    # are separate, code-rendered steerage that survives prompt optimization.
+    assert steerage != ""
+    assert "OPTIMIZED_TEXT" not in steerage
+    assert "[Focus] Objective: O" in steerage
+    assert "Deliverable: D" in steerage
