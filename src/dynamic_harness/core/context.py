@@ -6,6 +6,21 @@ from typing import Any
 from ..llm.provider import LLMProvider
 
 
+def estimate_tokens(text: str) -> int:
+    """Ballpark token count for a string, provider-agnostic.
+
+    Returns 0 for empty/None input. Blends two cheap proxies and takes the
+    higher so code (fewer spaces, denser punctuation) and prose (longer words)
+    both land in the right ballpark without pulling in a tokenizer dependency.
+    """
+    if not text:
+        return 0
+    chars = float(len(text))
+    words = float(len(text.split()))
+    est = max(chars / 3.8, words * 1.5)
+    return max(1, int(est))
+
+
 class AgentContext:
     """Owns an agent's turn accounting and conversation message buffer.
 
@@ -73,10 +88,10 @@ class AgentContext:
     def turn_token_estimate(self, pid: str) -> int:
         total = 0
         for m in self.turns.get(pid, []):
-            total += len(str(m.get("content") or ""))
+            total += estimate_tokens(str(m.get("content") or ""))
             for tc in m.get("tool_calls") or []:
-                total += len(json.dumps(tc.get("function", {}).get("arguments", "")))
-        return max(1, total // 4)
+                total += estimate_tokens(tc.get("function", {}).get("arguments", ""))
+        return max(1, total)
 
     def turn_tool_names(self, pid: str) -> str:
         names: list[str] = []
@@ -97,10 +112,10 @@ class AgentContext:
         """
         total = 0
         for m in self.messages:
-            total += len(str(m.get("content") or ""))
+            total += estimate_tokens(str(m.get("content") or ""))
             for tc in m.get("tool_calls") or []:
-                total += len(json.dumps(tc.get("function", {}).get("arguments", "")))
-        return max(1, total // 4)
+                total += estimate_tokens(tc.get("function", {}).get("arguments", ""))
+        return max(1, total)
 
     def active_turn_ids(self) -> list[str]:
         active = [pid for pid in self.turn_order if pid not in self.pruned]
