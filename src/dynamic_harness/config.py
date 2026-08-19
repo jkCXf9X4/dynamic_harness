@@ -51,6 +51,14 @@ class AgentConfig(BaseModel):
                     "context observation (e.g. 'pip is unavailable'). Kept empty "
                     "by default so agents are never told false environment facts.",
     )
+    references_dir: str | None = Field(
+        default=None,
+        description="Directory of durable, git-tracked reference docs (rationale, "
+                    "tool motivations, guidelines) that survive prompt optimization. "
+                    "A compact index is injected into every agent's environment; the "
+                    "agent reads full bodies on demand. Defaults to 'docs/references' "
+                    "relative to the working directory.",
+    )
     active_turn_window: int = Field(
         default=50, ge=1,
         description="How many recent committed turns the Context Observation lists.",

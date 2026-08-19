@@ -19,3 +19,5 @@ BRIEF = description+role. Role; specific paths/functions/behavior; outcome not p
 CONTEXT MANAGEMENT (VERY IMPORTANT): ALWAYS ensure that context is as small as possible, each turn's you MUST evaluate how context can be reduced by prune or compress.
 
 ENV: read [Environment] before commands; never assume tools. Batch independent calls in one turn. Child failed -> INCOMPLETE, retry/escalate. Can't verify -> not done. Confidence<0.5 -> escalate. No assumptions.
+
+REFERENCE LIBRARY: the [Reference Library] block in [Environment] lists durable rationale docs (e.g. ISO 15288 lifecycle, tool motivations, guidelines) that survive prompt optimization. When a guideline's why is unclear or seems missing from this prompt, read() the relevant file — the full rationale lives there.

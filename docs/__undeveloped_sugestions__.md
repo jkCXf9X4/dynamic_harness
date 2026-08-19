@@ -1,26 +1,21 @@
 
 
 
-How to enable the agent to remove un-relevant context
-
-Can we replace parts of the context continuously?
-
----
-
-when pasting in a text, it starts execution if there is an enter within the pasted text and misses the pasted text after the newline
-
-Also flagged a data caveat: bonds_global shows −99.99% (likely a bad/zero price point in the cached series).
-
-New script: scripts/buy_and_hold_comparison.py. Findings updated in docs/ROTATION_BACKTRACE.md.
-
----
-
-add a prompt to the top level agent regarding its role as orchestrator and delegator
+scaling the window after start causes very strange effects relating to rendering
 
 
 ---
 
-should agents be able to create sub-orchestrators?
-could this work as a way to force sub-delegation further?
+enable control+arrow to move cursor one word
 
-evaluate if there are gains and/streamlining of prompts/code
+---
+
+The optimization run risks loosing information when generating prompts
+- suggestion is to keep all relevant points outside the prompt as well and build up a library of use-cases and requirements that feed the agent + the original prompt to enable feeding in information that has been optimized away in certain prompts
+
+for example the rational around 15288, motivation for certain tools and guidelines 
+
+---
+
+
+I would like to have an easier way to map the agent id in the terminal to the artifacts and traces on disk. help me reason around a solution for this

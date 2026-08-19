@@ -66,6 +66,32 @@ def _utf8_char(fd: int, lead: int) -> str:
     return data.decode("utf-8", "replace")
 
 
+def _is_word_char(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"
+
+
+def _prev_word_start(text: list[str], pos: int) -> int:
+    """Move pos to the start of the preceding word (readline-style backward-word)."""
+    i = pos
+    n = len(text)
+    while i > 0 and not _is_word_char(text[i - 1]):
+        i -= 1
+    while i > 0 and _is_word_char(text[i - 1]):
+        i -= 1
+    return i
+
+
+def _next_word_end(text: list[str], pos: int) -> int:
+    """Move pos to the end of the next word (readline-style forward-word)."""
+    i = pos
+    n = len(text)
+    while i < n and _is_word_char(text[i]):
+        i += 1
+    while i < n and not _is_word_char(text[i]):
+        i += 1
+    return i
+
+
 def _read_input(prompt: str) -> str:
     """Read a line (or multi-line via Ctrl+J/paste) with arrow-key cursor editing.
 
@@ -121,17 +147,31 @@ def _read_input(prompt: str) -> str:
                 seq = os.read(fd, 1)
                 if not seq or seq[0] != 0x5B:  # expect '['
                     continue
-                s2 = os.read(fd, 1)
-                if not s2:
+                csi = bytearray()
+                while True:
+                    s = os.read(fd, 1)
+                    if not s:
+                        break
+                    byte = s[0]
+                    # Full-text string (F): 200~/201~ bracketed paste, etc.
+                    if byte == 0x7E and csi[:1] == b"2" and len(csi) >= 2:
+                        tail = csi[1:]
+                        if tail == b"00":
+                            pasting = True
+                        elif tail == b"01":
+                            pasting = False
+                        break
+                    if 0x40 <= byte <= 0x7E:  # final byte of the CSI
+                        csi.append(byte)
+                        break
+                    csi.append(byte)
+                if not 0x40 <= (csi[-1] if csi else 0) <= 0x7E:
                     continue
-                c = s2[0]
-                if c == 0x32:  # '2' -> 200~/201~ bracketed-paste marker
-                    s3 = os.read(fd, 1)
-                    s4 = os.read(fd, 1)
-                    s5 = os.read(fd, 1)
-                    if s3 == b"0" and s5 == b"~":
-                        pasting = s4 == b"0"  # 200~ start / 201~ end
-                        continue
+                c = csi[-1]
+                params = [int(p) if p else 0 for p in "".join(
+                    chr(x) for x in csi[:-1]
+                ).split(";")] or [0]
+                ctrl = 5 in params or "5" in "".join(chr(x) for x in csi[:-1])
                 if c == 0x41:  # up
                     if hist_nav is None:
                         saved = "".join(text)
@@ -149,20 +189,30 @@ def _read_input(prompt: str) -> str:
                         else:
                             text[:] = list(_HISTORY[hist_nav])
                         pos = len(text)
-                elif c == 0x43:  # right
-                    if pos < len(text):
+                elif c == 0x43:  # right (or Ctrl+Right = forward word)
+                    if ctrl:
+                        pos = _next_word_end(text, pos)
+                    elif pos < len(text):
                         pos += 1
-                elif c == 0x44:  # left
-                    if pos > 0:
+                    hist_nav = None
+                elif c == 0x44:  # left (or Ctrl+Left = backward word)
+                    if ctrl:
+                        pos = _prev_word_start(text, pos)
+                    elif pos > 0:
                         pos -= 1
+                    hist_nav = None
                 elif c == 0x48:  # home
                     pos = 0
                 elif c == 0x46:  # end
                     pos = len(text)
-                elif c == 0x33:  # delete (3~)
-                    os.read(fd, 1)
-                    if pos < len(text):
+                elif c == 0x7E:  # CSI ~ keypad sequences: 3~ delete, 1~/7~ home, 4~/8~ end
+                    if params and params[0] == 3 and pos < len(text):
                         del text[pos]
+                    elif params and params[0] in (1, 7):
+                        pos = 0
+                    elif params and params[0] in (4, 8):
+                        pos = len(text)
+                    hist_nav = None
             elif b >= 0x80:
                 text.insert(pos, _utf8_char(fd, b))
                 pos += 1
@@ -248,7 +298,12 @@ async def _run_with_live(runtime: Runtime, description: str, root_agent: Agent |
     ask_queue: asyncio.Queue[str] = asyncio.Queue()
     _install_ask_tool(runtime, ask_queue)
 
-    with Live(get_renderable=lambda: _render(runtime, events), refresh_per_second=4, console=console) as live:
+    with Live(
+        get_renderable=lambda: _render(runtime, events),
+        refresh_per_second=4,
+        console=console,
+        screen=True,
+    ) as live:
         run_task = asyncio.create_task(
             runtime.run(description, role=ORCHESTRATOR_ROLE, root_agent=root_agent)
         )

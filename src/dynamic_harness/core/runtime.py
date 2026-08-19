@@ -10,6 +10,7 @@ from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
 from .agent import Agent
 from .environment import EnvironmentInfo, build_environment_info
+from .references import discover_references, render_reference_index
 from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
 from .task import ActivityEvent, ActivityEventType, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
@@ -19,6 +20,23 @@ from .usage import UsageTracker
 if TYPE_CHECKING:
     from ..config import HarnessConfig
     from ..llm.provider import LLMProvider
+
+
+def _build_reference_index(config: HarnessConfig | None) -> str:
+    """Discover the durable reference library and render its compact index.
+
+    The library is purely additive: no directory (or an empty one) yields an empty
+    index, so it never changes behavior unless reference docs actually exist.
+    """
+    if config is None:
+        root = None
+    else:
+        root = config.agent.references_dir
+    try:
+        docs = discover_references(root)
+    except Exception:
+        return ""
+    return render_reference_index(docs)
 
 
 class Runtime:
@@ -51,9 +69,11 @@ class Runtime:
         self._self_heal_max_resumes = config.self_heal.max_resumes if config else 1
         self._self_heal_max_fresh = config.self_heal.max_fresh_retries if config else 1
         self._heal_counts: dict[str, dict[str, int]] = {}
-        self._environment_info: EnvironmentInfo = build_environment_info(
-            notes=config.agent.environment_notes if config else []
-        )
+        refs_index = _build_reference_index(config)
+        notes = list(config.agent.environment_notes if config else [])
+        if refs_index:
+            notes.append(refs_index)
+        self._environment_info: EnvironmentInfo = build_environment_info(notes=notes)
 
         self.event_bus = EventBus()
         self.usage_tracker = UsageTracker()

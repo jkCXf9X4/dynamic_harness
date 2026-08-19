@@ -58,6 +58,7 @@ src/dynamic_harness/
 │   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop + outcome
 │   ├── context.py           → AgentContext (turns, prune/restore/compress)
 │   ├── environment.py       → EnvironmentInfo (runtime-detected, injected)
+│   ├── references.py        → Reference library: discover + index durable rationale docs
 │   ├── tool_context.py      → ToolContext (public interface handed to tool functions)
 │   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus, run())
 │   ├── task.py              → Task, ReportPayload, Escalation, Failure, AgentOutcome, ActivityEvent
@@ -110,6 +111,10 @@ docs/
 ├── VISION.md                 → Architectural vision and success criteria
 ├── agent_methodology_guidelines.md → Mandatory agent workflow and anti-patterns
 ├── AGENTS.md                 → This file
+├── references/               → Durable rationale library that survives prompt optimization
+│   ├── 15288_rationale.md    → Why the lifecycle / V-model / artifact-driven design
+│   ├── tool_motivations.md   → Why each tool exists + how to choose between them
+│   └── guidelines.md         → Delegation / verification / stopping-conditions nuance
 ├── api/                      → Module-level API reference
 ├── guides/                   → How-to guides for common workflows
 └── concepts/                 → Architectural deep-dives
@@ -305,3 +310,4 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
 | Change agent methodology | `docs/agent_methodology_guidelines.md` |
+| Change rationale / reference library | `core/references.py` + `docs/references/` |
