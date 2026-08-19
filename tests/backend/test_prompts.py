@@ -75,11 +75,15 @@ def test_base_prompt_has_no_dead_role_placeholder() -> None:
 
 
 def test_verification_language_reconciled_with_context_economics() -> None:
-    """Verification must prefer summaries / converse over pulling full bodies."""
+    """Verification must prefer summaries / read_artifact over re-delegating."""
     assert "progressive disclosure" in AGENT_SYSTEM_PROMPT.lower()
     assert "converse" in AGENT_SYSTEM_PROMPT
     assert "progressive disclosure" in ORCHESTRATOR_SYSTEM_PROMPT.lower()
-    assert "prefer converse" in ORCHESTRATOR_SYSTEM_PROMPT.lower()
+    assert "read_artifact" in ORCHESTRATOR_SYSTEM_PROMPT
+    # The corrected guidance: pull a child's full_report via read_artifact and
+    # do NOT re-read the same file by spawning fresh sub-agents.
+    assert "do not" in ORCHESTRATOR_SYSTEM_PROMPT.lower()
+    assert "same file" in ORCHESTRATOR_SYSTEM_PROMPT.lower()
 
 
 def test_orchestrator_role_in_production_prompt() -> None:

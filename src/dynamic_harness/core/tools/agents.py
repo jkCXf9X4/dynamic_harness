@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import TYPE_CHECKING
 
 from ..task import ReportPayload, TaskStatus
@@ -36,8 +37,11 @@ TOOL_REPORT_DEF = ToolDef(
     name="report",
     description="Report final results to parent agent and complete this agent's work. "
                 "Include a concrete summary of findings, artifact_ids referencing any "
-                "files written, optionally a technical analysis and full report, and "
-                "optionally a confidence score (0.0–1.0).",
+                "files written, optionally a technical analysis, a confidence score "
+                "(0.0–1.0), and — critically — put any full body of content the parent "
+                "must read verbatim (e.g. a file's complete contents) in full_report, "
+                "NOT only in a file on disk. The parent reads full_report via "
+                "read_artifact; content hidden only on disk may not reach it.",
     input_schema={
         "type": "object",
         "properties": {
@@ -171,6 +175,12 @@ async def fail(*, ctx: ToolContext, error: str) -> str:
 
 
 async def ask(*, ctx: ToolContext, question: str) -> str:
+    if not sys.stdin.isatty():
+        return (
+            "NO_USER_AVAILABLE: running in non-interactive mode, no user to ask. "
+            "Do NOT treat this as confirmation. Proceed using your best judgment "
+            "or escalate if a human decision is genuinely required."
+        )
     loop = asyncio.get_event_loop()
     answer = await loop.run_in_executor(None, lambda: input(f"\n[Agent asks] {question}\nYour response: "))
     return answer.strip()
@@ -195,6 +205,20 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
 
 async def read_artifact(*, ctx: ToolContext, artifact_id: str) -> str:
     artifact = ctx.artifact_store.get(artifact_id)
+    if not artifact:
+        # Fall back to resolving by *agent* id: parents only know their child's
+        # agent id (from delegate), so read that agent's latest report artifact.
+        agent = ctx.get_other_agent(artifact_id)
+        if agent is not None:
+            report_aid = getattr(agent, "_report_artifact_id", None)
+            if report_aid:
+                artifact = ctx.artifact_store.get(report_aid)
+            if not artifact and getattr(agent, "last_report", None):
+                for aid in (agent.last_report.artifact_ids or []):
+                    candidate = ctx.artifact_store.get(aid)
+                    if candidate is not None:
+                        artifact = candidate
+                        break
     if not artifact:
         return f"Error: no artifact found with ID '{artifact_id}'"
     views = artifact.views

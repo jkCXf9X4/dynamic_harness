@@ -365,6 +365,13 @@ class Runtime:
         )
         artifact = Artifact(task_id=agent.task.id, agent_id=agent_id, views=view)
         self.artifact_store.save(artifact)
+
+        # Remember the report's artifact id on the agent so the parent can
+        # resolve this child's output via read_artifact(id or agent_id). This is
+        # kept separate from payload.artifact_ids (the agent's own declared
+        # attachments) so the self-heal deliverable check stays unambiguous.
+        agent._report_artifact_id = artifact.id
+
         if payload.files_written:
             self.artifact_store.write_text(
                 artifact.id, "files_written.json",

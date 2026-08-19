@@ -411,3 +411,28 @@ async def test_read_artifact_tool(runtime: Runtime) -> None:
     artifact_id = commits[0].artifact_ids[-1]
     result2 = await runtime.tool_registry.execute("read_artifact", "tc2", agent=agent, artifact_id=artifact_id)
     assert "artifact test report" in result2.content
+
+
+@pytest.mark.asyncio
+async def test_read_artifact_resolves_by_agent_id(runtime: Runtime) -> None:
+    """read_artifact must resolve a child's output by its *agent* id too.
+
+    Parents only learn a child's agent_id from delegate(), so verification must
+    work with that id, not just the separately-generated artifact id.
+    """
+    child = runtime.delegate(Task(description="child work"))
+    child.report = lambda payload: runtime.deliver_report(child.id, payload)
+    report = await runtime.tool_registry.execute("report", "tc1", agent=child,
+                                                 summary="child findings",
+                                                 full_report="CHILD_FULL_BODY")
+
+    # deliver_report records the report's artifact id on the agent
+    assert child._report_artifact_id is not None
+
+    # A third party (parent) resolves the child by its agent id
+    parent = runtime.delegate(Task(description="parent work"))
+    result = await runtime.tool_registry.execute(
+        "read_artifact", "tc2", agent=parent, artifact_id=child.id)
+    assert "child findings" in result.content
+    assert "CHILD_FULL_BODY" in result.content
+

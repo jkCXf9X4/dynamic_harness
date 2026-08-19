@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import deque
+
 import pytest
 
 from dynamic_harness.core.agent import Agent
@@ -124,3 +126,54 @@ async def test_completes_normally_with_small_number_of_calls(runtime: Runtime) -
     await root.run()
 
     assert root.task.status.value == "completed"
+
+
+def test_delegate_target_signature_extracts_path() -> None:
+    sig = Agent._delegate_target_signature(
+        {"description": "Read /repo/docs_improvement_analysis.md verbatim and return it"}
+    )
+    assert "docs_improvement_analysis.md" in sig
+
+    # Different wording but same path -> same signature
+    sig2 = Agent._delegate_target_signature(
+        {"description": "re-read /repo/docs_improvement_analysis.md from offset 2000"}
+    )
+    assert sig2 == sig
+
+
+@pytest.mark.asyncio
+async def test_repeated_delegate_to_same_file_triggers_safety(runtime: Runtime) -> None:
+    root = _make_agent(runtime, Task(description="orchestrate"),
+                       repeated_call_limit=3)
+    root._recent_batches = deque(maxlen=3)
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    def resp(i: int):
+        return ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(
+                id=f"c{i}", name="delegate",
+                arguments={"description": f"read docs_improvement_analysis.md verbatim, attempt {i}"},
+            )],
+        )
+
+    # Wording varies (attempt 1/2/3) but the file path is shared -> must trip.
+    det = [root._check_repeated_calls(resp(i)) for i in range(1, 4)]
+    assert det[0] is False and det[1] is False
+    assert det[2] is True
+
+    # Different targets never trip.
+    root2 = _make_agent(runtime, Task(description="orchestrate"),
+                        repeated_call_limit=3)
+    root2._recent_batches = deque(maxlen=3)
+    root2.fail = lambda error, trace=None: None
+    for i in range(1, 6):
+        ok = root2._check_repeated_calls(ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(
+                id=f"c{i}", name="delegate",
+                arguments={"description": f"process file number {i}.md"},
+            )],
+        ))
+        assert ok is False
+

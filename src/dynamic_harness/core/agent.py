@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import re
 import time
 from collections import deque
 from pathlib import Path
@@ -75,6 +76,8 @@ class Agent:
         self._has_run: bool = False
         self._iteration: int = 0
         self._recent_batches: deque[list[tuple[str, str]]] | None = None
+        self._recent_delegate_targets: deque[str] = deque(maxlen=repeated_call_limit)
+        self._report_artifact_id: str | None = None
         self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()
@@ -355,9 +358,15 @@ class Agent:
 
         if child.last_report:
             r = child.last_report
-            result["summary"] = r.summary[:500]
+            result["summary"] = r.summary[:2000] if r.summary else ""
+            if child._report_artifact_id:
+                result["artifact_id"] = child._report_artifact_id
             if r.artifact_ids:
                 result["artifact_ids"] = r.artifact_ids
+            if r.full_report:
+                result["full_report"] = r.full_report
+            if r.technical_summary:
+                result["technical_summary"] = r.technical_summary
             if r.confidence is not None:
                 result["confidence"] = r.confidence
 
@@ -548,6 +557,20 @@ class Agent:
         self.context.commit_turn(assistant_msg, results)
         return self._check_repeated_calls(response)
 
+    @staticmethod
+    def _delegate_target_signature(arguments: dict[str, Any]) -> str:
+        """Normalized key for a delegate call, keyed on the referenced path(s).
+
+        Catches the failure mode where an orchestrator re-reads *the same file*
+        by spinning a fresh sub-agent each time with superficially different
+        wording (e.g. 'read X verbatim' → 'read X from offset N' → ...).
+        """
+        description = str(arguments.get("description", ""))
+        paths = sorted(set(
+            p for p in re.findall(r"[\w./\-]+\.(?:md|txt|py|json|yaml|yml|toml|log)", description)
+        ))
+        return "|".join(paths) if paths else description.strip()
+
     def _check_repeated_calls(self, response: Any) -> bool:
         """Return True when repeated identical calls were detected (loop stops)."""
         batch_sig = tuple(
@@ -561,23 +584,44 @@ class Agent:
             len(self._recent_batches) == self.repeated_call_limit
             and all(sig == batch_sig for sig in self._recent_batches)
         ):
-            self._repeated_calls_detected = True
-            self._event_bus.emit_activity(ActivityEvent(
-                agent_id=self.id,
-                event_type=ActivityEventType.SAFETY_WARNING,
-                data={
-                    "warning_type": "repeated_calls",
-                    "tool_name": response.tool_calls[0].name,
-                    "repeated_count": self.repeated_call_limit,
-                },
-            ))
-            self.fail(
-                f"Repeated identical tool calls {self.repeated_call_limit} "
-                f"times in a row (tool: {response.tool_calls[0].name}). "
-                f"The provider may be stuck."
-            )
-            return True
+            return self._fail_repeated("Repeated identical tool calls",
+                                       response.tool_calls[0].name,
+                                       self.repeated_call_limit)
+
+        # Semantic guard: many consecutive delegate calls aimed at the *same*
+        # target (path) signal a verification loop, even if the wording varies.
+        for tc in response.tool_calls:
+            if tc.name == "delegate":
+                sig = self._delegate_target_signature(tc.arguments)
+                self._recent_delegate_targets.append(sig)
+                if (
+                    len(self._recent_delegate_targets) == self.repeated_call_limit
+                    and len(set(self._recent_delegate_targets)) == 1
+                ):
+                    return self._fail_repeated(
+                        f"Delegated {self.repeated_call_limit} times in a row "
+                        f"aimed at the same target",
+                        "delegate", self.repeated_call_limit)
+
         return False
+
+    def _fail_repeated(self, message: str, tool_name: str, count: int) -> bool:
+        assert self._recent_batches is not None
+        self._repeated_calls_detected = True
+        self._event_bus.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.SAFETY_WARNING,
+            data={
+                "warning_type": "repeated_calls",
+                "tool_name": tool_name,
+                "repeated_count": count,
+            },
+        ))
+        self.fail(
+            f"{message} {count} times in a row (tool: {tool_name}). "
+            f"The provider may be stuck. Change strategy or stop."
+        )
+        return True
 
     async def _run_loop(self) -> None:
         tools = self._tool_registry.openai_schemas(role=self.task.role)
