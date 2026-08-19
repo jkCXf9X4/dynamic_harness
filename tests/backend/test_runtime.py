@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -133,4 +134,64 @@ async def test_concurrent_children_reports_keep_repo_consistent(runtime: Runtime
     assert root_commit.id in tree
     assert set(tree[root_commit.id]) == set(root_commit.child_ids)
     assert runtime.repository.count() == 3
+
+
+@pytest.mark.asyncio
+async def test_provenance_maps_agent_to_artifacts_and_trace(tmp_path) -> None:
+    artifact_root = tmp_path / "artifacts"
+    repo_root = tmp_path / "repo"
+    trace_root = tmp_path / "traces"
+    runtime = Runtime(
+        artifact_root=artifact_root, repo_root=repo_root,
+        trace_root=trace_root, generated_root=tmp_path,
+    )
+
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(
+                task_id=self.task.id, summary="hello world", full_report="FULL BODY",
+            ))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    root = runtime.delegate(Task(description="provenance"), agent_type="LeafAgent")
+    await root.run()
+
+    (trace_root / root.id).mkdir(parents=True, exist_ok=True)
+    (trace_root / root.id / "trace.jsonl").write_text("{}")
+
+    prov = runtime.provenance(root.id)
+    assert prov["task_id"] == root.task.id
+    assert len(prov["artifact_ids"]) == 1
+    aid = prov["artifact_ids"][0]
+    assert prov["artifact_paths"][0] == str(artifact_root / aid)
+    assert prov["trace_path"] == str(trace_root / root.id / "trace.jsonl")
+    assert prov["commit_ids"]
+    # The artifact really exists on disk and holds the report.
+    assert (artifact_root / aid / "artifact.json").exists()
+    assert runtime.artifact_store.get(aid) is not None
+
+
+def test_write_provenance_index_round_trips(tmp_path) -> None:
+    artifact_root = tmp_path / "artifacts"
+    runtime = Runtime(
+        artifact_root=artifact_root, repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+    )
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.report(ReportPayload(task_id=self.task.id, summary="indexed"))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    root = runtime.delegate(Task(description="idx"), agent_type="LeafAgent")
+    asyncio.run(root.run())
+
+    out = runtime.write_provenance_index(tmp_path / "index.jsonl")
+    rows = [json.loads(ln) for ln in out.read_text().splitlines() if ln.strip()]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["agent_id"] == root.id
+    assert row["task_id"] == root.task.id
+    assert row["path"] == str(artifact_root / row["artifact_id"])
+    assert row["headline"] == "indexed"
+
 

@@ -44,6 +44,8 @@ def add_rich_node(parent: RichTree, node: AgentNode) -> None:
     label = f"[bold]{node.short_id}[/] \u2014 {node.short_description}{status}"
     if node.usage:
         label += f"[dim]{node.usage}[/]"
+    if node.artifact_ids:
+        label += f"[dim] \u2192 {', '.join(node.artifact_ids)}[/]"
     child = parent.add(label)
     for kid in node.children:
         add_rich_node(child, kid)

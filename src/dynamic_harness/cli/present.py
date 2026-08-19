@@ -23,6 +23,8 @@ class AgentNode:
     status: str
     tokens: int = 0
     messages: int = 0
+    artifact_ids: list[str] = field(default_factory=list)
+    trace_path: str | None = None
     children: list[AgentNode] = field(default_factory=list)
 
     @property
@@ -62,12 +64,15 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
     def build(aid: str) -> AgentNode:
         agent = agents[aid]
         usage = runtime.get_usage(aid)
+        prov = runtime.provenance(agent.id)
         return AgentNode(
             agent_id=agent.id,
             description=agent.task.description,
             status=agent.task.status.value,
             tokens=usage.get("total_tokens", 0),
             messages=usage.get("message_count", 0),
+            artifact_ids=prov["artifact_ids"],
+            trace_path=prov["trace_path"],
             children=[
                 build(cid) for cid in g.get(aid, []) if cid in agents
             ],

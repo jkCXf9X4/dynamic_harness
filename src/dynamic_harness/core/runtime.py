@@ -487,6 +487,89 @@ class Runtime:
     def total_usage(self) -> dict:
         return self.usage_tracker.total_usage()
 
+    # -- provenance -------------------------------------------------------
+
+    def artifact_index_records(self) -> list[dict]:
+        """Denormalized one-record-per-artifact rows for the run index.
+
+        Single source of truth for mapping artifacts to agents/tasks and their
+        on-disk locations. Survives reload because it reads committed artifacts
+        and the repository, not just in-memory runtime state.
+        """
+        rows: list[dict[str, Any]] = []
+        for art in self.artifact_store.all():
+            files_written: list[str] = []
+            fw = self.artifact_store.read_text(art.id, "files_written.json")
+            if fw:
+                try:
+                    files_written = json.loads(fw)
+                except Exception:
+                    files_written = []
+            commit = self.repository.commit_for_task(art.task_id)
+            rows.append({
+                "artifact_id": art.id,
+                "agent_id": art.agent_id,
+                "task_id": art.task_id,
+                "created_at": art.created_at.isoformat() if art.created_at else None,
+                "headline": art.get_view("headline"),
+                "files_written": files_written,
+                "path": str(self.artifact_store.root / art.id),
+                "commit_id": commit.id if commit else None,
+            })
+        return rows
+
+    def provenance(self, agent_id: str) -> dict[str, Any]:
+        """Map an agent id to its on-disk trace, artifacts, and commits.
+
+        Works from committed state, so it is correct even when the live agent is
+        no longer in memory (e.g. after a reload/reset).
+        """
+        agent = self._agents.get(agent_id)
+        task_id = agent.task.id if agent is not None else None
+        commits = [c for c in self.repository.log(limit=1_000_000) if c.agent_id == agent_id]
+        if task_id is None and commits:
+            task_id = commits[0].task_id
+
+        artifact_ids: set[str] = set()
+        if agent is not None and agent._report_artifact_id:
+            artifact_ids.add(agent._report_artifact_id)
+        for c in commits:
+            artifact_ids.update(c.artifact_ids)
+        for art in self.artifact_store.all():
+            if art.agent_id == agent_id:
+                artifact_ids.add(art.id)
+
+        ordered = sorted(artifact_ids)
+        trace_path = None
+        if self.trace_store:
+            tp = self.trace_store.root / agent_id / "trace.jsonl"
+            if tp.exists():
+                trace_path = str(tp)
+
+        return {
+            "agent_id": agent_id,
+            "task_id": task_id,
+            "status": agent.task.status.value if agent else None,
+            "trace_path": trace_path,
+            "artifact_ids": ordered,
+            "artifact_paths": [str(self.artifact_store.root / aid) for aid in ordered],
+            "commit_ids": [c.id for c in commits],
+        }
+
+    def write_provenance_index(self, path: Path | None = None) -> Path:
+        """Write a flat, greppable ``index.jsonl`` for the run.
+
+        Each line maps an artifact to its agent/task/created-at/headline/path so
+        you can ``rg``/``jq`` by agent_id without loading Python. Defaults to the
+        run root (the parent of the artifact root).
+        """
+        out = (path or self.artifact_store.root.parent / "index.jsonl").resolve()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with open(out, "w") as f:
+            for row in self.artifact_index_records():
+                f.write(json.dumps(row) + "\n")
+        return out
+
     def reset(self, *, clear_handlers: bool = False) -> None:
         for task in list(self._agent_run_tasks):
             task.cancel()

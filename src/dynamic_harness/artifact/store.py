@@ -86,6 +86,10 @@ class ArtifactStore:
     def get(self, artifact_id: str) -> Artifact | None:
         return self._artifacts.get(artifact_id)
 
+    def all(self) -> list[Artifact]:
+        """All artifacts currently known to the store (loaded from disk)."""
+        return list(self._artifacts.values())
+
     def clear(self) -> None:
         self._artifacts.clear()
         for child in self.root.iterdir():

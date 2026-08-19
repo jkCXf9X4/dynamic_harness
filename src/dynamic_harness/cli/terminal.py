@@ -245,6 +245,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--artifact-dir", help="Directory for artifacts")
     parser.add_argument("--repo-dir", help="Directory for commit repository")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
+    parser.add_argument("--print-provenance", action="store_true",
+                        help="After a run, print agent->trace/artifact maps and write index.jsonl")
     return parser.parse_args(argv)
 
 
@@ -327,12 +329,62 @@ def _print_outcome(root: Agent) -> None:
         console.print(f"\n[bold red]\u2717 Agent {root.id[:8]}[/] failed: {root.last_failure.error[:200]}\n")
 
 
+def _print_provenance(runtime: Runtime, agent_id: str) -> None:
+    """Render the task/trace/artifact/commit mapping for a single agent id."""
+    agent_id = agent_id.strip()
+    if not agent_id:
+        console.print("[yellow]Usage: /provenance <agent_id> (also /trace <id>, /artifacts <id>)[/]")
+        return
+    prov = runtime.provenance(agent_id)
+    if not prov["artifact_ids"] and not prov["trace_path"] and not prov["commit_ids"]:
+        console.print(f"[red]No records found for agent id '{agent_id}'.[/]  Try /artifacts to list all.")
+        return
+
+    table = Table(title=f"Provenance — agent {agent_id}", title_justify="left")
+    table.add_column("Key")
+    table.add_column("Value")
+    table.add_row("task_id", prov["task_id"] or "(unknown)")
+    table.add_row("status", prov["status"] or "(unknown)")
+    table.add_row("trace", prov["trace_path"] or "(no trace on disk)")
+    table.add_row("commits", ", ".join(prov["commit_ids"]) or "(none)")
+    for aid, p in zip(prov["artifact_ids"], prov["artifact_paths"]):
+        table.add_row(f"artifact {aid}", p)
+    console.print(table)
+
+
+def _print_artifacts(runtime: Runtime, fragment: str = "") -> None:
+    """List all artifacts, optionally filtered by an agent_id substring."""
+    rows = runtime.artifact_index_records()
+    if fragment:
+        rows = [r for r in rows if fragment in r["agent_id"] or fragment in r["artifact_id"]]
+    if not rows:
+        console.print("[dim]No artifacts.[/]")
+        return
+    table = Table(title="Artifacts", title_justify="left")
+    table.add_column("artifact")
+    table.add_column("agent")
+    table.add_column("headline")
+    for r in rows:
+        table.add_row(r["artifact_id"], r["agent_id"], (r["headline"] or "")[:48])
+    console.print(table)
+
+
+def _write_provenance_index(runtime: Runtime) -> Path:
+    path = runtime.write_provenance_index()
+    console.print(f"[bold cyan]index.jsonl → {path}[/]")
+    return path
+
+
 def _run_batch(runtime: Runtime, prompt: str) -> None:
     root = asyncio.run(_run_with_live(runtime, prompt))
     _print_outcome(root)
 
     usage = runtime.total_usage()
     console.print(f"[dim]Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}[/]")
+
+    # Per-run provenance index (C): a flat, greppable artifact->agent map.
+    if runtime.artifact_store.all():
+        _write_provenance_index(runtime)
 
 
 async def _run_interactive_async(runtime: Runtime) -> None:
@@ -355,12 +407,27 @@ async def _run_interactive_async(runtime: Runtime) -> None:
         if text.lower() in ("exit", "quit"):
             break
         if text.startswith("/"):
-            cmd = text.strip().lower()
+            parts = text.strip().split(maxsplit=1)
+            cmd = parts[0].lower()
+            arg = parts[1] if len(parts) > 1 else ""
             if cmd == "/help":
-                console.print("[bold]Commands:[/]  /help  /agents  /reset  exit/quit")
+                console.print("[bold]Commands:[/]  /help  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /reset  exit/quit")
+                console.print("  /provenance <id>  — task/trace/artifact/commit map for an agent")
+                console.print("  /trace <id>       — path to an agent's trace.jsonl on disk")
+                console.print("  /artifacts [id]   — list artifacts (optionally filter by agent)")
+                console.print("  /index            — write the run's index.jsonl")
             elif cmd == "/agents":
                 u = runtime.total_usage()
                 console.print(f"Agents: {runtime.agent_count()}  Commits: {runtime.repository.count()}  Tokens: {u['total_tokens']}")
+            elif cmd == "/provenance":
+                _print_provenance(runtime, arg)
+            elif cmd == "/trace":
+                prov = runtime.provenance(arg.strip())
+                console.print(prov["trace_path"] or f"[red]No trace on disk for agent '{arg.strip()}'. Try /artifacts[/]")
+            elif cmd == "/artifacts":
+                _print_artifacts(runtime, arg)
+            elif cmd == "/index":
+                _write_provenance_index(runtime)
             elif cmd == "/reset":
                 runtime.reset()
                 root_agent = None
@@ -386,6 +453,12 @@ def main() -> None:
         _run_batch(runtime, " ".join(args.prompt))
     else:
         asyncio.run(_run_interactive_async(runtime))
+
+    if args.print_provenance:
+        for agent_id in sorted(runtime.all_agents()):
+            _print_provenance(runtime, agent_id)
+        if runtime.artifact_store.all():
+            _write_provenance_index(runtime)
 
 
 if __name__ == "__main__":
