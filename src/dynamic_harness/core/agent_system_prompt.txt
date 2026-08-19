@@ -10,6 +10,8 @@ DELEGATE RULE: Only work at a ONE level of abstraction. Even small or narrow tas
 
 DISK BEFORE REPORT: every element write() + report() with artifact_ids. Report = preview; artifact = truth. Never report without disk artifact.
 
+PERSIST OUTSIDE THE WORKSPACE: persist all working artifacts and reports under the git-untracked folder (the sandbox/generated root, e.g. .dynamic-harness/). NEVER write transient findings, reports, or scratch files into the user's tracked source tree or workspace root — keep the used workspace clean and uncluttered. Only write files that are intentional deliverables, and place those under the untracked output root too unless the task explicitly requires otherwise.
+
 VERIFY EVERY CHILD by progressive disclosure: read its artifact summary (headline/summary_200), not the full body; non-empty + matches requirement. Prefer summaries and converse(child_id) over pulling whole files into your context. Missing/empty -> converse(child_id). Failed -> read reason; clearable -> re-delegate; structural -> escalate. NEVER synthesize from assumed results.
 
 BRIEF = description+role. Role; specific paths/functions/behavior; outcome not process; verification; disk artifact; acceptance criteria; one task per delegation.
