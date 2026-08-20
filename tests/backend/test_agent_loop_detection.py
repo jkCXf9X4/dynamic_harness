@@ -4,6 +4,7 @@ from collections import deque
 
 import pytest
 
+from dynamic_harness.config import HarnessConfig, SafetyConfig
 from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
@@ -176,4 +177,64 @@ async def test_repeated_delegate_to_same_file_triggers_safety(runtime: Runtime) 
             )],
         ))
         assert ok is False
+
+
+@pytest.mark.asyncio
+async def test_alternating_batches_trigger_sliding_window(runtime: Runtime) -> None:
+    """Catch the trace failure mode: two near-identical command variants
+    interleaved so no N batches are byte-identical, yet the same tool call
+    recurs N times in a short window."""
+    root = _make_agent(runtime, Task(description="loop"), repeated_call_limit=3)
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    def resp(i: int) -> ToolCallResponse:
+        # two grep variants differing only by one extra term
+        terms = "disclaimer|financial advice|educational"
+        if i % 2 == 0:
+            terms += "|risk of loss"
+        args = {"command": f'grep -rn "{terms}" /repo'}
+        return ToolCallResponse(
+            content="check disclaimers", model="mock",
+            tool_calls=[ToolCallData(id=f"c{i}", name="bash", arguments=args)],
+        )
+
+    det = [root._check_repeated_calls(resp(i)) for i in range(1, 6)]
+    # first three should not trip (A,B,A); by the 5th call A recurs 3x in window
+    assert det[2] is False
+    assert det[4] is True
+
+
+@pytest.mark.asyncio
+async def test_identical_assistant_content_triggers(runtime: Runtime) -> None:
+    """The model repeats the exact same text turn after turn while tool args
+    fluctuate -- must still be flagged as a stuck loop."""
+    root = _make_agent(runtime, Task(description="stuck"), repeated_call_limit=3)
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    content = "Let me check the remaining README sections and the docs README disclaimer."
+    for i in range(1, 7):
+        ok = root._check_repeated_calls(ToolCallResponse(
+            content=content, model="mock",
+            tool_calls=[ToolCallData(
+                id=f"c{i}", name="bash",
+                arguments={"command": f"grep -n {i}"},
+            )],
+        ))
+    # After enough identical-text turns in the window, the last call trips.
+    # (limit=3 -> window=6; 6 identical msgs means last-3 identical.)
+    assert root._repeated_calls_detected is True
+
+
+def test_runtime_wires_timeout_from_config(tmp_path) -> None:
+    cfg = HarnessConfig(safety=SafetyConfig(timeout_seconds=60.5))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    assert rt._safety_timeout_seconds == 60.5
+    task = Task(description="t")
+    agent = rt.delegate(task)
+    assert agent._safety_timeout_seconds == 60.5
 

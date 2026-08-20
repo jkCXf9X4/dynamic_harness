@@ -9,7 +9,8 @@
   },
   "safety": {
     "max_iterations": 500,
-    "repeated_call_limit": 5
+    "repeated_call_limit": 4,
+    "timeout_seconds": 300
   },
   "agent": {
     "environment_notes": [

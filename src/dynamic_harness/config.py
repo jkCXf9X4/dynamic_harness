@@ -28,6 +28,13 @@ class LLMProviderConfig(BaseModel):
 class SafetyConfig(BaseModel):
     max_iterations: int = 500
     repeated_call_limit: int = 5
+    timeout_seconds: float | None = Field(
+        default=None, gt=0,
+        description="Wall-clock budget for a single agent run, in seconds. After "
+                    "this many seconds the loop force-fails with a timeout. None "
+                    "disables the wall-clock cap (cost is then bounded only by "
+                    "max_iterations / max_agent_tokens).",
+    )
     max_agent_tokens: int | None = Field(
         default=None, ge=0,
         description="Hard cap on total tokens (prompt + completion) a single agent may "

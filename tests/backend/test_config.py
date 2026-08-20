@@ -36,6 +36,11 @@ class TestHarnessConfig:
         sc = SafetyConfig()
         assert sc.max_iterations == 500
         assert sc.repeated_call_limit == 5
+        assert sc.timeout_seconds is None
+
+    def test_safety_timeout_seconds(self) -> None:
+        sc = SafetyConfig(timeout_seconds=120.0)
+        assert sc.timeout_seconds == 120.0
 
     def test_llm_provider_config_defaults(self) -> None:
         lpc = LLMProviderConfig()
@@ -56,7 +61,7 @@ class TestLoadHarnessConfig:
     def test_load_from_file(self, tmp_path: Path) -> None:
         config_data = {
             "llm": {"model": "test-model", "base_url": "http://localhost"},
-            "safety": {"max_iterations": 100, "repeated_call_limit": 3},
+            "safety": {"max_iterations": 100, "repeated_call_limit": 3, "timeout_seconds": 90},
         }
         cfg_path = tmp_path / "harness.json"
         cfg_path.write_text(json.dumps(config_data))
@@ -66,6 +71,7 @@ class TestLoadHarnessConfig:
         assert cfg.llm.base_url == "http://localhost"
         assert cfg.safety.max_iterations == 100
         assert cfg.safety.repeated_call_limit == 3
+        assert cfg.safety.timeout_seconds == 90
 
     def test_load_raises_for_missing_explicit_path(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):

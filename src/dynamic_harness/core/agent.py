@@ -75,8 +75,20 @@ class Agent:
         self._started_at: float | None = None
         self._has_run: bool = False
         self._iteration: int = 0
-        self._recent_batches: deque[list[tuple[str, str]]] | None = None
+        self._recent_batches: deque[list[tuple[str, str]]] = deque(
+            maxlen=repeated_call_limit
+        )
         self._recent_delegate_targets: deque[str] = deque(maxlen=repeated_call_limit)
+        # Sliding-window of normalized individual tool calls and assistant
+        # content texts, used to catch loops that *vary* slightly between turns
+        # (e.g. alternating two near-identical command variants) rather than
+        # repeating one batch byte-for-byte.
+        self._recent_tool_signatures: deque[tuple[str, str]] = deque(
+            maxlen=max(repeated_call_limit * 3, 1)
+        )
+        self._recent_messages: deque[str] = deque(
+            maxlen=max(repeated_call_limit * 3, 1)
+        )
         self._report_artifact_id: str | None = None
         self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
@@ -291,7 +303,10 @@ class Agent:
         self.context.reset(system_prompt, user_message)
         self._has_run = True
         self._iteration = 0
-        self._recent_batches = deque(maxlen=self.repeated_call_limit)
+        self._recent_batches.clear()
+        self._recent_tool_signatures.clear()
+        self._recent_messages.clear()
+        self._recent_delegate_targets.clear()
         self._started_at = time.monotonic()
         await self._run_guarded()
 
@@ -646,13 +661,36 @@ class Agent:
         ))
         return "|".join(paths) if paths else description.strip()
 
+    @staticmethod
+    def _normalize_tool_signature(name: str, arguments: dict[str, Any]) -> str:
+        """Canonical, whitespace-insensitive key for a single tool call.
+
+        Small stylistic variation (quote style, padding, casing, shell
+        chaining) is folded away so a genuinely stuck loop is not hidden by
+        the model nudging the wording/format of an identical command.
+        """
+        parts: list[str] = []
+        for key in sorted(arguments):
+            val = arguments[key]
+            if isinstance(val, str):
+                val = "_".join(val.split()).strip().lower()
+            parts.append(f"{key}={json.dumps(val, sort_keys=True)}")
+        return f"{name}({' '.join(parts)})"
+
     def _check_repeated_calls(self, response: Any) -> bool:
-        """Return True when repeated identical calls were detected (loop stops)."""
+        """Return True when repeated calls were detected (loop stops).
+
+        Detects three loop shapes:
+          1. ``repeated_call_limit`` consecutive *byte-identical* batches.
+          2. The same normalized tool call occurring ``limit`` times within a
+             small sliding window -- catches alternation between two near-
+             identical command variants (e.g. grep A vs grep A+B).
+          3. Repeated delegation aimed at the same target path.
+        """
         batch_sig = tuple(
             (tc.name, json.dumps(tc.arguments, sort_keys=True))
             for tc in response.tool_calls
         )
-        assert self._recent_batches is not None
         self._recent_batches.append(batch_sig)
 
         if (
@@ -662,6 +700,34 @@ class Agent:
             return self._fail_repeated("Repeated identical tool calls",
                                        response.tool_calls[0].name,
                                        self.repeated_call_limit)
+
+        # Sliding-window frequency check over individual normalized calls.
+        # Any tool name+args occurring `limit` times within the last
+        # (limit*2) calls is treated as a loop, even if batches interleave
+        # with a sibling variant.
+        limit = self.repeated_call_limit
+        for tc in response.tool_calls:
+            sig = self._normalize_tool_signature(tc.name, tc.arguments)
+            self._recent_tool_signatures.append(sig)
+        if len(self._recent_tool_signatures) >= limit:
+            recent = list(self._recent_tool_signatures)
+            window = recent[-limit * 2:]
+            for sig in set(window):
+                if window.count(sig) >= limit:
+                    return self._fail_repeated(
+                        f"Tool call '{sig}' appeared {limit} times in the "
+                        f"last {limit * 2} calls",
+                        response.tool_calls[-1].name, limit)
+
+        # Identical assistant text repeated many times is also a stuck signal,
+        # regardless of how the tool arguments vary around it.
+        if response.content:
+            self._recent_messages.append(response.content.strip())
+        if len(self._recent_messages) >= limit * 2:
+            recent_msgs = list(self._recent_messages)
+            if recent_msgs[-limit:] == [recent_msgs[-1]] * limit:
+                return self._fail_repeated(
+                    "Repeated identical assistant responses", "LLM", limit)
 
         # Semantic guard: many consecutive delegate calls aimed at the *same*
         # target (path) signal a verification loop, even if the wording varies.
@@ -681,7 +747,6 @@ class Agent:
         return False
 
     def _fail_repeated(self, message: str, tool_name: str, count: int) -> bool:
-        assert self._recent_batches is not None
         self._repeated_calls_detected = True
         self._event_bus.emit_activity(ActivityEvent(
             agent_id=self.id,

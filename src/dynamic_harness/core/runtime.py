@@ -79,6 +79,7 @@ class Runtime:
         self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
+        self._safety_timeout_seconds = config.safety.timeout_seconds if config else None
         self._max_agent_tokens = (
             config.safety.max_agent_tokens if config else None
         ) or None
@@ -438,6 +439,7 @@ class Runtime:
                 agent_id, task, self, parent,
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
+                safety_timeout_seconds=self._safety_timeout_seconds,
                 active_turn_window=self._active_turn_window,
             )
         else:
@@ -445,6 +447,7 @@ class Runtime:
                 agent_id, task, self, parent,
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
+                safety_timeout_seconds=self._safety_timeout_seconds,
                 active_turn_window=self._active_turn_window,
             )
         agent.max_agent_tokens = self._max_agent_tokens
