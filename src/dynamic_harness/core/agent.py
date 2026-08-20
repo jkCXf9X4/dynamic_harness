@@ -6,6 +6,7 @@ import random
 import re
 import time
 from collections import deque
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -64,6 +65,15 @@ class Agent:
         # stays contiguous. _delegate_nudge_attempts caps how many nudges fire.
         delegate_nudge_threshold: int = 8,
         delegate_nudge_attempts: int = 1,
+        # Soft, non-fatal warning for *near*-identical calls (e.g. re-running a
+        # path listing with slightly different head/tail/sed modifiers). Unlike
+        # repeated-call detection this never fails the run — it only injects a
+        # notice telling the agent to paginate / change approach.
+        near_identical_threshold: int = 3,
+        near_identical_window: int = 6,
+        near_identical_similarity: float = 0.6,
+        near_identical_tools: list[str] | None = None,
+        near_identical_warning_attempts: int = 2,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -124,6 +134,19 @@ class Agent:
         self._delegate_nudge_threshold: int = max(int(delegate_nudge_threshold), 1)
         self._delegate_nudge_attempts: int = max(int(delegate_nudge_attempts), 0)
         self._delegate_nudge_left: int = self._delegate_nudge_attempts
+        # Soft near-identical-warning tunables + window of recent signatures.
+        # Signatures drop pagination knobs so paged reads are never flagged.
+        self._near_identical_threshold: int = max(int(near_identical_threshold), 1)
+        self._near_identical_window: int = max(int(near_identical_window), 2)
+        self._near_identical_similarity: float = float(near_identical_similarity)
+        self._near_identical_tools: tuple[str, ...] = (
+            tuple(near_identical_tools) if near_identical_tools is not None else ("bash",)
+        )
+        self._near_identical_warning_left: int = max(int(near_identical_warning_attempts), 0)
+        # (core sig, full sig, tool name) triples, sliding window.
+        self._recent_near_identical: deque[tuple[str, str, str]] = deque(
+            maxlen=self._near_identical_window
+        )
         # On-disk outputs this agent must produce (set by Runtime.run). Self-heal
         # uses them as the deliverable check when provided.
         self._expected_outputs: list[str] | None = None
@@ -761,6 +784,98 @@ class Agent:
             parts.append(f"{key}={json.dumps(val, sort_keys=True)}")
         return f"{name}({' '.join(parts)})"
 
+    @staticmethod
+    def _paginationless_signature(
+        name: str, arguments: dict[str, Any], exclude: set[str] | None = None
+    ) -> str:
+        """Signature used for *similarity* scoring: pagination knobs are dropped
+        so legitimately paged reads (token_offset/token_limit changing) never
+        look like a duplicated command.
+        """
+        skip = exclude or {"token_offset", "token_limit"}
+        parts: list[str] = []
+        for key in sorted(arguments):
+            if key in skip:
+                continue
+            val = arguments[key]
+            if isinstance(val, str):
+                val = "_".join(val.split()).strip().lower()
+            parts.append(f"{key}={json.dumps(val, sort_keys=True)}")
+        return f"{name}({' '.join(parts)})"
+
+    def _similarity(self, a: str, b: str) -> float:
+        return SequenceMatcher(None, a, b).ratio()
+
+    def _maybe_warn_near_identical(self, tool_calls: list[Any]) -> None:
+        """Inject a *non-fatal* notice when the agent repeatedly issues
+        near-identical monitored-tool calls (e.g. re-running a path listing
+        with different head/tail/sed modifiers).
+
+        This is deliberately softer than ``_check_repeated_calls``: it never
+        fails the run (``near_identical_warning_attempts`` only bounds how many
+        warnings refresh). Two special cases are treated as *benign*, never
+        warned about: calls whose core (pagination-free) signature is identical
+        — i.e. legitimate paged reads where only token_offset/token_limit
+        advance — and calls against genuinely different paths.
+        """
+        if self._near_identical_warning_left <= 0 or not self._near_identical_tools:
+            return
+        if not tool_calls:
+            return
+        near = self._near_identical_tools
+        scored: list[tuple[str, str]] = []  # (core sig, full sig)
+        for tc in tool_calls:
+            if tc.name in near:
+                core = self._paginationless_signature(tc.name, tc.arguments)
+                full = self._paginationless_signature(
+                    tc.name, tc.arguments, exclude=set()
+                )
+                self._recent_near_identical.append((core, full, tc.name))
+                scored.append((core, full))
+        if not scored:
+            return
+        if len(self._recent_near_identical) < self._near_identical_threshold:
+            return
+        for core_new, full_new in scored:
+            rec = list(self._recent_near_identical)
+            count = sum(
+                1 for core_old, full_old, _ in rec
+                if core_new != core_old
+                and self._similarity(full_new, full_old) >= self._near_identical_similarity
+            )
+            if count < self._near_identical_threshold:
+                continue
+            toolname = next(
+                tn for c, f, tn in rec if c == core_new and f == full_new
+            )
+            self._near_identical_warning_left -= 1
+            self._event_bus.emit_activity(ActivityEvent(
+                agent_id=self.id,
+                event_type=ActivityEventType.SAFETY_WARNING,
+                data={
+                    "warning_type": "near_identical_calls",
+                    "tool_name": toolname,
+                    "similar_count": count,
+                    "window": len(rec),
+                    "attempts_remaining": self._near_identical_warning_left,
+                },
+            ))
+            self.context.append({
+                "role": "user",
+                "content": (
+                    "[notice] You have issued "
+                    f"{count} near-identical '{toolname}' tool calls in the last "
+                    f"{len(rec)} turns (e.g. re-listing the same files with "
+                    "slightly different head/tail/sort/sed modifiers). Each "
+                    "returns the same material and tells you to use "
+                    "token_offset/token_limit to page further. Stop re-running "
+                    "these: paginate with token_offset, delegate the distinct "
+                    "pieces, or move on to the next step and report / escalate / "
+                    "fail. This is a warning only — it will not fail the run."
+                ),
+            })
+            return
+
     def _check_repeated_calls(self, response: Any) -> bool:
         """Return True when repeated calls were detected (loop stops).
 
@@ -827,6 +942,11 @@ class Agent:
                         f"Delegated {self.repeated_call_limit} times in a row "
                         f"aimed at the same target",
                         "delegate", self.repeated_call_limit)
+
+        # Softly warn about *near*-identical (similar-not-bytes-equal) calls
+        # only when no hard loop detection fired this turn, so the agent gets
+        # actionable paginate/delegate guidance without a duplicate fail-nudge.
+        self._maybe_warn_near_identical(response.tool_calls)
 
         return False
 

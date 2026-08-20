@@ -293,7 +293,7 @@ the immutable checkpoint, not only in agent memory.
 All safety mechanisms are in `Agent._run_loop()`:
 
 1. **Max iterations:** Default 500. Exceeding → force-fail with message.
-2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops).
+2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops). **Near-identical warning:** separate, *non-fatal* — when N string-similar-but-not-identical `bash` commands (e.g. re-listing the same paths with different head/tail/sed) recur inside a sliding window (`safety.near_identical_threshold`, default 3 in `near_identical_window` 6), a `[notice]` user message is injected telling the agent to paginate via `token_offset`/delegate/move on. It never fails the run; pagination knobs are excluded from the similarity signature so paged reads are never flagged.
 3. **Wall-clock timeout:** Optional `safety_timeout_seconds` → force-fail when exceeded.
 4. **Token budget:** Optional `safety.max_agent_tokens` cap → force-fail when cumulative usage exceeds it.
 5. **Context observation:** Kept static/cache-friendly — agents read their own live turn count, message count, and token estimates on demand via the `usage` tool instead of a changing per-turn message.

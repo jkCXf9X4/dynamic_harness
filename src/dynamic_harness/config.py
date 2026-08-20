@@ -43,6 +43,41 @@ class SafetyConfig(BaseModel):
                     "force-fails it. 0 preserves the old behavior of failing "
                     "immediately on first detection.",
     )
+    near_identical_threshold: int = Field(
+        default=3, ge=1,
+        description="Soft warning threshold: how many near-identical tool calls "
+                    "(string-similar but not byte-identical, e.g. 'find ... | head' "
+                    "vs 'find ... | sed -n') must appear inside the sliding window "
+                    "before a non-fatal notice is injected into the agent's context. "
+                    "This is a pure warning — it never fails the run — it exists to "
+                    "pull a model out of a browsing rut (re-listing the same paths) "
+                    "before it escalates into hard repeated-call detection.",
+    )
+    near_identical_window: int = Field(
+        default=6, ge=2,
+        description="Size of the sliding window over which near-identical calls "
+                    "are counted. Calls older than this are forgotten.",
+    )
+    near_identical_similarity: float = Field(
+        default=0.6, gt=0.0, le=1.0,
+        description="Minimum difflib.SequenceMatcher ratio (0.0-1.0) between two "
+                    "normalized calls for them to count as 'near-identical'. "
+                    "Pagination knobs (token_offset/token_limit) are excluded from "
+                    "the signature so legitimate paged reads never look duplicated.",
+    )
+    near_identical_tools: list[str] = Field(
+        default_factory=lambda: ["bash"],
+        description="Tool names monitored for near-identical repetition. Scoped to "
+                    "bash by default because re-running redundant shell commands "
+                    "(find/cat/ls listings) is the observed churn loop; read calls "
+                    "against different paths naturally look similar yet are "
+                    "legitimate and are therefore excluded.",
+    )
+    near_identical_warning_attempts: int = Field(
+        default=2, ge=0,
+        description="How many times the near-identical notice may be (re-)injected "
+                    "over the whole run. 0 disables the feature entirely.",
+    )
     timeout_seconds: float | None = Field(
         default=None, gt=0,
         description="Wall-clock budget for a single agent's ENTIRE run (its whole "

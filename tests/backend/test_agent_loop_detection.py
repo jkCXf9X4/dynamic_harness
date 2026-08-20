@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
+from typing import Any
 
 import pytest
 
@@ -51,12 +52,14 @@ def _make_agent(
     safety_max_iterations: int = 50,
     repeated_call_limit: int = 5,
     repeated_recovery_attempts: int = 1,
+    **kwargs,
 ) -> Agent:
     agent = Agent(
         "test-agent", task, runtime,
         safety_max_iterations=safety_max_iterations,
         repeated_call_limit=repeated_call_limit,
         repeated_recovery_attempts=repeated_recovery_attempts,
+        **kwargs,
     )
     task.status = TaskStatus.running
     runtime._agents[agent.id] = agent
@@ -312,6 +315,51 @@ def test_runtime_wires_timeout_from_config(tmp_path) -> None:
     assert agent._repeated_recovery_left == 1
 
 
+def test_root_exempt_from_timeout_but_children_inherit(tmp_path) -> None:
+    """With disable_root_timeout, every root-level agent (parent is None) — the
+    initial root AND any self-heal successor regenerating the tree — is exempt
+    from the full-run wall-clock cap, while child agents still inherit it."""
+    cfg = HarnessConfig(safety=SafetyConfig(
+        timeout_seconds=60.5,
+        disable_root_timeout=True,
+    ))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+
+    initial_root = rt.delegate(Task(description="root"))
+    assert initial_root._safety_timeout_seconds is None  # exempted
+
+    # A self-heal successor re-delegated at the top level (parent is None) must
+    # NOT inherit the cap — this was the root cause of the "main orchestrator
+    # still times out" after the first root dies and _fresh_restart() respawns it.
+    successor = rt.delegate(Task(description="root successor"))
+    assert successor._safety_timeout_seconds is None
+
+    # Child agents spawned under a root still get the cap.
+    child = rt.delegate(Task(description="child"), parent=initial_root)
+    assert child._safety_timeout_seconds == 60.5
+
+
+def test_root_timeout_when_disable_root_timeout_false(tmp_path) -> None:
+    """Without disable_root_timeout, even the root agent inherits the cap."""
+    cfg = HarnessConfig(safety=SafetyConfig(
+        timeout_seconds=60.5,
+        disable_root_timeout=False,
+    ))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    root = rt.delegate(Task(description="root"))
+    assert root._safety_timeout_seconds == 60.5
+
+
 def test_runtime_wires_recovery_from_config(tmp_path) -> None:
     cfg = HarnessConfig(safety=SafetyConfig(repeated_recovery_attempts=3))
     rt = Runtime(
@@ -391,4 +439,119 @@ def test_delegate_nudge_suppressed_after_first_delegate(runtime: Runtime) -> Non
     root._iteration = 20
     root._maybe_nudge_delegation()
     assert len(root.context.messages) == 0
+
+
+def test_near_identical_bash_churn_warns_but_never_fails(runtime: Runtime) -> None:
+    """The trace failure mode: the model re-runs a path listing with slightly
+    different head/tail/sed modifiers. The near-identical notice must inject
+    a bounded warning into the context and NEVER fail the run."""
+    root = _make_agent(
+        runtime, Task(description="audit churn"),
+        repeated_call_limit=20, repeated_recovery_attempts=1,
+        near_identical_threshold=3, near_identical_window=6,
+        near_identical_similarity=0.6, near_identical_warning_attempts=2,
+    )
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    events: list[Any] = []
+    runtime.event_bus.on_activity(lambda ev: events.append(ev))
+
+    cmds = [
+        f'cd /repo/src && find . -type f -name "*.py" | sort | head -{n}'
+        for n in range(1, 31)
+    ]
+    for i, cmd in enumerate(cmds, start=1):
+        ok = root._check_repeated_calls(ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(id=f"c{i}", name="bash", arguments={"command": cmd})],
+        ))
+        # The soft warning must never stop the loop (return True would fail it).
+        assert ok is False, f"near-identical warning unexpectedly stopped the loop at call {i}"
+
+    assert root.outcome.failure is None
+    assert root._repeated_calls_detected is False
+
+    notices = [
+        m for m in root.context.messages
+        if m["role"] == "user" and m["content"].startswith("[notice]")
+    ]
+    assert notices, "expected at least one near-identical notice"
+    assert len(notices) <= 2  # bounded by near_identical_warning_attempts
+
+    near_events = [
+        e for e in events if e.data.get("warning_type") == "near_identical_calls"
+    ]
+    assert near_events, "expected a near_identical_calls safety event"
+    assert near_events[0].data["tool_name"] == "bash"
+    assert near_events[-1].data["attempts_remaining"] == 0  # budget fully consumed
+
+
+def test_near_identical_ignores_pure_pagination(runtime: Runtime) -> None:
+    """Same command, only token_offset advancing = legit paging -> silent."""
+    root = _make_agent(
+        runtime, Task(description="page"), repeated_call_limit=20,
+        near_identical_threshold=3, near_identical_warning_attempts=2,
+    )
+    root.fail = lambda error, trace=None: None
+    for i in range(1, 11):
+        ok = root._check_repeated_calls(ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(
+                id=f"b{i}", name="bash",
+                arguments={"command": "ls -la", "token_offset": i * 100},
+            )],
+        ))
+        assert ok is False
+    assert not [m for m in root.context.messages if m["content"].startswith("[notice]")]
+
+
+def test_near_identical_unmonitored_tools_silent(runtime: Runtime) -> None:
+    """read is not monitored by default: reading many different (but
+    textually similar) source paths is legitimate exploration, never warned."""
+    root = _make_agent(runtime, Task(description="reads"),
+        near_identical_threshold=3, near_identical_window=6,
+        near_identical_warning_attempts=2,
+    )
+    paths = [
+        "ma_crossover", "donchian", "bollinger", "rotation",
+        "backtester", "rotation_backtester", "walkforward", "statistics",
+        "continuous_optimization", "main", "config", "basket",
+    ]
+    for i, name in enumerate(paths, start=1):
+        ok = root._check_repeated_calls(ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(
+                id=f"r{i}", name="read",
+                arguments={"path": f"/8repo/src/strategy/{name}.py"},
+            )],
+        ))
+        assert ok is False
+    assert not [m for m in root.context.messages if m["content"].startswith("[notice]")]
+
+
+def test_runtime_wires_near_identical_from_config(tmp_path) -> None:
+    cfg = HarnessConfig(safety=SafetyConfig(
+        near_identical_threshold=4,
+        near_identical_window=9,
+        near_identical_similarity=0.5,
+        near_identical_tools=["bash", "grep"],
+        near_identical_warning_attempts=7,
+    ))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    assert rt._near_identical_threshold == 4
+    assert rt._near_identical_window == 9
+    assert rt._near_identical_similarity == 0.5
+    assert rt._near_identical_tools == ["bash", "grep"]
+    assert rt._near_identical_warning_attempts == 7
+    root = rt.delegate(Task(description="t"))
+    assert root._near_identical_threshold == 4
+    assert root._near_identical_window == 9
+    assert root._near_identical_similarity == 0.5
+    assert root._near_identical_tools == ("bash", "grep")
+    assert root._near_identical_warning_left == 7
 

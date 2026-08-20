@@ -72,6 +72,12 @@ def format_event(
         if wtype in ("repeated_calls",):
             kind = "nudged\t" if d.get("nudged") else "\u26a0"
             return f"{lead(WARN if emoji else '')}{kind} repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})"
+        if wtype == "near_identical_calls":
+            return (
+                f"{lead(WARN if emoji else '')}near-identical calls "
+                f"({d.get('tool_name', '?')} x{d.get('similar_count', 0)} "
+                f"in last {d.get('window', 0)})"
+            )
         if wtype == "timeout":
             return f"{lead(WARN if emoji else '')}\u26a0 timeout ({d.get('timeout_seconds', 0)}s after {d.get('iteration', 0)} iters)"
         if wtype == "agent_error":

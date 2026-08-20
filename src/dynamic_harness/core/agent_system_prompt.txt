@@ -6,6 +6,8 @@ NORMALIZE: restate goal in 1 verifiable sentence; name tools; define done-artifa
 
 PLAN FIRST & PERSIST: before any hands-on work, call plan(steps=[...]) to decompose the task into atomic steps (your plan is re-stated as progress each turn). Persist intermediate results to disk AND call checkpoint(note=...) at every milestone (after writing a file or finishing a sub-analysis) — your full state is saved so an interrupted or failed run can be resumed from disk, not restarted.
 
+EVALUATIONS LOG: maintain ONE running markdown file in the working root (e.g. findings.md) that accrues every partial result AS YOU PRODUCE IT — never hold findings only in memory. Before each write(), append each claim as a short block: the claim, the evidence/source (file path or command that supports it), confidence (0-1), and a status verdict (verified / unverified / contradicted). Return to this file every turn and update verdicts as you verify — a claim that later proves wrong is re-marked contradicted, never deleted. This file is your survival artifact if the run fails or the model drifts: a parent can later trust what is marked verified and distrust the rest. Never leave it empty, and never report() a synthesis whose component claims are unverified.
+
 PARALLELIZE: ALWAYS split tasks if possible, delegate ALL in one turn. NEVER serialize parallel work. 
 
 DELEGATE RULE: Only work at a ONE level of abstraction. Even small or narrow tasks (1 file/command/action) MUST be delegated. NEVER under-delegate.

@@ -11,7 +11,8 @@
   "safety": {
     "max_iterations": 500,
     "repeated_call_limit": 4,
-    "timeout_seconds": 300
+    "timeout_seconds": 300,
+    "disable_root_timeout": true
   },
   "agent": {
     "environment_notes": [

@@ -82,6 +82,21 @@ class Runtime:
         self._repeated_recovery_attempts = (
             config.safety.repeated_recovery_attempts if config else 1
         )
+        self._near_identical_threshold = (
+            config.safety.near_identical_threshold if config else 3
+        )
+        self._near_identical_window = (
+            config.safety.near_identical_window if config else 6
+        )
+        self._near_identical_similarity = (
+            config.safety.near_identical_similarity if config else 0.6
+        )
+        self._near_identical_tools = (
+            list(config.safety.near_identical_tools) if config else ["bash"]
+        )
+        self._near_identical_warning_attempts = (
+            config.safety.near_identical_warning_attempts if config else 2
+        )
         self._safety_timeout_seconds = config.safety.timeout_seconds if config else 900
         self._disable_root_timeout = (
             config.safety.disable_root_timeout if config else True
@@ -201,12 +216,10 @@ class Runtime:
         )
         root = self.delegate(task, agent_type=agent_type)
         root._expected_outputs = list(expected_outputs) if expected_outputs else None
-        # The top agent is exempted from the full-run wall-clock cap when
-        # configured: it runs until it finishes on its own (the oversee caller
-        # decides when to kill it). Child agents spawned later still inherit the
-        # runtime cap from `delegate`.
-        if self._disable_root_timeout:
-            root._safety_timeout_seconds = None
+        # The top agent is exempted from the full-run wall-clock cap by
+        # `delegate()` (parent is None) when configured: it runs until it finishes
+        # on its own (the oversee caller decides when to kill it). Child agents
+        # spawned later inherit the runtime cap from `delegate`.
         await root.run()
         root = await self._recover(root)
         return root
@@ -446,6 +459,16 @@ class Runtime:
         agent_id = uuid4().hex[:12]
         # The runtime owns the hierarchy; never trust a caller-supplied parent_id.
         task.parent_id = parent.id if parent else None
+        # Every root-level agent (initial root AND any self-heal successor that
+        # regenerates the top of the tree) is exempt from the full-run wall-clock
+        # cap when `disable_root_timeout` is set. Keying on `parent is None` here —
+        # rather than patching only the one root built in run() — ensures a fresh
+        # worker spawned by `_fresh_restart()` after the first root dies does not
+        # silently inherit the cap and time out again.
+        timeout = (
+            None if (parent is None and self._disable_root_timeout)
+            else self._safety_timeout_seconds
+        )
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
             agent = cls(
@@ -453,9 +476,14 @@ class Runtime:
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
                 repeated_recovery_attempts=self._repeated_recovery_attempts,
-                safety_timeout_seconds=self._safety_timeout_seconds,
+                safety_timeout_seconds=timeout,
                 active_turn_window=self._active_turn_window,
                 stream_children=self._stream_children,
+                near_identical_threshold=self._near_identical_threshold,
+                near_identical_window=self._near_identical_window,
+                near_identical_similarity=self._near_identical_similarity,
+                near_identical_tools=self._near_identical_tools,
+                near_identical_warning_attempts=self._near_identical_warning_attempts,
             )
         else:
             agent = Agent(
@@ -463,9 +491,14 @@ class Runtime:
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
                 repeated_recovery_attempts=self._repeated_recovery_attempts,
-                safety_timeout_seconds=self._safety_timeout_seconds,
+                safety_timeout_seconds=timeout,
                 active_turn_window=self._active_turn_window,
                 stream_children=self._stream_children,
+                near_identical_threshold=self._near_identical_threshold,
+                near_identical_window=self._near_identical_window,
+                near_identical_similarity=self._near_identical_similarity,
+                near_identical_tools=self._near_identical_tools,
+                near_identical_warning_attempts=self._near_identical_warning_attempts,
             )
         agent.max_agent_tokens = self._max_agent_tokens
         agent.set_environment_info(self._environment_info)
