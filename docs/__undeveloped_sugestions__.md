@@ -9,6 +9,9 @@ Encourage the agents to plan before and persist intermediary results to disk in 
 ---
 
 from the concepts and the code base, set up use-cases that are plausible under docs/
+- DONE → docs/use-cases/ (index + 7 families: repository-analysis, change-and-validation,
+  documentation-and-knowledge, research-and-synthesis, pipelines-and-jobs,
+  evaluation-and-qa, embedding-and-integration)
 
 ---
 

@@ -119,11 +119,20 @@ docs/
 │   └── guidelines.md         → Delegation / verification / stopping-conditions nuance
 ├── api/                      → Module-level API reference
 ├── guides/                   → How-to guides for common workflows
-└── concepts/                 → Architectural deep-dives
-    ├── agent-lifecycle.md
-    ├── artifact-system.md
-    ├── delegation-model.md
-    └── self-healing.md        → Layered failure-recovery policy (resume / fresh / escalate)
+├── concepts/                 → Architectural deep-dives
+│   ├── agent-lifecycle.md
+│   ├── artifact-system.md
+│   ├── delegation-model.md
+│   └── self-healing.md        → Layered failure-recovery policy (resume / fresh / escalate)
+└── use-cases/                 → Plausible use-cases deduced from the concepts + runtime
+    ├── index.md               → Taxonomy + fitness filter + how to read each family
+    ├── repository-analysis.md → Inventory, audit, security, debt scanning
+    ├── change-and-validation.md → Bug fix, test coverage, refactor, codegen
+    ├── documentation-and-knowledge.md → Module docs, reference-library curation, overviews
+    ├── research-and-synthesis.md → External research with cited artifacts
+    ├── pipelines-and-jobs.md  → Batch extraction + long resumable jobs
+    ├── evaluation-and-qa.md   → Benchmark suite, prompt A/B, failure triage
+    └── embedding-and-integration.md → Library use, custom agents/tools, product workflows
 ```
 
 ## Architecture Principles
