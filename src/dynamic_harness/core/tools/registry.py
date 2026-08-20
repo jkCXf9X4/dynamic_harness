@@ -92,6 +92,13 @@ class ToolRegistry:
         except Exception as e:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error executing {name}: {e}")
 
+        # Tools are allowed to return None or non-string values; normalize them
+        # here so the truncation/slicing below never raises on a falsy body.
+        if content is None:
+            content = ""
+        elif not isinstance(content, str):
+            content = str(content)
+
         char_limit = max(1, token_limit * 4)
         char_offset = max(0, token_offset * 4)
         total_chars = len(content)

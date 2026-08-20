@@ -21,6 +21,7 @@ from openai import (
 from .context import AgentContext
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
 from ..llm.provider import LLMConfig
+from .tools.registry import ToolResult
 from .task import (
     ActivityEvent,
     ActivityEventType,
@@ -651,19 +652,33 @@ class Agent:
             kwargs = dict(tc.arguments)
             if tc.name == "delegate":
                 kwargs["_tool_call_id"] = tc.id
-            result = await self._tool_registry.execute(
-                tc.name, tc.id, agent=self, **kwargs
-            )
+            try:
+                result = await self._tool_registry.execute(
+                    tc.name, tc.id, agent=self, **kwargs
+                )
+            except Exception as exc:
+                # A single misbehaving tool must never take down the whole run:
+                # surface the failure to the model as tool output and continue.
+                self._event_bus.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.TOOL_CALL_END,
+                    data={"tool_name": tc.name, "error": str(exc)},
+                ))
+                result = ToolResult(
+                    tool_call_id=tc.id,
+                    content=f"Error executing {tc.name}: {exc}",
+                )
+            content = result.content or ""
             if ts:
-                ts.record_tool_result(self.id, tc.id, tc.name, result.content)
-            truncated = result.content
+                ts.record_tool_result(self.id, tc.id, tc.name, content)
+            truncated = content
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.TOOL_CALL_END,
                 data={
                     "tool_name": tc.name,
-                    "result_length": len(result.content),
-                    "result_preview": result.content[:200],
+                    "result_length": len(content),
+                    "result_preview": content[:200],
                 },
             ))
             results.append({
@@ -881,7 +896,17 @@ class Agent:
                         self.id, response.content, response.model, response.usage,
                         duration_ms=duration_ms,
                     )
-                content = response.content or ""
+                content = (response.content or "").strip()
+                if not content:
+                    # A response with neither tool calls nor usable text is a
+                    # degenerate provider output. Fail gracefully rather than
+                    # reporting an empty (misleading) success or looping forever.
+                    self.fail(
+                        "LLM returned an empty response "
+                        "(no tool calls, no content)"
+                    )
+                    self.persist_checkpoint()
+                    return
                 self.report(ReportPayload(
                     task_id=self.task.id,
                     summary=content,
