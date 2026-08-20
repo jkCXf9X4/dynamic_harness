@@ -584,9 +584,6 @@ class Agent:
                 cached_tokens=response.usage.get("cached_tokens", 0),
                 message_count=len(sent_messages),
             )
-        ts = self._trace_store
-        if ts:
-            ts.record_llm_request(self.id, list(sent_messages))
 
     def _emit_llm_end(self, response: Any, tool_names: list[str]) -> None:
         self._event_bus.emit_activity(ActivityEvent(
@@ -600,7 +597,7 @@ class Agent:
             },
         ))
 
-    async def _handle_tool_calls(self, response: Any) -> bool:
+    async def _handle_tool_calls(self, response: Any, duration_ms: float) -> bool:
         """Execute a response's tool calls. Returns True when the agent must
         stop (a terminal status was reached while dispatching)."""
         ts = self._trace_store
@@ -632,7 +629,7 @@ class Agent:
         if ts:
             ts.record_llm_response(
                 self.id, response.content, response.model,
-                response.usage, tc_info,
+                response.usage, tc_info, duration_ms=duration_ms,
             )
 
         has_delegates = any(tc.name == "delegate" for tc in response.tool_calls)
@@ -818,21 +815,28 @@ class Agent:
             self._emit_iteration(prompt_tokens)
 
             sent = list(self.context.messages)
+            ts = self._trace_store
+            if ts:
+                # Record the REQUEST at its actual send time (before awaiting the
+                # provider), so trace latency shows the real in-flight duration.
+                ts.record_llm_request(self.id, list(sent))
+            req_started = time.monotonic()
             response = await self._call_llm_with_run_budget(tools, sent)
             if response is None:
                 return  # safety timeout fired mid-call
+            duration_ms = (time.monotonic() - req_started) * 1000.0
             await self._record_usage_and_trace(response, sent)
 
             if response.tool_calls:
-                if await self._handle_tool_calls(response):
+                if await self._handle_tool_calls(response, duration_ms):
                     self.persist_checkpoint()
                     return
             else:
                 self._emit_llm_end(response, [])
-                ts = self._trace_store
                 if ts:
                     ts.record_llm_response(
                         self.id, response.content, response.model, response.usage,
+                        duration_ms=duration_ms,
                     )
                 content = response.content or ""
                 self.report(ReportPayload(

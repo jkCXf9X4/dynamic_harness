@@ -3,9 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 class TraceStore:
@@ -24,7 +29,7 @@ class TraceStore:
         with open(path, "a") as f:
             f.write(json.dumps(entry, default=str) + "\n")
 
-    def record_llm_request(self, agent_id: str, messages: list[dict[str, Any]]) -> None:
+    def record_llm_request(self, agent_id: str, messages: list[dict[str, Any]]):
         prefix = tuple(
             m.get("content", "") if isinstance(m, dict) else ""
             for m in messages[:2]
@@ -41,15 +46,19 @@ class TraceStore:
         self._prefix_seen[agent_id] = prefix_hash
 
         self._append(agent_id, {
+            "ts": _now_ms(),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "llm_request",
             "messages": messages,
         })
 
-    def record_llm_response(self, agent_id: str, content: str | None, model: str, usage: dict | None, tool_calls: list[dict[str, Any]] | None = None) -> None:
+    def record_llm_response(self, agent_id: str, content: str | None, model: str, usage: dict | None, tool_calls: list[dict[str, Any]] | None = None, duration_ms: float | None = None, latencies: dict[str, float] | None = None) -> None:
         self._append(agent_id, {
+            "ts": _now_ms(),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "llm_response",
+            "duration_ms": duration_ms,
+            "latencies": latencies,
             "content": content,
             "model": model,
             "usage": usage,

@@ -79,7 +79,10 @@ class Runtime:
         self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
-        self._safety_timeout_seconds = config.safety.timeout_seconds if config else None
+        self._safety_timeout_seconds = config.safety.timeout_seconds if config else 900
+        self._disable_root_timeout = (
+            config.safety.disable_root_timeout if config else True
+        )
         self._max_agent_tokens = (
             config.safety.max_agent_tokens if config else None
         ) or None
@@ -194,6 +197,12 @@ class Runtime:
         )
         root = self.delegate(task, agent_type=agent_type)
         root._expected_outputs = list(expected_outputs) if expected_outputs else None
+        # The top agent is exempted from the full-run wall-clock cap when
+        # configured: it runs until it finishes on its own (the oversee caller
+        # decides when to kill it). Child agents spawned later still inherit the
+        # runtime cap from `delegate`.
+        if self._disable_root_timeout:
+            root._safety_timeout_seconds = None
         await root.run()
         root = await self._recover(root)
         return root

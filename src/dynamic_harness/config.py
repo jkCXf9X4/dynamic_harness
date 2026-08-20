@@ -44,6 +44,16 @@ class SafetyConfig(BaseModel):
                     "separate from llm.call_timeout_seconds, which bounds a single "
                     "LLM request.",
     )
+    disable_root_timeout: bool = Field(
+        default=False,
+        description="Exempt only the TOP (root) agent from safety.timeout_seconds. "
+                    "The root's full-run wall-clock cap is cleared so it runs until "
+                    "it finishes on its own; the person overseeing the run decides "
+                    "when to kill it. Child agents still inherit the cap, so a stuck "
+                    "child force-fails and stays recoverable via resume/self-heal. "
+                    "The per-call httpx timeout (llm.call_timeout_seconds) still "
+                    "bounds every individual request.",
+    )
     max_agent_tokens: int | None = Field(
         default=None, ge=0,
         description="Hard cap on total tokens (prompt + completion) a single agent may "

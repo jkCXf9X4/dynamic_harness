@@ -57,6 +57,13 @@ class OpenAIProvider(LLMProvider):
             base_url=base_url,
             api_key=api_key,
             http_client=http_client,
+            # Pass the timeout to the SDK as well: the openai client bakes its
+            # OWN default timeout (600s read/write/pool) into every request
+            # (`_base_client.build_request`), which overrides the httpx
+            # client-level timeout. Without this, the configured
+            # `llm.call_timeout_seconds` cap was silently ignored and a hung
+            # provider call would block far longer than intended.
+            timeout=timeout,
         )
         self.default_model = model
         self._provider_ignore = provider_ignore or []
