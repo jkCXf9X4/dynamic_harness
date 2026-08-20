@@ -71,12 +71,18 @@ class TestBuildAgentTree:
         runtime.get_agent(aid).task.status = TaskStatus.completed
         assert build_agent_tree(runtime)[0].status == "completed"
 
-    def test_usage_comes_from_tracker(self, runtime) -> None:
+    def test_tokens_come_from_tracker_messages_from_live_context(self, runtime) -> None:
         aid = _seed(runtime, n=1)[0]
         asyncio.run(runtime.record_usage(aid, prompt_tokens=50, completion_tokens=50, message_count=4))
+        agent = runtime.get_agent(aid)
+        agent.context.messages = [
+            {"role": "user", "content": "start"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "next"},
+        ]
         node = build_agent_tree(runtime)[0]
         assert node.tokens == 100
-        assert node.messages == 4
+        assert node.messages == 3
 
 
 class TestBuildStats:

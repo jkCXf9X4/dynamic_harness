@@ -23,6 +23,13 @@ class LLMProviderConfig(BaseModel):
     verify_ssl: bool = True
     price_input_per_mtok: float | None = Field(default=None, description="USD per 1M input tokens, if known")
     price_output_per_mtok: float | None = Field(default=None, description="USD per 1M output tokens, if known")
+    call_timeout_seconds: float = Field(
+        default=120.0, gt=0,
+        description="Timeout for a single LLM request, in seconds. A slow or stuck "
+                    "provider call is abandoned after this; the agent may retry "
+                    "transient failures and keeps a separate full-run budget "
+                    "(`safety.timeout_seconds`) spanning its whole context.",
+    )
 
 
 class SafetyConfig(BaseModel):
@@ -30,10 +37,12 @@ class SafetyConfig(BaseModel):
     repeated_call_limit: int = 5
     timeout_seconds: float | None = Field(
         default=None, gt=0,
-        description="Wall-clock budget for a single agent run, in seconds. After "
-                    "this many seconds the loop force-fails with a timeout. None "
-                    "disables the wall-clock cap (cost is then bounded only by "
-                    "max_iterations / max_agent_tokens).",
+        description="Wall-clock budget for a single agent's ENTIRE run (its whole "
+                    "context), in seconds. After this the loop force-fails with a "
+                    "timeout. None disables the wall-clock cap (cost is then "
+                    "bounded only by max_iterations / max_agent_tokens). This is "
+                    "separate from llm.call_timeout_seconds, which bounds a single "
+                    "LLM request.",
     )
     max_agent_tokens: int | None = Field(
         default=None, ge=0,

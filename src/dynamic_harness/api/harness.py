@@ -86,6 +86,7 @@ class Harness:
             api_key=config.get("api_key", ""),
             verify_ssl=config.get("verify_ssl", True),
             provider_force=config.get("provider_force"),
+            timeout=config.get("call_timeout_seconds", 120.0),
         )
         self._runtime.set_llm(llm)
 

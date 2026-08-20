@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from collections import deque
 
 import pytest
@@ -237,4 +239,30 @@ def test_runtime_wires_timeout_from_config(tmp_path) -> None:
     task = Task(description="t")
     agent = rt.delegate(task)
     assert agent._safety_timeout_seconds == 60.5
+
+
+@pytest.mark.asyncio
+async def test_run_timeout_binds_mid_call(runtime: Runtime) -> None:
+    """A slow LLM call must not overshoot the full-run budget: the run timeout
+    is enforced even while a request is in flight."""
+
+    class SlowLLM(LLMProvider):
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            await asyncio.sleep(5)  # far longer than the run budget
+            return ToolCallResponse(content="done", model="mock")
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    runtime.set_llm(SlowLLM())
+
+    root = _make_agent(runtime, Task(description="slow"))
+    root._started_at = time.monotonic() - 1.0  # 1s already elapsed
+    root._safety_timeout_seconds = 0.5  # only 0.5s left -> must stop mid-call
+    await root._run_loop()
+    assert root.task.status.value == "failed"
+    assert root._terminated_by_safety is True
 

@@ -80,6 +80,7 @@ def main() -> None:
         provider_ignore=config.llm.provider_ignore or None,
         provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
         provider_force=config.llm.provider_force,
+        timeout=config.llm.call_timeout_seconds,
     )
 
     benchmark = Benchmark(

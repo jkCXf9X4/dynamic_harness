@@ -5,7 +5,8 @@
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
     "provider_allow_fallbacks": true,
     "provider_force": null,
-    "verify_ssl": true
+    "verify_ssl": true,
+    "call_timeout_seconds": 120
   },
   "safety": {
     "max_iterations": 500,

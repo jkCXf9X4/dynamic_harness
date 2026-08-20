@@ -404,6 +404,46 @@ class Agent:
             )
         )
 
+    async def _call_llm_with_run_budget(
+        self, tools: list[dict], sent: list[dict[str, Any]]
+    ) -> Any | None:
+        """Invoke the LLM, bounding the call by the agent's full-run budget.
+
+        The full-run timeout (``safety.timeout_seconds``) is enforced even WHILE
+        a request is in flight, so a single slow call (plus its retries) can never
+        overshoot the run's wall-clock budget. Returns None when the budget was
+        exhausted mid-call (the loop should stop). The per-call httpx timeout on
+        the provider remains the tighter bound for a single request.
+        """
+        remaining = None
+        if (
+            self._safety_timeout_seconds is not None
+            and self._started_at is not None
+        ):
+            remaining = self._safety_timeout_seconds - (
+                time.monotonic() - self._started_at
+            )
+            if remaining <= 0:
+                self._terminated_by_safety = True
+                self.fail(
+                    f"Agent timed out after {self._safety_timeout_seconds}s "
+                    f"({self._iteration} iterations)"
+                )
+                return None
+        try:
+            if remaining is not None:
+                return await asyncio.wait_for(
+                    self._llm_call_with_retry(tools, sent), timeout=remaining
+                )
+            return await self._llm_call_with_retry(tools, sent)
+        except asyncio.TimeoutError:
+            self._terminated_by_safety = True
+            self.fail(
+                f"Agent timed out after {self._safety_timeout_seconds}s "
+                f"({self._iteration} iterations, an LLM call exceeded the budget)"
+            )
+            return None
+
     # -- turn / context helpers (delegate to context) ---------------------
 
     def _format_delegate_result(self, child: Agent) -> str:
@@ -778,7 +818,9 @@ class Agent:
             self._emit_iteration(prompt_tokens)
 
             sent = list(self.context.messages)
-            response = await self._llm_call_with_retry(tools, sent)
+            response = await self._call_llm_with_run_budget(tools, sent)
+            if response is None:
+                return  # safety timeout fired mid-call
             await self._record_usage_and_trace(response, sent)
 
             if response.tool_calls:

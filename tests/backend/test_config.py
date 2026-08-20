@@ -49,6 +49,11 @@ class TestHarnessConfig:
         assert lpc.provider_ignore == []
         assert lpc.provider_allow_fallbacks is True
         assert lpc.provider_force is None
+        assert lpc.call_timeout_seconds == 120.0
+
+    def test_call_timeout_seconds(self) -> None:
+        lpc = LLMProviderConfig(call_timeout_seconds=45.0)
+        assert lpc.call_timeout_seconds == 45.0
 
     def test_partial_config_merge(self) -> None:
         cfg = HarnessConfig.model_validate({"llm": {"model": "custom-model"}})

@@ -70,7 +70,7 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             description=agent.task.description,
             status=agent.task.status.value,
             tokens=usage.get("total_tokens", 0),
-            messages=usage.get("message_count", 0),
+            messages=agent.message_count,
             artifact_ids=prov["artifact_ids"],
             trace_path=prov["trace_path"],
             children=[
