@@ -58,6 +58,12 @@ class Agent:
         safety_timeout_seconds: float | None = None,
         active_turn_window: int = 50,
         stream_children: bool = False,
+        # If the agent reaches `delegate_nudge_threshold` turns without having
+        # delegated any work, append ONE stable reminder to split/prune/report.
+        # Rare + tail-append-only so the prompt prefix (and provider cache)
+        # stays contiguous. _delegate_nudge_attempts caps how many nudges fire.
+        delegate_nudge_threshold: int = 8,
+        delegate_nudge_attempts: int = 1,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -111,6 +117,13 @@ class Agent:
         # Registry-name of this agent's class (None for the base Agent). Used by
         # self-heal to restart a failed agent as the same agent_type.
         self.agent_type: str | None = None
+
+        # Delegate-rarity nudge: set to True once a delegate call is observed, so
+        # the reminder never fires for agents that are already delegating.
+        self._has_delegated: bool = False
+        self._delegate_nudge_threshold: int = max(int(delegate_nudge_threshold), 1)
+        self._delegate_nudge_attempts: int = max(int(delegate_nudge_attempts), 0)
+        self._delegate_nudge_left: int = self._delegate_nudge_attempts
         # On-disk outputs this agent must produce (set by Runtime.run). Self-heal
         # uses them as the deliverable check when provided.
         self._expected_outputs: list[str] | None = None
@@ -321,6 +334,8 @@ class Agent:
         self._recent_tool_signatures.clear()
         self._recent_messages.clear()
         self._recent_delegate_targets.clear()
+        self._has_delegated = False
+        self._delegate_nudge_left = self._delegate_nudge_attempts
         self._started_at = time.monotonic()
         await self._run_guarded()
 
@@ -647,8 +662,10 @@ class Agent:
             )
 
         has_delegates = any(tc.name == "delegate" for tc in response.tool_calls)
-        if has_delegates and not self.stream_children:
-            self._deferred_delegates = []
+        if has_delegates:
+            self._has_delegated = True
+            if not self.stream_children:
+                self._deferred_delegates = []
 
         for tc in response.tool_calls:
             self._event_bus.emit_activity(ActivityEvent(
@@ -869,6 +886,43 @@ class Agent:
         )
         return True
 
+    def _maybe_nudge_delegation(self) -> None:
+        """Emit a stable, one-off reminder when an agent never delegates.
+
+        Scoped to agents that have reached ``_delegate_nudge_threshold`` turns
+        without any ``delegate`` call. Fires at most ``_delegate_nudge_attempts``
+        times and appends a fixed-text user message at the end of the context —
+        never mutating a prior message — so the prompt prefix (and the provider's
+        cache contiguity) is preserved after the nudge lands.
+        """
+        if self._has_delegated:
+            return
+        if self._delegate_nudge_left <= 0:
+            return
+        if self._iteration < self._delegate_nudge_threshold:
+            return
+        self._delegate_nudge_left -= 1
+
+        note = (
+            "You are N turns into this run and have not delegated any work. "
+            "If your task decomposes into independent units, delegate them to "
+            "fresh sub-agents in one turn and verify each by artifact summary. "
+            "If the task is genuinely atomic and effectively done, prune stale "
+            "committed turns to keep context flat, then report / escalate / fail "
+            "instead of chaining further calls in-context."
+        ).replace("N turns", f"{self._iteration} turns")
+
+        self._event_bus.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.SAFETY_WARNING,
+            data={
+                "warning_type": "delegate_reminder",
+                "turn": self._iteration,
+                "attempts_remaining": self._delegate_nudge_left,
+            },
+        ))
+        self.context.append({"role": "user", "content": note})
+
     async def _run_loop(self) -> None:
         tools = self._tool_registry.openai_schemas(role=self.task.role)
 
@@ -930,6 +984,10 @@ class Agent:
                 ))
                 self.persist_checkpoint()
                 return
+            # One-off, rare reminder: if the agent has gone past the threshold
+            # without delegating, append (don't mutate) a stable nudge so the
+            # next turn sees it without breaking the cached prompt prefix.
+            self._maybe_nudge_delegation()
             self.persist_checkpoint()
 
     async def _gather_deferred_and_finalize(

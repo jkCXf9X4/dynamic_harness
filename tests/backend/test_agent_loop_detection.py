@@ -351,3 +351,44 @@ async def test_run_timeout_binds_mid_call(runtime: Runtime) -> None:
     assert root.task.status.value == "failed"
     assert root._terminated_by_safety is True
 
+
+def test_delegate_nudge_fires_once_for_non_delegating_agent(runtime: Runtime) -> None:
+    """An agent past the threshold with no delegations gets ONE reminder; once it
+    has delegated (or the nudge budget is spent) no further nudge is emitted."""
+    root = _make_agent(runtime, Task(description="task"))
+    root._delegate_nudge_threshold = 4
+    root._delegate_nudge_attempts = 1
+    root._delegate_nudge_left = 1
+
+    # Below threshold -> no nudge.
+    root._iteration = 3
+    root._maybe_nudge_delegation()
+    assert len(root.context.messages) == 0
+
+    # At/above threshold -> one nudge, appended (not mutated).
+    root._iteration = 4
+    root._maybe_nudge_delegation()
+    assert len(root.context.messages) == 1
+    assert root.context.messages[0]["role"] == "user"
+    assert "have not delegated" in root.context.messages[0]["content"]
+    budget_after = root._delegate_nudge_left
+
+    # Budget exhausted -> no second nudge even if it keeps not delegating.
+    root._iteration = 9
+    root._maybe_nudge_delegation()
+    assert len(root.context.messages) == 1
+    assert root._delegate_nudge_left == budget_after
+
+
+def test_delegate_nudge_suppressed_after_first_delegate(runtime: Runtime) -> None:
+    """Once the agent has delegated, the reminder never fires."""
+    root = _make_agent(runtime, Task(description="task"))
+    root._delegate_nudge_threshold = 2
+    root._delegate_nudge_attempts = 1
+    root._delegate_nudge_left = 1
+    root._has_delegated = True
+
+    root._iteration = 20
+    root._maybe_nudge_delegation()
+    assert len(root.context.messages) == 0
+

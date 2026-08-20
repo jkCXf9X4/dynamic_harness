@@ -394,6 +394,42 @@ async def test_bash_timeout(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
+async def test_bash_leading_cd_chain(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    marker = tmp_path / "marker.txt"
+    marker.write_text("hello-cd")
+    result = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent,
+        command=f"cd {tmp_path} && cat marker.txt",
+    )
+    assert "hello-cd" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_explicit_workdir(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    marker = tmp_path / "marker.txt"
+    marker.write_text("workdir-hit")
+    result = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent,
+        command="cat marker.txt", workdir=str(tmp_path),
+    )
+    assert "workdir-hit" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_shell_chain(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent,
+        command="echo alpha && echo beta && echo gamma",
+    )
+    assert "alpha" in result.content
+    assert "beta" in result.content
+    assert "gamma" in result.content
+
+
+@pytest.mark.asyncio
 async def test_grep_reports_unreadable_files(runtime: Runtime, tmp_path: Path) -> None:
     agent = runtime.delegate(Task(description="test"))
     (tmp_path / "readable.txt").write_text("needle")
