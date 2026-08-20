@@ -80,6 +80,12 @@ class CheckpointStore:
             ),
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
+        # Self-heal: the checkpoint root may have been recreated/removed since
+        # construction (e.g. a session/workdir cleanup), so ensure it exists
+        # before writing. A checkpoint is best-effort — callers decide whether a
+        # failure here is fatal — but the common FileNotFoundError case is
+        # transient and cheap to recover from.
+        self.root.mkdir(parents=True, exist_ok=True)
         self._path(str(agent.id)).write_text(cp.model_dump_json(indent=2))
         return cp
 

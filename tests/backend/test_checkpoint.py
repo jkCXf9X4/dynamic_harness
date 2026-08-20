@@ -144,3 +144,33 @@ async def test_resume_aborted_task_from_fresh_runtime(tmp: Path) -> None:
     assert "resumed and done" in recovered.last_report.summary
     assert out.exists()
     assert "gather" in (recovered.focus.pending or [])
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_dir_removed_midrun_is_nonfatal_and_self_heals(tmp: Path) -> None:
+    """Deleting the checkpoints dir mid-run mimics the trace.jsonl failure: a
+    FileNotFoundError from the checkpoint write must NEVER fail the run (even a
+    top agent) — it self-heals by recreating the dir and keeps working."""
+    ckpt = tmp / "ckpt"
+    rt = _make_runtime(tmp / "rt", ckpt)
+    out = tmp / "rt" / "out.txt"
+    rt.set_llm(ScriptedProvider([
+        _tool("c0", "write", {"path": str(out), "content": "phase1"}),
+        _tool("c1", "write", {"path": str(out), "content": "phase2"}),
+        _tool("c2", "report", {"summary": "ran to completion"}),
+    ]))
+
+    # Simulate a session/workdir cleanup between the construct and the run.
+    rt.checkpoint_store.clear()
+    import shutil as _shutil
+    _shutil.rmtree(ckpt, ignore_errors=True)
+
+    root = rt.delegate(Task(description="build a file on disk"))
+    await root.run()
+
+    assert root.last_report is not None
+    assert "ran to completion" in root.last_report.summary
+    assert out.read_text() == "phase2"
+    # The store self-healed the removed dir and persisted the final state.
+    assert ckpt.exists()
+    assert (ckpt / f"{root.id}.json").exists()

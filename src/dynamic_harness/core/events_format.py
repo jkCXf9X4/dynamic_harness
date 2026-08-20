@@ -82,6 +82,8 @@ def format_event(
             return f"{lead(WARN if emoji else '')}\u26a0 timeout ({d.get('timeout_seconds', 0)}s after {d.get('iteration', 0)} iters)"
         if wtype == "agent_error":
             return f"{lead(WARN if emoji else '')}\u26a0 agent error: {str(d.get('error', ''))[:120]}"
+        if wtype == "checkpoint_error":
+            return f"{lead(WARN if emoji else '')}\u26a0 checkpoint write failed (non-fatal): {str(d.get('error', ''))[:120]}"
         return f"{lead(WARN if emoji else '')}\u26a0 {wtype}"
     elif et == ActivityEventType.ITERATION:
         return None

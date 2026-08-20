@@ -66,3 +66,20 @@ maybe point out to the agent that its looping and see if it can recover
 check trace.jsonl and see if you can deduce the error and if it is something fixable of if its reasonable
 
 use the sess
+
+
+---
+
+lets push the agents further when it comes to persisting partial results and evaluations. models often fail or suffer from hallucinations during long runs
+
+---
+
+The main orchestrator still times out, can you evaluate why?
+
+---
+
+lets ensure that sub-orchestrators can not time out as well
+
+---
+
+parents should also be able to evaluate if children has crashed and kill them

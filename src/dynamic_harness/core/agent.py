@@ -279,10 +279,26 @@ class Agent:
         Called automatically after every committed turn and whenever the agent
         plans or checkpoints, so an interrupted run can be resumed from disk.
         No-op when no checkpoint store is configured.
+
+        Checkpoint writes are best-effort and NEVER fatal: a filesystem error
+        (missing/permission-denied dir, disk full) must not crash or fail the
+        run, even at the top agent. We log it to the trace and emit a warning
+        activity, then continue — the agent keeps working with state in memory.
         """
         store = self._checkpoint_store
-        if store is not None:
+        if store is None:
+            return
+        try:
             store.save(self)
+        except Exception as exc:
+            ts = self._trace_store
+            if ts:
+                ts.record_event(self.id, "checkpoint_error", error=str(exc))
+            self._event_bus.emit_activity(ActivityEvent(
+                agent_id=self.id,
+                event_type=ActivityEventType.SAFETY_WARNING,
+                data={"warning_type": "checkpoint_error", "error": str(exc)},
+            ))
 
     def set_plan(
         self,
