@@ -93,6 +93,11 @@ class Agent:
         self._repeated_calls_detected: bool = False
         self._terminated_by_safety: bool = False
 
+        # Total-token cap for this agent (None = uncapped). When set, the loop
+        # force-fails once cumulative prompt+completion usage exceeds it, and the
+        # cap is surfaced to the agent in its static budget guidance.
+        self.max_agent_tokens: int | None = None
+
         self.context = AgentContext(
             active_turn_window=active_turn_window,
         )
@@ -459,6 +464,24 @@ class Agent:
                 f"Safety limit reached ({self._safety_max_iterations} iterations)"
             )
             return True
+        if self.max_agent_tokens:
+            current = self._runtime.get_usage(self.id).get("total_tokens", 0)
+            if current > self.max_agent_tokens:
+                self._terminated_by_safety = True
+                self._event_bus.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.SAFETY_WARNING,
+                    data={
+                        "warning_type": "max_token_budget",
+                        "used": current,
+                        "limit": self.max_agent_tokens,
+                    },
+                ))
+                self.fail(
+                    f"Token budget exceeded: {current} > {self.max_agent_tokens} "
+                    f"total tokens. This agent stopped to contain cost."
+                )
+                return True
         return False
 
     def _build_steerage(self) -> str:
@@ -475,6 +498,13 @@ class Agent:
         focus_text = render_focus(self._focus, iteration=1)
         if focus_text:
             blocks.append(focus_text)
+        if self.max_agent_tokens:
+            blocks.append(
+                f"[Budget] This agent may use at most {self.max_agent_tokens} total "
+                f"tokens (prompt + completion) before the run is stopped. Track your "
+                f"live spend and messages with the usage tool; to stay lean, "
+                f"delegate or prune stale turns instead of chaining calls in-context."
+            )
         if self.environment_info:
             blocks.append(self.environment_info)
         return "\n\n".join(blocks)

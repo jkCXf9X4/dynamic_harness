@@ -34,3 +34,14 @@ Implement
 --- 
 
 Evaluate how referencing additional knowledge should work and fit in to the larger picture
+
+---
+
+How to visulize token use better to the agents, did this improve by g10?
+set a context goal of using a total per agent of less than 50000 tokens, 
+
+---
+
+hangs at 
+
+{"timestamp": "2026-08-20T07:25:45.519899+00:00", "type": "tool_result", "tool_call_id": "chatcmpl-tool-b0fe599dc7680626", "name": "bash", "content_length": 11, "content_preview": "(no output)"}

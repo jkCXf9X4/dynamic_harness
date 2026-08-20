@@ -79,6 +79,9 @@ class Runtime:
         self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
+        self._max_agent_tokens = (
+            config.safety.max_agent_tokens if config else None
+        ) or None
         self._active_turn_window = (config.agent.active_turn_window if config else 50)
         self._self_heal_mode = config.self_heal.mode if config else True
         self._self_heal_max_resumes = config.self_heal.max_resumes if config else 1
@@ -444,6 +447,7 @@ class Runtime:
                 repeated_call_limit=self._repeated_call_limit,
                 active_turn_window=self._active_turn_window,
             )
+        agent.max_agent_tokens = self._max_agent_tokens
         agent.set_environment_info(self._environment_info)
         agent.agent_type = agent_type
         self._agents[agent_id] = agent

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from typing import TYPE_CHECKING
 
@@ -127,6 +128,22 @@ TOOL_CONVERSE_DEF = ToolDef(
             "message": {"type": "string", "description": "Message or instruction for the target agent"},
         },
         "required": ["agent_id", "message"],
+    },
+)
+
+TOOL_USAGE_DEF = ToolDef(
+    name="usage",
+    description="Read this agent's current message + token usage. Returns cumulative "
+                "messages sent and prompt/completion/total tokens this run, your live "
+                "in-context message count and token estimate, and the configured "
+                "budget cap (if any). Call this when work is repetitive or growing — "
+                "before the loop does, or to decide whether to delegate, prune, or "
+                "compress. Cache-friendly: read your own counters instead of waiting "
+                "for an injected per-turn observation.",
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "required": [],
     },
 )
 
@@ -289,6 +306,10 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
     summary = ctx.latest_assistant_message(agent_id)
     status = target.task.status.value
     return f"[Agent {agent_id[:8]}] {summary}\n(Status: {status})"
+
+
+async def usage(*, ctx: ToolContext) -> str:
+    return json.dumps(ctx.usage_summary(), indent=2)
 
 
 async def read_artifact(*, ctx: ToolContext, artifact_id: str, file: str | None = None, level: str = "auto") -> str:

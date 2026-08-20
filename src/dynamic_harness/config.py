@@ -28,6 +28,14 @@ class LLMProviderConfig(BaseModel):
 class SafetyConfig(BaseModel):
     max_iterations: int = 500
     repeated_call_limit: int = 5
+    max_agent_tokens: int | None = Field(
+        default=None, ge=0,
+        description="Hard cap on total tokens (prompt + completion) a single agent may "
+                    "use before it is force-failed (a safety invariant). None or 0 "
+                    "disables the cap. When set, it is surfaced to the agent each turn "
+                    "as its live token budget. The default per-agent guidance (when no "
+                    "cap is configured) recommends staying under ~50,000 total tokens for best performance.",
+    )
 
 
 class SelfHealConfig(BaseModel):

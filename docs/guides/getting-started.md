@@ -63,10 +63,18 @@ Edit as needed:
   },
   "safety": {
     "max_iterations": 500,
-    "repeated_call_limit": 5
+    "repeated_call_limit": 5,
+    "max_agent_tokens": 50000
   }
 }
 ```
+
+`max_agent_tokens` (optional) force-fails an agent once its total cumulative
+usage (prompt + completion) passes the cap. It is surfaced to agents as a
+static budget line, and the `usage` tool lets any agent read its own live
+message/token counters — so a tight per-agent goal (e.g. **under 50,000
+tokens**) can be communicated both up-front and as the agent runs, without
+adding a per-turn observation message.
 
 The config file is discovered automatically from `./harness.json` (CWD),
 `~/.config/dynamic-harness/harness.json` (XDG user-global), or explicitly via

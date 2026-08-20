@@ -250,7 +250,7 @@ ReportPayload(
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 19 Built-in Tools
+## 20 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -263,7 +263,7 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 5 | `bash` | `command: str, timeout?: int` | No |
 | 6 | `webfetch` | `url: str` | No |
 | 7 | `edit` | `path: str, old_string: str, new_string: str` | No |
-| 8 | `delegate` | `description: str, role?: str, system_prompt?: str` | No |
+| 8 | `delegate` | `description: str, role?: str, system_prompt?: str, agent_type?: str` | No |
 | 9 | `report` | `summary: str, artifact_ids?: list[str], technical_summary?: str, full_report?: str, confidence?: float` | **Yes** |
 | 10 | `escalate` | `issue: str` | **Yes** |
 | 11 | `fail` | `error: str` | **Yes** |
@@ -272,17 +272,20 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 14 | `prune` | `prune_ids?: list[str]` | No |
 | 15 | `restore` | `prune_id: str` | No |
 | 16 | `converse` | `agent_id: str, message: str` | No |
-| 17 | `read_artifact` | `artifact_id: str` | No |
+| 17 | `read_artifact` | `artifact_id: str, file?: str, level?: str` | No |
 | 18 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
 | 19 | `checkpoint` | `note: str` | No |
+| 20 | `usage` | *(none)* | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its
-checkpoint); `checkpoint` writes a milestone note to disk. The run loop also
-auto-persists a structured `AgentCheckpoint` after every committed turn, so an
-interrupted or failed task can be resumed from disk via `Runtime.resume(agent_id)`
-(e.g. `--resume <id>` in the CLI) — state lives in the immutable checkpoint, not
-only in agent memory.
+checkpoint); `checkpoint` writes a milestone note to disk. `usage` returns the
+agent's own cumulative message/token counts and live-context estimate so it can
+self-regulate (no per-turn observation message — see Safety Invariants). The run
+loop also auto-persists a structured `AgentCheckpoint` after every committed
+turn, so an interrupted or failed task can be resumed from disk via
+`Runtime.resume(agent_id)` (e.g. `--resume <id>` in the CLI) — state lives in
+the immutable checkpoint, not only in agent memory.
 
 ## Safety Invariants
 
@@ -291,9 +294,10 @@ All safety mechanisms are in `Agent._run_loop()`:
 1. **Max iterations:** Default 500. Exceeding → force-fail with message.
 2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops).
 3. **Wall-clock timeout:** Optional `safety_timeout_seconds` → force-fail when exceeded.
-4. **Context observation:** Every turn includes turn count, message count, token estimate.
-5. **Compress tool:** LLM can compress its own context when past ~50 messages.
-6. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
+4. **Token budget:** Optional `safety.max_agent_tokens` cap → force-fail when cumulative usage exceeds it.
+5. **Context observation:** Kept static/cache-friendly — agents read their own live turn count, message count, and token estimates on demand via the `usage` tool instead of a changing per-turn message.
+6. **Compress tool:** LLM can compress its own context when past ~50 messages.
+7. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
 
 ## Process (CLI / programmatic)
 

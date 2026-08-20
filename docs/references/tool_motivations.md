@@ -38,6 +38,10 @@ another, has been optimized away, recover it here via `read`.
   output. Prefer this over pulling a child's full artifact into your context.
 - **read_artifact** — read a stored artifact by ID across the progressive-disclosure
   view (headline → summary → technical). Verify children by summary first.
+- **usage** — read your own cumulative message/token counters and live-context
+  estimate. The cache-friendly way to self-monitor: consult it when work grows
+  repetitive (before delegating/pruning/compressing) instead of waiting for a
+  per-turn observation that would zero the provider prompt cache.
 
 ## Context-management tools
 

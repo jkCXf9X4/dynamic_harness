@@ -61,6 +61,29 @@ class ToolContext:
     def message_count(self) -> int:
         return self._agent.message_count
 
+    def usage_summary(self) -> dict[str, Any]:
+        """Live cumulative usage + context state for this agent.
+
+        Cache-clean feedback: the agent calls the tool to read its own counters
+        rather than the runtime appending a changing per-turn observation message
+        (which would zero the provider prompt cache). Callers shouldn't inspect
+        private agent state; this centralizes the reading here on ToolContext.
+        """
+        agent = self._agent
+        u = agent._runtime.get_usage(agent.id)
+        return {
+            "agent_id": agent.id,
+            "iteration": getattr(agent, "_iteration", 0),
+            "messages_in_context": agent.message_count,
+            "cumulative_messages_sent": u.get("message_count", 0),
+            "cumulative_prompt_tokens": u.get("prompt_tokens", 0),
+            "cumulative_completion_tokens": u.get("completion_tokens", 0),
+            "cumulative_total_tokens": u.get("total_tokens", 0),
+            "cumulative_cached_tokens": u.get("cached_tokens", 0),
+            "live_context_token_estimate": agent.context.estimate_prompt_tokens(),
+            "max_agent_tokens": agent.max_agent_tokens,
+        }
+
     @property
     def artifact_store(self) -> Any:
         return self._agent.artifact_store
