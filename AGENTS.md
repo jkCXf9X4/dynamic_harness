@@ -119,6 +119,7 @@ docs/
 │   └── guidelines.md         → Delegation / verification / stopping-conditions nuance
 ├── api/                      → Module-level API reference
 ├── guides/                   → How-to guides for common workflows
+├── gap-analysis.md           → Evaluation: concept/use-case promises vs implementation (G1–G13)
 ├── concepts/                 → Architectural deep-dives
 │   ├── agent-lifecycle.md
 │   ├── artifact-system.md
