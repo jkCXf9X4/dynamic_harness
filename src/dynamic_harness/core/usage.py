@@ -33,7 +33,7 @@ class UsageTracker:
             prev["completion_tokens"] += completion_tokens
             prev["total_tokens"] += prompt_tokens + completion_tokens
             prev["cached_tokens"] += cached_tokens
-            prev["message_count"] = message_count
+            prev["message_count"] = prev.get("message_count", 0) + message_count
             self._agent_usage[agent_id] = prev
 
     def get_usage(self, agent_id: str) -> dict:

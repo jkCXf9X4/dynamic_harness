@@ -23,9 +23,9 @@ Turn 20: report("I analyzed the codebase...")  ← synthesis from stale/buried c
 ```
 Turn 1: [Analysis] "I see 3 sub-tasks: (A) find auth logic, (B) check error handling, (C) review tests"
          delegate(A), delegate(B), delegate(C)  ← all in one turn
-Turn 2: [Verification] read("/tmp/auth_findings.txt") ✓
-         read("/tmp/error_handling.txt") ✓
-         read("/tmp/test_review.txt") ✓
+Turn 2: [Verification] read_artifact(artA) / read("outputs/auth_findings.txt") ✓
+         read("outputs/error_handling.txt") ✓
+         read("outputs/test_review.txt") ✓
 Turn 3: [Synthesis + Termination] report("...", artifact_ids=[artA, artB, artC])
 ```
 

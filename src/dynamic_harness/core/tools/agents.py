@@ -19,15 +19,19 @@ TOOL_DELEGATE_DEF = ToolDef(
                 "Use system_prompt to override the sub-agent's default behavior. "
                 "Set role to 'orchestrator' to force deeper decomposition: the "
                 "sub-agent becomes a sub-orchestrator that must split and delegate "
-                "its own work (it cannot do hands-on work itself). Returns the "
-                "child's status, ID, report summary, artifact IDs, and confidence "
-                "(if set). For failed children, returns the failure reason.",
+                "its own work (it cannot do hands-on work itself). "
+                "Optionally set agent_type to a registered custom agent class "
+                "name to instantiate a specialist sub-agent; unknown names are "
+                "rejected. Returns the child's status, ID, report summary, "
+                "artifact IDs, and confidence (if set). For failed children, "
+                "returns the failure reason.",
     input_schema={
         "type": "object",
         "properties": {
             "description": {"type": "string", "description": "Description of the task for the sub-agent"},
-            "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.'). Set role to 'orchestrator' to create a sub-orchestrator that must further decompose and delegate its own sub-tree — use when an delegated task is itself large enough to be split."},
+            "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.'). Set role to 'orchestrator' to create a sub-orchestrator that must further decompose and delegate its own sub-tree — use when a delegated task is itself large enough to be split."},
             "system_prompt": {"type": "string", "description": "Optional custom system prompt for the sub-agent. Overrides the default agent behavior. Use for A/B testing different prompt strategies."},
+            "agent_type": {"type": "string", "description": "Optional registered custom agent class name (via Runtime.register_agent_class) to instantiate for the sub-agent. Unknown names are rejected — the base Agent is never used as a silent fallback."},
         },
         "required": ["description"],
     },
@@ -128,26 +132,110 @@ TOOL_CONVERSE_DEF = ToolDef(
 
 TOOL_READ_ARTIFACT_DEF = ToolDef(
     name="read_artifact",
-    description="Read an artifact by its ID. Artifacts are stored when agents call "
-                "report(). Use this to look up a child agent's report contents by its "
-                "artifact ID. Returns the artifact's headline and summary views.",
+    description="Read an artifact by its ID (or by the agent id whose latest "
+                "artifact is wanted). Progressive disclosure: by default returns "
+                "only the cheap summary (headline + 200/1000-char summaries), "
+                "preferring that slim preview over pulling the full body. Pass "
+                "level='technical'|'full'|'raw' only when you actually need a "
+                "deeper view. Pass file='<name>' to read a file the agent wrote "
+                "(files_written), stored inside the artifact.",
     input_schema={
         "type": "object",
         "properties": {
-            "artifact_id": {"type": "string", "description": "The ID of the artifact to read"},
+            "artifact_id": {"type": "string", "description": "ID of the artifact, or of the agent whose latest artifact to read"},
+            "file": {"type": "string", "description": "Optional: basename of a files_written file to read from the artifact's stored copy"},
+            "level": {"type": "string", "description": "Disclosure level: auto (default, progressive summary), headline, summary, technical, full, raw"},
         },
         "required": ["artifact_id"],
     },
 )
 
+_VIEW_LEVELS: dict[str, tuple[str, ...]] = {
+    "auto": ("headline", "summary_200", "summary_1000"),
+    "headline": ("headline",),
+    "summary": ("headline", "summary_200", "summary_1000"),
+    "technical": ("technical",),
+    "full": ("full_report",),
+    "raw": ("raw_data",),
+}
+
+
+def _resolve_artifact(ctx: ToolContext, artifact_id: str):
+    """Resolve an artifact by id; fall back to resolving a child *agent* id."""
+    artifact = ctx.artifact_store.get(artifact_id)
+    if not artifact:
+        agent = ctx.get_other_agent(artifact_id)
+        if agent is not None:
+            report_aid = getattr(agent, "_report_artifact_id", None)
+            if report_aid:
+                artifact = ctx.artifact_store.get(report_aid)
+            if not artifact and getattr(agent, "last_report", None):
+                for aid in (agent.last_report.artifact_ids or []):
+                    candidate = ctx.artifact_store.get(aid)
+                    if candidate is not None:
+                        artifact = candidate
+                        break
+    return artifact
+
+
+async def read_artifact(
+    *, ctx: ToolContext, artifact_id: str,
+    file: str | None = None, level: str = "auto",
+) -> str:
+    artifact = _resolve_artifact(ctx, artifact_id)
+    if not artifact:
+        return f"Error: no artifact found with ID '{artifact_id}'"
+
+    if file:
+        content = ctx.artifact_store.read_text(artifact.id, file)
+        if content is None:
+            names = [p.name for p in ctx.artifact_store.list_files(artifact.id)]
+            return (f"Error: artifact {artifact.id} has no stored file named '{file}'. "
+                    f"Available: {', '.join(sorted(n for n in names if n != 'artifact.json')) or '(none)'}")
+        return content
+
+    level = (level or "auto").strip().lower()
+    if level not in _VIEW_LEVELS:
+        return (f"Error: unknown level '{level}'. One of: "
+                f"{', '.join(_VIEW_LEVELS)}")
+    names = _VIEW_LEVELS[level]
+
+    parts: list[str] = []
+    for name in names:
+        v = getattr(artifact.views, name, None)
+        if v:
+            parts.append(f"[{name}] {v}")
+    if not parts and level != "raw":
+        # Progressive fallback: if the requested preview is empty but deeper
+        # content exists (e.g. a prose-only report with a full_report), reveal
+        # the first deeper view so the parent is not left empty-handed.
+        for name in ("technical", "full_report", "raw_data"):
+            v = getattr(artifact.views, name, None)
+            if v:
+                parts.append(f"[{name}] {v}")
+                break
+    if not parts:
+        return f"Artifact {artifact.id} has no content at level '{level}'."
+
+    body = "\n".join(parts)
+    # For summary-level reads, hint at withheld detail so the parent can opt in.
+    if level in ("auto", "summary", "headline"):
+        deeper = [n for n in ("technical", "full_report", "raw_data")
+                  if getattr(artifact.views, n, None)]
+        if deeper:
+            body += (f"\n\n[More detail available: {', '.join(deeper)}. "
+                     f"Re-read with level='{deeper[0]}' to see it.]")
+    return body
+
 
 async def delegate(
     *, ctx: ToolContext, description: str,
     role: str | None = None, system_prompt: str | None = None,
-    _tool_call_id: str = "",
+    agent_type: str | None = None, _tool_call_id: str = "",
 ) -> str:
     return await ctx.run_delegate_tool(
-        description, role=role, system_prompt=system_prompt, tool_call_id=_tool_call_id,
+        description, role=role, system_prompt=system_prompt,
+        agent_type=agent_type, tool_call_id=_tool_call_id,
     )
 
 
@@ -203,28 +291,43 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
     return f"[Agent {agent_id[:8]}] {summary}\n(Status: {status})"
 
 
-async def read_artifact(*, ctx: ToolContext, artifact_id: str) -> str:
-    artifact = ctx.artifact_store.get(artifact_id)
-    if not artifact:
-        # Fall back to resolving by *agent* id: parents only know their child's
-        # agent id (from delegate), so read that agent's latest report artifact.
-        agent = ctx.get_other_agent(artifact_id)
-        if agent is not None:
-            report_aid = getattr(agent, "_report_artifact_id", None)
-            if report_aid:
-                artifact = ctx.artifact_store.get(report_aid)
-            if not artifact and getattr(agent, "last_report", None):
-                for aid in (agent.last_report.artifact_ids or []):
-                    candidate = ctx.artifact_store.get(aid)
-                    if candidate is not None:
-                        artifact = candidate
-                        break
+async def read_artifact(*, ctx: ToolContext, artifact_id: str, file: str | None = None, level: str = "auto") -> str:
+    artifact = _resolve_artifact(ctx, artifact_id)
     if not artifact:
         return f"Error: no artifact found with ID '{artifact_id}'"
-    views = artifact.views
-    parts = []
-    for name in ("headline", "summary_200", "summary_1000", "technical", "full_report", "raw_data"):
-        v = getattr(views, name, None)
+
+    if file:
+        content = ctx.artifact_store.read_text(artifact.id, file)
+        if content is None:
+            names = [p.name for p in ctx.artifact_store.list_files(artifact.id) if p.name != "artifact.json"]
+            return (f"Error: no stored file named '{file}' for artifact {artifact.id}. "
+                    f"Available: {', '.join(names) or '(none)'}")
+        return content
+
+    level = (level or "auto").strip().lower()
+    if level not in _VIEW_LEVELS:
+        return (f"Error: unknown level '{level}'. One of: {', '.join(_VIEW_LEVELS)}")
+    names = _VIEW_LEVELS[level]
+
+    parts: list[str] = []
+    for name in names:
+        v = getattr(artifact.views, name, None)
         if v:
             parts.append(f"[{name}] {v}")
-    return "\n".join(parts) if parts else f"Artifact {artifact_id} has no content."
+    if not parts and level != "raw":
+        for name in ("technical", "full_report", "raw_data"):
+            v = getattr(artifact.views, name, None)
+            if v:
+                parts.append(f"[{name}] {v}")
+                break
+    if not parts:
+        return f"Artifact {artifact.id} has no content at level '{level}'."
+
+    body = "\n".join(parts)
+    if level in ("auto", "headline", "summary"):
+        deeper = [n for n in ("technical", "full_report", "raw_data")
+                  if getattr(artifact.views, n, None)]
+        if deeper:
+            body += (f"\n\n[More detail available: {', '.join(deeper)}. "
+                     f"Re-read with level='{deeper[0]}' to see it.]")
+    return body

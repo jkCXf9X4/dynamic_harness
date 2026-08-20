@@ -16,7 +16,7 @@ The quality of the root task description directly determines the entire agent tr
 > "Fix the bugs in my project."
 
 **GOOD:**
-> "The user reports that login fails with a 500 error when the password contains special characters. Investigate `src/auth/login.py` and `src/auth/password.py` to find the root cause. Apply a minimal fix. Verify by running `pytest tests/test_auth.py`. Do NOT modify the database schema or frontend code. Write a summary to `/tmp/fix_report.md`."
+> "The user reports that login fails with a 500 error when the password contains special characters. Investigate `src/auth/login.py` and `src/auth/password.py` to find the root cause. Apply a minimal fix. Verify by running `pytest tests/test_auth.py`. Do NOT modify the database schema or frontend code. Write a summary to `outputs/fix_report.md`."
 
 ---
 
@@ -28,7 +28,7 @@ A good `report()` call makes the parent's job of verification and synthesis stra
 report(
     summary="[1–2 sentences summarizing the concrete finding or change]. "
              "Verified by: [how]. Artifacts written: [files].",
-    artifact_ids=["/tmp/analysis_results.json", "/tmp/changes_summary.txt"]
+    artifact_ids=["outputs/analysis_results.json", "outputs/changes_summary.txt"]
 )
 ```
 

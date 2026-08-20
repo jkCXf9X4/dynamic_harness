@@ -96,6 +96,11 @@ generation-agent flake that motivated the design, `documentation-and-knowledge`
 outcome is a report without a deliverable (`last_failure is None` AND
 `not _has_deliverable(child)`), matching the root check.
 
+**Status:** ✅ **RESOLVED** — both delegate boundaries (`agent.py`
+`_gather_deferred_and_finalize` and `run_delegate_tool`) now heal on
+`not _has_deliverable(child)` instead of `child.last_failure is not None`, so a
+prose-completed child is recovered exactly like at the root.
+
 ### G3. Progressive disclosure is data, not an interface; `raw_data` is dead
 
 **Concept promise:** a six-level disclosure ladder — headline → 200-char →
@@ -120,6 +125,11 @@ Scenario C's `hierarchical_summary`.
 **Fix direction:** add a `level` parameter to `read_artifact`
 (`headline|summary|technical|full|raw`), populate `raw_data` from a child's
 `files_written` payload or the sidecar, and make the default level `summary`.
+
+**Status:** ✅ **RESOLVED** — `read_artifact` gained `level` (`auto|headline|summary
+|technical|full|raw`) and now defaults to the progressive summary (deeper detail
+withheld). `raw_data` is populated from written files in `deliver_report`
+(`runtime._store_written_files`). An unknown level is an explicit error.
 
 ### G4. `artifact_ids` are free-form strings; agent-written files are not linked to the artifact
 
@@ -149,6 +159,11 @@ actual output" step (`repository-analysis` §Verification, `change-and-validatio
 (or copy/link it at `deliver_report` time using `payload.files_written`), and
 make `read_artifact`/`provenance`/`index.jsonl` surface those files.
 
+**Status:** ✅ **RESOLVED** — `deliver_report` now copies `files_written` into the
+artifact directory, fills `raw_data` from them, keeps a `files_written.json`
+(declared→stored) sidecar, and `read_artifact(file=...)` + the provenance
+`index.jsonl` surface the stored copies.
+
 ---
 
 ## P1 — Blocks a documented capability or real-world run
@@ -173,6 +188,13 @@ default sandbox (no output isolation).
 IDs; consider a default `generated_root` (e.g. `.dynamic-harness/out/`) for CLI
 runs so agents don't write into the source tree by default.
 
+**Status:** ✅ **RESOLVED (doc + own sandbox).** The example/config docs
+(`examples/*.md`, `api/task.md`, `concepts/artifact-system.md`) no longer
+instruct `/tmp/...` writes — they use workspace-relative `outputs/…` paths and
+artifact references. The sandbox's outside-workspace error now names the
+workspace root and suggests a relative path (no default `generated_root`
+change, which would break benchmark CWD-relative tasks).
+
 ### G6. Custom agent classes cannot be spawned by the LLM
 
 **Concept/docs:** VISION pillar 7 "parent-defined specialized agents" and
@@ -193,6 +215,11 @@ child — the whole specialization story is reachable only from host code.
 registered names, or document that custom classes are a programmatic-only
 feature.
 
+**Status:** ✅ **RESOLVED** — `agent_type` was added to the `delegate` tool and
+threaded through `ToolContext.run_delegate_tool` → `Agent.run_delegate_tool`,
+which validates against `Runtime.has_agent_class` and rejects unknown names
+(no silent fallback to the base `Agent`).
+
 ### G7. Self-heal Layer 2 is not a distinct mechanism
 
 **Concept:** `self-healing.md:56-58` describes Layer 2 — "parent `converse()` /
@@ -210,6 +237,10 @@ untestable at the delegation boundary.
 **Fix direction:** either document that Layer 2 = Layer 1 applied at the parent
 boundary, or implement a distinct parent-side diagnosis + `converse` heal path,
 and fix the G2 deliverable check.
+
+**Status (G2 done):** the G2 deliverable check is fixed (see G2); the parent
+boundary now heals prose-completions too. Whether this counts as a distinct
+"Layer 2" is a naming question — the mechanism is the shared `_recover`.
 
 ### G8. Budgeting / cost-control is dead plumbing
 
@@ -245,6 +276,10 @@ the CLI.
 accumulating, so `get_usage()["message_count"]` is the last message count, not
 the total processed. Misleading for cost analysis.
 
+**Status:** ✅ **RESOLVED** — `UsageTracker.record_usage` now accumulates
+(i.e. adds) `message_count` (`usage.py`). `get_usage()["message_count"]` is now
+the total messages processed.
+
 ### G11. Docs drift on tool count and extension surface
 
 - `api/runtime.md:44` says "17 default tools"; `AGENTS.md` and
@@ -271,18 +306,21 @@ survive a restart (only the checkpoint/rot detection per run does).
 
 ## Summary
 
-| # | Gap | Severity | Fixing enables |
-|---|---|---|---|
-| G1 | No mechanical verification; acceptance criteria unused | **P0** | trustable orchestration |
-| G2 | Delegate-boundary heal misses prose completions | **P0** | self-heal as documented |
-| G3 | Disclosure not progressive; `raw_data` dead | **P0** | cheap parent reads |
-| G4 | `artifact_ids` / files not linked to artifact | **P0** | "artifact is the truth" |
-| G5 | Sandbox vs `/tmp` examples; weak default isolation | P1 | examples + safety |
-| G6 | LLM cannot spawn custom agent classes | P1 | VISION pillar 7 |
-| G7 | Layer 2 heal is not distinct (and G2) | P1 | layered policy |
-| G8 | Budget plumbing is inert | P1 | cost control |
-| G9–G13 | Cost, counters, docs drift, agent-side provenance, durable heal budgets | P2 | polish |
+Resolved this round: **G2, G3, G4** (P0) and **G5, G6, G10** (P1/P2).
 
-Recommended first pass: **G2, G4, G3** (small, high-leverage, make the
-delegation/verification story real), then **G8** and **G5** before advertising
-cost-control and example-driven onboarding.
+| # | Gap | Severity | Status / Fixing enables |
+|---|---|---|---|
+| G1 | No mechanical verification; acceptance criteria unused | **P0** | open — trustable orchestration |
+| G2 | Delegate-boundary heal misses prose completions | **P0** | ✅ resolved — self-heal as documented |
+| G3 | Disclosure not progressive; `raw_data` dead | **P0** | ✅ resolved — cheap parent reads |
+| G4 | `artifact_ids` / files not linked to artifact | **P0** | ✅ resolved — "artifact is the truth" |
+| G5 | Sandbox vs `/tmp` examples; weak default isolation | P1 | ✅ resolved (docs + error msg) — examples + safety |
+| G6 | LLM cannot spawn custom agent classes | P1 | ✅ resolved — VISION pillar 7 |
+| G7 | Layer 2 heal is not distinct (see G2) | P1 | partially resolved via G2; naming question remains |
+| G8 | Budget plumbing is inert | P1 | open — cost control |
+| G10 | `usage.message_count` overwritten | P2 | ✅ resolved — cumulative counter |
+| G9, G11–G13 | Runtime USD cost, tool-count + doc drift, agent-side provenance, durable heal budgets | P2 | open — polish |
+
+Recommended next pass: **G8** (cost control) and **G1** (mechanical
+verification), then **G13** / **G12** for resumability and agent-side
+self-audit. G11's tool-count drift is a one-line docs fix.

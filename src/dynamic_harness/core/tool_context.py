@@ -109,10 +109,12 @@ class ToolContext:
         *,
         role: str | None = None,
         system_prompt: str | None = None,
+        agent_type: str | None = None,
         tool_call_id: str = "",
     ) -> str:
         return await self._agent.run_delegate_tool(
-            description, role=role, system_prompt=system_prompt, tool_call_id=tool_call_id,
+            description, role=role, system_prompt=system_prompt,
+            agent_type=agent_type, tool_call_id=tool_call_id,
         )
 
     def report(self, payload: ReportPayload) -> None:

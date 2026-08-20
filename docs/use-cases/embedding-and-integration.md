@@ -60,9 +60,10 @@ class PolicyReviewer(Agent):
 runtime.register_agent_class("policy", PolicyReviewer)
 ```
 
-`runtime.delegate(task, agent_type="policy")` from programmatic code (the
-LLM-facing `delegate` tool only exposes description/role/system_prompt, so the
-custom class is chosen by the wrapper, not by the model).
+`runtime.delegate(task, agent_type="policy")` from programmatic code, or the
+LLM can spawn it inside a larger tree via
+`delegate(description=..., agent_type="policy")` — unknown names are rejected
+rather than silently falling back to the base `Agent`.
 
 ## Scenario C — DB-assisted triage assistant (custom tool)
 

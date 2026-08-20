@@ -142,6 +142,13 @@ class Runtime:
     def register_agent_class(self, name: str, cls: type[Agent]) -> None:
         self._agent_registry[name] = cls
 
+    def has_agent_class(self, name: str) -> bool:
+        """True when ``name`` names a registered (custom) agent class."""
+        return name in self._agent_registry
+
+    def registered_agent_classes(self) -> list[str]:
+        return sorted(self._agent_registry)
+
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
 
@@ -271,6 +278,36 @@ class Runtime:
             return all(Path(p).exists() for p in outputs)
         r = agent.last_report
         return bool(r and (r.artifact_ids or r.files_written))
+
+    def _store_written_files(self, artifact: Artifact, files_written: list[str]) -> None:
+        """Make an artifact self-contained by copying written files into its dir.
+
+        Fills the progressive-disclosure ``raw_data`` view (G3) and stores each
+        file verbatim under the artifact directory so a parent can read them via
+        ``read_artifact(file=...)`` or the artifact store (G4). Files that no
+        longer exist on disk are skipped, not fatal.
+        """
+        raw_parts: list[str] = []
+        names: list[str] = []
+        for fp in files_written:
+            try:
+                src = Path(fp).resolve()
+                if not src.is_file():
+                    continue
+                content = src.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            name = src.name
+            self.artifact_store.write_text(artifact.id, name, content)
+            names.append(name)
+            raw_parts.append(f"--- {name} ({len(content)} chars) ---\n{content}")
+        if names:
+            artifact.views.raw_data = "\n\n".join(raw_parts)
+            self.artifact_store.save(artifact)
+        self.artifact_store.write_text(
+            artifact.id, "files_written.json",
+            json.dumps({"files": files_written, "stored": names}, indent=2),
+        )
 
     def _resume_nudge(self, agent: Agent) -> str:
         if agent.last_failure is None:
@@ -443,10 +480,7 @@ class Runtime:
         agent._report_artifact_id = artifact.id
 
         if payload.files_written:
-            self.artifact_store.write_text(
-                artifact.id, "files_written.json",
-                json.dumps(payload.files_written, indent=2),
-            )
+            self._store_written_files(artifact, payload.files_written)
 
         commit = Commit(
             task_id=agent.task.id,
@@ -572,7 +606,11 @@ class Runtime:
             fw = self.artifact_store.read_text(art.id, "files_written.json")
             if fw:
                 try:
-                    files_written = json.loads(fw)
+                    parsed = json.loads(fw)
+                    if isinstance(parsed, list):
+                        files_written = parsed
+                    elif isinstance(parsed, dict):
+                        files_written = parsed.get("stored") or parsed.get("files") or []
                 except Exception:
                     files_written = []
             commit = self.repository.commit_for_task(art.task_id)

@@ -83,7 +83,7 @@ ReportPayload(
     summary="Added JWT expiry validation to auth.py. 3 tests pass.",
     confidence=0.95,
     claims=["auth.py:45 adds expiry check", "3 tests pass in test_auth.py"],
-    files_written=["/tmp/auth_fix_summary.txt"],
+    files_written=["outputs/auth_fix_summary.txt"],
 )
 ```
 

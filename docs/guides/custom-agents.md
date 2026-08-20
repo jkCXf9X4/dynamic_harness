@@ -39,6 +39,8 @@ runtime.register_agent_class("my_agent", MyAgent)
 ```python
 # Via the delegate() tool in the LLM loop:
 #   delegate(description="...", agent_type="my_agent")
+# Only registered names are accepted; an unknown agent_type is rejected with an
+# error rather than silently falling back to the base Agent.
 
 # Or programmatically:
 agent = runtime.delegate(task, agent_type="my_agent")

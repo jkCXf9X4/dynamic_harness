@@ -418,7 +418,8 @@ async def test_read_artifact_resolves_by_agent_id(runtime: Runtime) -> None:
     """read_artifact must resolve a child's output by its *agent* id too.
 
     Parents only learn a child's agent_id from delegate(), so verification must
-    work with that id, not just the separately-generated artifact id.
+    work with that id, not just the separately-generated artifact id. Reading is
+    progressive: the default level returns the summary, without the full body.
     """
     child = runtime.delegate(Task(description="child work"))
     child.report = lambda payload: runtime.deliver_report(child.id, payload)
@@ -434,5 +435,10 @@ async def test_read_artifact_resolves_by_agent_id(runtime: Runtime) -> None:
     result = await runtime.tool_registry.execute(
         "read_artifact", "tc2", agent=parent, artifact_id=child.id)
     assert "child findings" in result.content
-    assert "CHILD_FULL_BODY" in result.content
+    assert "CHILD_FULL_BODY" not in result.content  # withheld by default
+
+    # Full body is opt-in via the level parameter
+    result_full = await runtime.tool_registry.execute(
+        "read_artifact", "tc3", agent=parent, artifact_id=child.id, level="full")
+    assert "CHILD_FULL_BODY" in result_full.content
 

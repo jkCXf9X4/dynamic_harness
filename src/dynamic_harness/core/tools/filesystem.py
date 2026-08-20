@@ -101,7 +101,11 @@ def resolve_safe_path(path: str, ctx: ToolContext) -> Path:
     else:
         resolved = (sandbox / p).resolve()
     if sandbox not in resolved.parents and resolved != sandbox:
-        raise ValueError(f"Path '{path}' is outside the workspace")
+        raise ValueError(
+            f"Path '{path}' is outside the workspace. You may only access "
+            f"paths under the workspace root: {sandbox}. Use a relative path "
+            f"or report a file and reference it by its artifact ID instead."
+        )
     return resolved
 
 

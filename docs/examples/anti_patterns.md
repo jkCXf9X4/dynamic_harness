@@ -48,7 +48,7 @@ The most common failure modes observed in agent behavior. **All of them are meth
 
 **Why it fails:** The sub-agent wanders. "Look at" is directionless. "Fix issues" has no acceptance criteria. The sub-agent has no way to know when it's done.
 
-**Fix:** `delegate(description="Read src/auth/login.py and find the function that validates JWT expiry. If the expiry check is missing or incorrect (should reject tokens older than 3600 seconds), add the check. Run `pytest tests/test_auth.py` to verify. Write a summary of changes to /tmp/auth_fix_summary.txt and call report() with that file path as an artifact.")`
+**Fix:** `delegate(description="Read src/auth/login.py and find the function that validates JWT expiry. If the expiry check is missing or incorrect (should reject tokens older than 3600 seconds), add the check. Run `pytest tests/test_auth.py` to verify. Write a summary of changes to outputs/auth_fix_summary.txt and call report() with that file path as an artifact.")`
 
 ## AP-7: Hallucinating sub-agent output
 

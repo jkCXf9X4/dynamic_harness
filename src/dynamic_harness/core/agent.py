@@ -732,8 +732,10 @@ class Agent:
 
         # Self-heal: recover failed children (resume-once or fresh worker) so the
         # parent format step below reflects the healed result, not the failure.
+        # Also heal a child that *completed* without an on-disk deliverable
+        # (prose-only report) — the exact case self-healing Layer 1 targets.
         for tcid, child in list(deferred_map.items()):
-            if child.last_failure is not None:
+            if not self._runtime._has_deliverable(child):
                 deferred_map[tcid] = await self._runtime._recover(child)
 
         for r in results:
@@ -800,15 +802,23 @@ class Agent:
         *,
         role: str | None = None,
         system_prompt: str | None = None,
+        agent_type: str | None = None,
         tool_call_id: str = "",
     ) -> str:
         """Create + run a sub-agent on behalf of the ``delegate`` tool.
 
         When the agent is mid-batch (multiple delegations in one turn) the child
         run is deferred and gathered by the run loop; otherwise it runs to
-        completion here.
+        completion here. ``agent_type`` selects a registered custom agent class;
+        unknown names are rejected (never silently downgraded to the base Agent).
         """
-        child = self.delegate(description, role=role, system_prompt=system_prompt)
+        if agent_type and not self._runtime.has_agent_class(agent_type):
+            known = self._runtime.registered_agent_classes()
+            return json.dumps({
+                "error": f"unknown agent_type '{agent_type}'. "
+                        f"Registered custom classes: {known or '(none)'}",
+            }, indent=2)
+        child = self.delegate(description, agent_type=agent_type, role=role, system_prompt=system_prompt)
         self.emit_activity(ActivityEvent(
             agent_id=self.id,
             event_type=ActivityEventType.DELEGATION_START,
@@ -824,7 +834,7 @@ class Agent:
             self._deferred_delegates.append((tool_call_id, child, task))
             return json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
         await task
-        if child.last_failure is not None:
+        if not self._runtime._has_deliverable(child):
             child = await self._runtime._recover(child)
         return self._format_delegate_result(child)
 

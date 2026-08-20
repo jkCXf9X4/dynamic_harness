@@ -38,7 +38,7 @@ raw_data       →  Raw underlying data
 Parent agent delegates to Security Auditor child
   │
   ▼
-Child completes → report(summary="Found 3 HIGH-severity vulns", artifact_ids=["/tmp/findings.json"])
+Child completes → report(summary="Found 3 HIGH-severity vulns", files_written=["findings/findings.json"])
   │
   ▼
 Runtime.deliver_report():
@@ -51,10 +51,11 @@ Parent receives delegate() return:
 
 Parent VERIFIES:
   1. read_artifact("abc123")
-     → Returns headline + summary_200 + summary_1000 views
+     → Returns the progressive summary (headline + summary views); deeper
+       detail is withheld until the parent asks for it explicitly, e.g.
+       read_artifact("abc123", file="findings.json") or level='full'.
   2. Parent decides: "I need more detail"
-  3. read("/tmp/findings.json")
-     → Gets the full detailed report
+  3. read_artifact("abc123", level='full') / read the stored file
   4. Parent synthesizes and reports
 ```
 
@@ -116,7 +117,12 @@ Runtime.deliver_report():
      → repository.commit(commit)
 ```
 
-The commit's `artifact_ids` hold the report artifact UUID; files the agent wrote are referenced separately via the report's `files_written` (persisted as a `files_written.json` sidecar on the artifact). This provides end-to-end provenance from task to result.
+The commit's `artifact_ids` hold the report artifact UUID. Files the agent wrote
+are copied **into the artifact directory** under their basename and the
+progressive-disclosure `raw_data` view is filled from them; the report's
+`files_written` list is persisted as a `files_written.json` sidecar (a map of
+declared → stored names) on the artifact. This makes the artifact
+self-contained and provides end-to-end provenance from task to result.
 
 ## Programmatic Access
 
