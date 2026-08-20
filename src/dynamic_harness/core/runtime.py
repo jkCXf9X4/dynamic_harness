@@ -90,6 +90,7 @@ class Runtime:
             config.safety.max_agent_tokens if config else None
         ) or None
         self._active_turn_window = (config.agent.active_turn_window if config else 50)
+        self._stream_children = (config.agent.stream_children if config else False)
         self._self_heal_mode = config.self_heal.mode if config else True
         self._self_heal_max_resumes = config.self_heal.max_resumes if config else 1
         self._self_heal_max_fresh = config.self_heal.max_fresh_retries if config else 1
@@ -454,6 +455,7 @@ class Runtime:
                 repeated_recovery_attempts=self._repeated_recovery_attempts,
                 safety_timeout_seconds=self._safety_timeout_seconds,
                 active_turn_window=self._active_turn_window,
+                stream_children=self._stream_children,
             )
         else:
             agent = Agent(
@@ -463,6 +465,7 @@ class Runtime:
                 repeated_recovery_attempts=self._repeated_recovery_attempts,
                 safety_timeout_seconds=self._safety_timeout_seconds,
                 active_turn_window=self._active_turn_window,
+                stream_children=self._stream_children,
             )
         agent.max_agent_tokens = self._max_agent_tokens
         agent.set_environment_info(self._environment_info)

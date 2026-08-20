@@ -45,3 +45,24 @@ set a context goal of using a total per agent of less than 50000 tokens,
 hangs at 
 
 {"timestamp": "2026-08-20T07:25:45.519899+00:00", "type": "tool_result", "tool_call_id": "chatcmpl-tool-b0fe599dc7680626", "name": "bash", "content_length": 11, "content_preview": "(no output)"}
+
+
+---
+
+lets make the top agent unable to timeout
+
+lets also make the trace send and receive to enable simpler debuging 
+
+---
+
+enable parents to act on child events before all children are done? 
+
+---
+
+When hitting tool call limits, lets incorporate a tighter fallback loop before failing the agent
+maybe point out to the agent that its looping and see if it can recover
+
+---
+check trace.jsonl and see if you can deduce the error and if it is something fixable of if its reasonable
+
+use the sess

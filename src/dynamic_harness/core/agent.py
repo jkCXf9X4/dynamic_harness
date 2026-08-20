@@ -57,6 +57,7 @@ class Agent:
         repeated_recovery_attempts: int = 1,
         safety_timeout_seconds: float | None = None,
         active_turn_window: int = 50,
+        stream_children: bool = False,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -98,6 +99,14 @@ class Agent:
         self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()
+
+        # Streaming mode (config `agent.stream_children`): when True, delegations
+        # are fire-and-forget and children settle asynchronously; the run loop is
+        # re-admitted as each child completes so a parent can act on child events
+        # mid-batch instead of blocking on ALL children (the default gather).
+        # This holds children who have not yet surfaced into the parent's context.
+        self.stream_children = stream_children
+        self._stream_pending: dict[str, tuple[str, Agent, asyncio.Task[None]]] = {}
 
         # Registry-name of this agent's class (None for the base Agent). Used by
         # self-heal to restart a failed agent as the same agent_type.
@@ -638,7 +647,7 @@ class Agent:
             )
 
         has_delegates = any(tc.name == "delegate" for tc in response.tool_calls)
-        if has_delegates:
+        if has_delegates and not self.stream_children:
             self._deferred_delegates = []
 
         for tc in response.tool_calls:
@@ -692,6 +701,8 @@ class Agent:
                 TaskStatus.failed,
                 TaskStatus.escalated,
             ):
+                if self._stream_pending:
+                    self._cancel_stream_children()
                 if self._deferred_delegates is not None:
                     await self._gather_deferred_and_finalize(results)
                 self.context.commit_turn(assistant_msg, results)
@@ -889,6 +900,12 @@ class Agent:
                 if await self._handle_tool_calls(response, duration_ms):
                     self.persist_checkpoint()
                     return
+                # Streaming mode: block (respecting safety) until at least one
+                # delegated child settles, inject it into our context, and let the
+                # parent react to that child's event before siblings finish.
+                if self.stream_children and self._stream_pending:
+                    if await self._harvest_streamed_child():
+                        continue
             else:
                 self._emit_llm_end(response, [])
                 if ts:
@@ -952,7 +969,51 @@ class Agent:
             if tcid in deferred_map:
                 r["content"] = self._format_delegate_result(deferred_map[tcid])
 
-    # -- orchestration (delegate / report / escalate / fail) --------------
+    # -- streaming child events (agent.stream_children) ------------------
+
+    async def _harvest_streamed_child(self) -> bool:
+        """Wait until at least one fire-and-forget child settles, then inject its
+        outcome into the parent's context and return True.
+
+        Blocks within the parent's own wall-clock / iteration budget (loop-local
+        safety check runs every second while waiting). Surfaces ONE child per
+        call — the parent loop re-admits and reacts to it before siblings finish
+        — which is the behavior streaming mode exists to enable. Returns False
+        when there is nothing pending (or a safety limit fired while waiting)."""
+        if not self._stream_pending:
+            return False
+        while True:
+            if self._safety_check():
+                return False
+            tasks = [t for _, _, t in self._stream_pending.values()]
+            done, _ = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED, timeout=1.0
+            )
+            if done:
+                break
+        for tcid, (_, child, task) in list(self._stream_pending.items()):
+            if not task.done():
+                continue
+            del self._stream_pending[tcid]
+            if not self._runtime._has_deliverable(child):
+                child = await self._runtime._recover(child)
+            self.context.append({
+                "role": "user",
+                "content": f"[child settled]\n{self._format_delegate_result(child)}",
+            })
+            break
+        return True
+
+    def _cancel_stream_children(self) -> None:
+        """Cancel every child task that is still running (a parent terminated
+        while some children are stragglers). Already-settled children are left
+        in place so their commits/artifacts survive."""
+        for child_tcid, (_, child, task) in list(self._stream_pending.items()):
+            if not task.done():
+                task.cancel()
+        self._stream_pending.clear()
+
+    # -- orchestration (delegate / report / escalate / fail) ---------------
 
     def delegate(
         self,
@@ -1016,10 +1077,14 @@ class Agent:
     ) -> str:
         """Create + run a sub-agent on behalf of the ``delegate`` tool.
 
-        When the agent is mid-batch (multiple delegations in one turn) the child
-        run is deferred and gathered by the run loop; otherwise it runs to
-        completion here. ``agent_type`` selects a registered custom agent class;
-        unknown names are rejected (never silently downgraded to the base Agent).
+        Non-streaming (default): when the agent is mid-batch (multiple
+        delegations in one turn) the child run is deferred and gathered by the
+        run loop; otherwise it runs to completion here. Streaming mode: the
+        child is always spawned fire-and-forget and registered in
+        ``_stream_pending``; the run loop re-admits the parent as each child
+        settles so it can act on child events before siblings finish. ``agent_type``
+        selects a registered custom agent class; unknown names are rejected
+        (never silently downgraded to the base Agent).
         """
         if agent_type and not self._runtime.has_agent_class(agent_type):
             known = self._runtime.registered_agent_classes()
@@ -1039,6 +1104,9 @@ class Agent:
         ))
         task = asyncio.create_task(child.run())
         self._runtime.track_agent_task(task)
+        if self.stream_children:
+            self._stream_pending[tool_call_id] = (tool_call_id, child, task)
+            return json.dumps({"child_id": child.id, "status": "running"}, indent=2)
         if self._deferred_delegates is not None:
             self._deferred_delegates.append((tool_call_id, child, task))
             return json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
@@ -1048,6 +1116,8 @@ class Agent:
         return self._format_delegate_result(child)
 
     def report(self, payload: ReportPayload) -> None:
+        if self.stream_children:
+            self._cancel_stream_children()
         self.outcome.report = payload
         self._runtime.deliver_report(self.id, payload)
 
@@ -1061,11 +1131,15 @@ class Agent:
         self._runtime.deliver_budget_request(self.id, req)
 
     def escalate(self, issue: str, **context: object) -> None:
+        if self.stream_children:
+            self._cancel_stream_children()
         e = Escalation(task_id=self.task.id, issue=issue, context=context)
         self.outcome.escalation = e
         self._runtime.deliver_escalation(self.id, e)
 
     def fail(self, error: str, trace: str | None = None) -> None:
+        if self.stream_children:
+            self._cancel_stream_children()
         f = Failure(task_id=self.task.id, error=error, trace=trace)
         self.outcome.failure = f
         ts = self._trace_store

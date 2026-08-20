@@ -16,6 +16,7 @@
   "agent": {
     "environment_notes": [
       "Working dir is project root; run `pytest` from there."
-    ]
+    ],
+    "stream_children": true 
   }
 }

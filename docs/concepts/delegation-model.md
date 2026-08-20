@@ -17,6 +17,20 @@ related:
 
 Dynamic Harness uses **recursive task decomposition** — parent agents break work into independent sub-tasks, delegate to child agents, verify results, and synthesize a combined output. This is the core mechanism that keeps agent contexts shallow and output quality high.
 
+## Streaming Amendment (opt-in)
+
+By default delegation is **all-or-nothing**: a parent that delegates several children blocks until *every* child settles (the batch gather). It cannot act on any child's result until all siblings finish.
+
+When `harness.json` sets `agent.stream_children: true`, delegation becomes **streaming**: children are spawned fire-and-forget and the parent is re-admitted to its LLM loop as *each* child settles (report / escalate / fail). Each completion is injected into the parent's context as a `[child settled]` message the instant it lands — so a parent can act on one child's event *before* its siblings are done: re-delegate a failed branch, converse with a completed child, cancel the remaining stragglers, or report early.
+
+If the parent terminates (report / escalate / fail) while some children are still running, the stragglers are **cancelled** (their individual commits/artifacts survive if they already settled).
+
+```json
+{ "agent": { "stream_children": true } }
+```
+
+Cost trade-off: streaming generally yields more parent LLM turns per batch (one reaction per child settlement) than the default one-shot gather. Leave it off when you only need the async fan-out of independent children.
+
 ## The Mandatory Workflow
 
 Every agent (except leaf agents) follows this sequence:

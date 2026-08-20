@@ -105,6 +105,17 @@ class AgentConfig(BaseModel):
         default=50, ge=1,
         description="How many recent committed turns the Context Observation lists.",
     )
+    stream_children: bool = Field(
+        default=False,
+        description="When true, an agent that delegates multiple children stays "
+                    "responsive: it is re-admitted to its LLM loop as each child "
+                    "settles (report/escalate/fail) instead of blocking until ALL "
+                    "children finish (the default batch gather). This lets a parent "
+                    "act on child events — re-delegate a failed branch, converse, "
+                    "cancel the rest, or report early — before its siblings are "
+                    "done. Cost: generally more LLM turns per parent. Default off "
+                    "preserves the current block-until-all semantics.",
+    )
 
 
 class HarnessConfig(BaseModel):

@@ -201,8 +201,9 @@ ReportPayload(
 ```
 
 ### Agent (`core/agent.py`)
-- Constructor: `Agent(agent_id, task, runtime, parent=None, *, system_prompt=None, safety_max_iterations=500, repeated_call_limit=5, safety_timeout_seconds=None, active_turn_window=50, max_pruned_retained=100)`
+- Constructor: `Agent(agent_id, task, runtime, parent=None, *, system_prompt=None, safety_max_iterations=500, repeated_call_limit=5, safety_timeout_seconds=None, active_turn_window=50, max_pruned_retained=100, stream_children=False)`
 - `async run()` — executes tool-calling loop to completion
+- `stream_children: bool` — when True, delegations are fire-and-forget and the parent is re-admitted to its loop as each child settles (`[child settled]` injected to its context), so it can act on child events (report/escalate/fail/ask) before siblings finish. Via `agent.stream_children` in `harness.json`. Default False preserves the block-until-all gather.
 - `delegate(description, role=None, system_prompt=None, **metadata)` — creates child Agent
 - `report(payload: ReportPayload)` — delivers report to Runtime
 - `escalate(issue, **context)` — escalates to parent
