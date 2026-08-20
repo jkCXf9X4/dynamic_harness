@@ -50,6 +50,7 @@ class OpenAIProvider(LLMProvider):
         provider_allow_fallbacks: bool = True,
         provider_force: str | None = None,
         timeout: httpx.Timeout | float = 120.0,
+        max_retries: int = 0,
     ) -> None:
         http_client = httpx.AsyncClient(verify=verify_ssl, timeout=timeout)
         self._http_client = http_client
@@ -60,10 +61,17 @@ class OpenAIProvider(LLMProvider):
             # Pass the timeout to the SDK as well: the openai client bakes its
             # OWN default timeout (600s read/write/pool) into every request
             # (`_base_client.build_request`), which overrides the httpx
-            # client-level timeout. Without this, the configured
+            # client-level timeout. Without this the configured
             # `llm.call_timeout_seconds` cap was silently ignored and a hung
             # provider call would block far longer than intended.
             timeout=timeout,
+            # The SDK transparently retries on timeout/connection errors up to
+            # `max_retries` (default 2) times, silently multiplying the effective
+            # wait by up to ~3x per call. The agent already owns retry/backoff
+            # (`Agent._llm_call_with_retry`); letting both layers retry compounds
+            # the stall into ~12x the configured timeout. Default 0 so the
+            # configured `call_timeout_seconds` is honored on the first attempt.
+            max_retries=max_retries,
         )
         self.default_model = model
         self._provider_ignore = provider_ignore or []
