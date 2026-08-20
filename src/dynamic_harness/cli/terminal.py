@@ -245,6 +245,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--artifact-dir", help="Directory for artifacts")
     parser.add_argument("--repo-dir", help="Directory for commit repository")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
+    parser.add_argument("--resume", metavar="AGENT_ID", help="Resume an interrupted/failed agent from its persisted checkpoint")
     parser.add_argument("--print-provenance", action="store_true",
                         help="After a run, print agent->trace/artifact maps and write index.jsonl")
     return parser.parse_args(argv)
@@ -289,7 +290,12 @@ def _render(runtime: Runtime, events: list[str]) -> Table:
     return layout
 
 
-async def _run_with_live(runtime: Runtime, description: str, root_agent: Agent | None = None) -> Agent:
+async def _run_with_live(
+    runtime: Runtime,
+    description: str,
+    root_agent: Agent | None = None,
+    resume_id: str | None = None,
+) -> Agent:
     runtime.event_bus.clear()
 
     events: list[str] = []
@@ -306,9 +312,12 @@ async def _run_with_live(runtime: Runtime, description: str, root_agent: Agent |
         console=console,
         screen=True,
     ) as live:
-        run_task = asyncio.create_task(
-            runtime.run(description, role=ORCHESTRATOR_ROLE, root_agent=root_agent)
-        )
+        if resume_id:
+            run_task = asyncio.create_task(runtime.resume(resume_id))
+        else:
+            run_task = asyncio.create_task(
+                runtime.run(description, role=ORCHESTRATOR_ROLE, root_agent=root_agent)
+            )
         while not run_task.done():
             while not ask_queue.empty():
                 question: str = ask_queue.get_nowait()
@@ -375,8 +384,8 @@ def _write_provenance_index(runtime: Runtime) -> Path:
     return path
 
 
-def _run_batch(runtime: Runtime, prompt: str) -> None:
-    root = asyncio.run(_run_with_live(runtime, prompt))
+def _run_batch(runtime: Runtime, prompt: str, *, resume_id: str | None = None) -> None:
+    root = asyncio.run(_run_with_live(runtime, prompt, resume_id=resume_id))
     _print_outcome(root)
 
     usage = runtime.total_usage()
@@ -411,11 +420,27 @@ async def _run_interactive_async(runtime: Runtime) -> None:
             cmd = parts[0].lower()
             arg = parts[1] if len(parts) > 1 else ""
             if cmd == "/help":
-                console.print("[bold]Commands:[/]  /help  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /reset  exit/quit")
+                console.print("[bold]Commands:[/]  /help  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /checkpoints  /resume <id>  /reset  exit/quit")
                 console.print("  /provenance <id>  — task/trace/artifact/commit map for an agent")
                 console.print("  /trace <id>       — path to an agent's trace.jsonl on disk")
                 console.print("  /artifacts [id]   — list artifacts (optionally filter by agent)")
                 console.print("  /index            — write the run's index.jsonl")
+                console.print("  /checkpoints      — list persisted (resumable) agent checkpoints")
+                console.print("  /resume <id>      — resume an agent from its persisted checkpoint")
+            elif cmd == "/checkpoints":
+                if not runtime.checkpoint_store:
+                    console.print("[yellow]No checkpoint store configured on this runtime.[/]")
+                else:
+                    ids = runtime.checkpoint_store.list_ids()
+                    console.print((", ".join(ids)) if ids else "[dim]No checkpoints on disk.[/dim]")
+            elif cmd == "/resume":
+                if not runtime.checkpoint_store:
+                    console.print("[yellow]No checkpoint store configured on this runtime.[/]")
+                elif not arg.strip():
+                    console.print("[yellow]Usage: /resume <agent_id>  (see /checkpoints)[/]")
+                else:
+                    agent = await _run_with_live(runtime, "", resume_id=arg.strip())
+                    _print_outcome(agent)
             elif cmd == "/agents":
                 u = runtime.total_usage()
                 console.print(f"Agents: {runtime.agent_count()}  Commits: {runtime.repository.count()}  Tokens: {u['total_tokens']}")
@@ -447,7 +472,9 @@ def main() -> None:
 
     runtime = build_runtime(args)
 
-    if args.m:
+    if args.resume:
+        _run_batch(runtime, "", resume_id=args.resume)
+    elif args.m:
         _run_batch(runtime, Path(args.m).read_text())
     elif args.prompt:
         _run_batch(runtime, " ".join(args.prompt))

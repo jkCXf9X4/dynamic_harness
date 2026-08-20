@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time as _time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
@@ -9,7 +10,9 @@ from uuid import uuid4
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
 from .agent import Agent
+from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
+from .prompts import FocusLedger
 from .references import discover_references, render_reference_index
 from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
@@ -47,6 +50,8 @@ class Runtime:
         trace_root: Path | None = None,
         generated_root: Path | None = None,
         config: HarnessConfig | None = None,
+        *,
+        checkpoint_root: Path | None = None,
     ) -> None:
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
@@ -54,6 +59,16 @@ class Runtime:
         if generated_root:
             generated_root.mkdir(parents=True, exist_ok=True)
         self._generated_root = generated_root
+        # Structured per-agent state persists here so aborted/failed runs can be
+        # resumed from a fresh process. Defaults to under generated_root when set,
+        # otherwise under the untracked `.dynamic-harness/` work dir (keeps stray
+        # folders out of the workspace tree).
+        if checkpoint_root is None:
+            if generated_root is not None:
+                checkpoint_root = generated_root / "checkpoints"
+            else:
+                checkpoint_root = Path.cwd() / ".dynamic-harness" / "checkpoints"
+        self.checkpoint_store = CheckpointStore(checkpoint_root) if checkpoint_root else None
         self._agents: dict[str, Agent] = {}
         self._agent_retries: dict[str, int] = {}
         self._agent_run_tasks: set[asyncio.Task[Any]] = set()
@@ -171,6 +186,61 @@ class Runtime:
         await root.run()
         root = await self._recover(root)
         return root
+
+    async def resume(self, agent_id: str, *, message: str | None = None) -> Agent:
+        """Resume an aborted or failed agent from its persisted checkpoint.
+
+        Rebuilds the agent (conversation, plan, and progress) from the JSON
+        checkpoint on disk — rather than from memory — so a task can survive a
+        process restart. If the agent is already live in this runtime, it is
+        continued in place. ``message`` (optional) is appended as a user nudge;
+        otherwise a fresh resume instruction is used.
+        """
+        live = self._agents.get(agent_id)
+        if live is not None:
+            if message:
+                await live.continue_with_input(message)
+            return live
+
+        cp = self.checkpoint_store.load(agent_id) if self.checkpoint_store else None
+        if cp is None:
+            raise KeyError(f"No checkpoint found for agent '{agent_id}'")
+        task = Task(
+            id=cp.task.id,
+            description=cp.task.description,
+            role=cp.task.role,
+            system_prompt=cp.task.system_prompt,
+            status=cp.task.status,
+            parent_id=cp.task.parent_id,
+            created_at=cp.task.created_at,
+            metadata=dict(cp.task.metadata or {}),
+        )
+        agent = self.delegate(task, agent_type=cp.agent_type)
+        agent._has_run = True
+        agent._iteration = 0
+        agent.session_id = cp.session_id or agent.id
+        agent._checkpoint_notes = list(cp.checkpoint_notes or [])
+        focus = cp.focus or {}
+        agent._focus = FocusLedger(
+            objective=focus.get("objective", ""),
+            acceptance=list(focus.get("acceptance") or []),
+            deliverable=focus.get("deliverable", ""),
+            pending=list(focus.get("pending") or []),
+            done=list(focus.get("done") or []),
+        )
+        agent.context.messages = list(cp.messages or [])
+        agent.context.turn_counter = cp.turn_counter
+        agent.context.turn_order = list(cp.turn_order or [])
+        agent.context.turns = dict(cp.turns or {})
+        agent.context.pruned = set(cp.pruned or [])
+        agent.context.prune_markers = dict(cp.prune_markers or {})
+        nudge = message or (
+            "A previous attempt of this task was interrupted. Resume NOW from your "
+            "persisted plan and prior results (already in your context): "
+            "continue the work, reach the deliverable, and finish with report()."
+        )
+        await agent.continue_with_input(nudge)
+        return agent
 
     # -- self-heal (docs/concepts/self-healing.md) ------------------------
 

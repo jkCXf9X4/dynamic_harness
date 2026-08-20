@@ -72,6 +72,14 @@ class ToolContext:
 
     # -- context management ----------------------------------------------
 
+    def set_plan(self, *, steps=None, objective=None, acceptance=None, deliverable=None) -> str:
+        return self._agent.set_plan(
+            steps=steps, objective=objective, acceptance=acceptance, deliverable=deliverable,
+        )
+
+    def checkpoint(self, note: str) -> str:
+        return self._agent.checkpoint(note)
+
     async def compress(self) -> dict[str, Any]:
         compression_prompt = "\n".join([
             "You are a context compression engine. Condense the following agent",

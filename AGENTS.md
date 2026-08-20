@@ -66,13 +66,15 @@ src/dynamic_harness/
 │   ├── events_format.py     → format_event() — single event→text source
 │   ├── usage.py             → UsageTracker (per-agent/total token tracking)
 │   ├── trace.py             → TraceStore (JSONL debug trace)
-│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 17 tools split by concern
+│   ├── checkpoint.py        → AgentCheckpoint + CheckpointStore (plan/progress persisted to JSON for resumability)
+│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 19 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()
 │       ├── filesystem.py    → read, write, glob, grep, edit (+ sandbox helpers)
 │       ├── process.py       → bash
 │       ├── network.py       → webfetch
 │       ├── agents.py        → delegate, report, escalate, fail, ask, converse, read_artifact
+│       ├── planning.py      → plan, checkpoint
 │       └── context.py       → compress, prune, restore
 ├── cli/
 │   ├── terminal.py          → DEFAULT CLI: Rich Live-rendered terminal (batch, -i REPL)
@@ -208,6 +210,7 @@ ReportPayload(
 - Event handlers: `on_report()`, `on_escalation()`, `on_failure()`, `on_budget_request()`, `on_activity()`
 - `register_agent_class(name, cls)` — register custom agent type
 - `set_llm(llm)` — inject LLM provider
+- `resume(agent_id, message=None)` — rebuild an interrupted/failed agent from its persisted checkpoint and continue it to completion
 - `task_graph()` → dict[str, list[str]] — parent→children map
 - `get_usage(agent_id)` / `total_usage()` — per-agent / aggregate token usage
 - `reset(clear_handlers=False)` — clear state (event handlers only if `clear_handlers=True`)
@@ -227,17 +230,22 @@ ReportPayload(
 - `Commit(id, task_id, agent_id, summary, artifact_ids, parent_ids, child_ids, timestamp)`
 - `Repository(root)` — commit/get/log/tree/count/clear, persisted as sharded JSON
 
+### AgentCheckpoint / CheckpointStore (`core/checkpoint.py`)
+- `AgentCheckpoint(agent_id, agent_type, session_id, task, focus, messages, checkpoint_notes, turn_counter, turn_order, turns, pruned, prune_markers, terminated)`
+- `CheckpointStore(root)` — save(agent)/load(agent_id)/list/clear; persisted as JSON per agent
+- The run loop auto-persists an `AgentCheckpoint` after every committed turn; `Runtime.resume(agent_id)` rebuilds a live agent from it.
+
 ### LLMProvider (`llm/provider.py`)
 - `LLMProvider` (ABC) with `generate()`, `generate_with_tools()`, `generate_structured()`
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 17 Built-in Tools
+## 19 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
 | # | Tool | Parameters | Terminal? |
-|---|------|-----------|-----------|
+|---|------|-----------|----------|
 | 1 | `read` | `path: str` | No |
 | 2 | `write` | `path: str, content: str` | No |
 | 3 | `glob` | `pattern: str` | No |
@@ -255,8 +263,16 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 15 | `restore` | `prune_id: str` | No |
 | 16 | `converse` | `agent_id: str, message: str` | No |
 | 17 | `read_artifact` | `artifact_id: str` | No |
+| 18 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
+| 19 | `checkpoint` | `note: str` | No |
 
-Terminal tools (report, escalate, fail) stop the agent loop.
+Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
+agent's step decomposition (re-stated as progress each turn and persisted to its
+checkpoint); `checkpoint` writes a milestone note to disk. The run loop also
+auto-persists a structured `AgentCheckpoint` after every committed turn, so an
+interrupted or failed task can be resumed from disk via `Runtime.resume(agent_id)`
+(e.g. `--resume <id>` in the CLI) — state lives in the immutable checkpoint, not
+only in agent memory.
 
 ## Safety Invariants
 

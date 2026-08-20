@@ -4,6 +4,7 @@ from . import agents as _agents
 from . import context as _context
 from . import filesystem as _filesystem
 from . import network as _network
+from . import planning as _planning
 from . import process as _process
 from .registry import ToolRegistry
 
@@ -24,5 +25,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_context.TOOL_COMPRESS_DEF, _context.compress)
     registry.register(_context.TOOL_PRUNE_DEF, _context.prune)
     registry.register(_context.TOOL_RESTORE_DEF, _context.restore)
+    registry.register(_planning.TOOL_PLAN_DEF, _planning.plan)
+    registry.register(_planning.TOOL_CHECKPOINT_DEF, _planning.checkpoint)
     registry.register(_agents.TOOL_CONVERSE_DEF, _agents.converse)
     registry.register(_agents.TOOL_READ_ARTIFACT_DEF, _agents.read_artifact)

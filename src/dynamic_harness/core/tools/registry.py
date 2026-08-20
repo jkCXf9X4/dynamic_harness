@@ -28,6 +28,7 @@ ORCHESTRATOR_ALLOWED_TOOLS: frozenset[str] = frozenset({
     "delegate", "converse", "ask", "read_artifact",
     "report", "escalate", "fail",
     "compress", "prune", "restore",
+    "plan", "checkpoint",
 })
 
 

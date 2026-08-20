@@ -107,6 +107,8 @@ class Agent:
         self._trace_store = runtime.trace_store
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
+        self._checkpoint_store = runtime.checkpoint_store
+        self._checkpoint_notes: list[str] = []
         self._environment_info: EnvironmentInfo | None = None
         self._environment_render: str = ""
 
@@ -201,6 +203,49 @@ class Agent:
             self._focus.done.append(item)
         if item in self._focus.pending:
             self._focus.pending.remove(item)
+
+    # -- planning / checkpoint persistence -------------------------------
+
+    def persist_checkpoint(self) -> None:
+        """Persist this agent's full running state to disk as structured JSON.
+
+        Called automatically after every committed turn and whenever the agent
+        plans or checkpoints, so an interrupted run can be resumed from disk.
+        No-op when no checkpoint store is configured.
+        """
+        store = self._checkpoint_store
+        if store is not None:
+            store.save(self)
+
+    def set_plan(
+        self,
+        *,
+        steps: list[str] | None = None,
+        objective: str | None = None,
+        acceptance: list[str] | None = None,
+        deliverable: str | None = None,
+    ) -> str:
+        """Record a structured plan: steps become the focus ledger's pending
+        items (re-stated each turn) and are persisted in the checkpoint."""
+        if objective is not None:
+            self._focus.objective = objective
+        if acceptance is not None:
+            self._focus.acceptance = list(acceptance)
+        if deliverable is not None:
+            self._focus.deliverable = deliverable
+        if steps is not None:
+            for step in steps:
+                step = str(step).strip()
+                if step and step not in self._focus.done and step not in self._focus.pending:
+                    self._focus.pending.append(step)
+        self.persist_checkpoint()
+        return f"Plan recorded: {len(steps or [])} pending step(s); progress is re-stated each turn."
+
+    def checkpoint(self, note: str) -> str:
+        """Persist current state with a milestone note, enabling crash-resume."""
+        self._checkpoint_notes.append(note)
+        self.persist_checkpoint()
+        return f"Checkpoint saved (state on disk) — note: {note[:80]}"
 
     # -- LLM / environment -------------------------------------------------
 
@@ -630,6 +675,9 @@ class Agent:
             self._iteration += 1
             if self._safety_check():
                 return
+            # Persist state before each LLM call so a crash mid-turn still leaves
+            # every committed turn (and the plan) recoverable from disk.
+            self.persist_checkpoint()
 
             prompt_tokens = self.context.estimate_prompt_tokens()
             self._emit_iteration(prompt_tokens)
@@ -640,6 +688,7 @@ class Agent:
 
             if response.tool_calls:
                 if await self._handle_tool_calls(response):
+                    self.persist_checkpoint()
                     return
             else:
                 self._emit_llm_end(response, [])
@@ -653,7 +702,9 @@ class Agent:
                     task_id=self.task.id,
                     summary=content,
                 ))
+                self.persist_checkpoint()
                 return
+            self.persist_checkpoint()
 
     async def _gather_deferred_and_finalize(
         self,
