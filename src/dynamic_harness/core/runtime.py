@@ -79,6 +79,9 @@ class Runtime:
         self._gitignore_mtime: float | None = None
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
+        self._repeated_recovery_attempts = (
+            config.safety.repeated_recovery_attempts if config else 1
+        )
         self._safety_timeout_seconds = config.safety.timeout_seconds if config else 900
         self._disable_root_timeout = (
             config.safety.disable_root_timeout if config else True
@@ -448,6 +451,7 @@ class Runtime:
                 agent_id, task, self, parent,
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
+                repeated_recovery_attempts=self._repeated_recovery_attempts,
                 safety_timeout_seconds=self._safety_timeout_seconds,
                 active_turn_window=self._active_turn_window,
             )
@@ -456,6 +460,7 @@ class Runtime:
                 agent_id, task, self, parent,
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
+                repeated_recovery_attempts=self._repeated_recovery_attempts,
                 safety_timeout_seconds=self._safety_timeout_seconds,
                 active_turn_window=self._active_turn_window,
             )

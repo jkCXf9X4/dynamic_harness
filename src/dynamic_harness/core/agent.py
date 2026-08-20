@@ -53,6 +53,7 @@ class Agent:
         system_prompt: str | None = None,
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
+        repeated_recovery_attempts: int = 1,
         safety_timeout_seconds: float | None = None,
         active_turn_window: int = 50,
     ) -> None:
@@ -71,6 +72,9 @@ class Agent:
         self._system_prompt = system_prompt or task.system_prompt
         self._safety_max_iterations = safety_max_iterations
         self.repeated_call_limit = repeated_call_limit
+        # Remaining chances to nudge a looping agent out of its rut before
+        # repeated-call detection force-fails it (0 = fail on first detection).
+        self._repeated_recovery_left = repeated_recovery_attempts
         self._safety_timeout_seconds = safety_timeout_seconds
         self._started_at: float | None = None
         self._has_run: bool = False
@@ -734,7 +738,7 @@ class Agent:
             len(self._recent_batches) == self.repeated_call_limit
             and all(sig == batch_sig for sig in self._recent_batches)
         ):
-            return self._fail_repeated("Repeated identical tool calls",
+            return self._loop_detected("Repeated identical tool calls",
                                        response.tool_calls[0].name,
                                        self.repeated_call_limit)
 
@@ -751,7 +755,7 @@ class Agent:
             window = recent[-limit * 2:]
             for sig in set(window):
                 if window.count(sig) >= limit:
-                    return self._fail_repeated(
+                    return self._loop_detected(
                         f"Tool call '{sig}' appeared {limit} times in the "
                         f"last {limit * 2} calls",
                         response.tool_calls[-1].name, limit)
@@ -763,7 +767,7 @@ class Agent:
         if len(self._recent_messages) >= limit * 2:
             recent_msgs = list(self._recent_messages)
             if recent_msgs[-limit:] == [recent_msgs[-1]] * limit:
-                return self._fail_repeated(
+                return self._loop_detected(
                     "Repeated identical assistant responses", "LLM", limit)
 
         # Semantic guard: many consecutive delegate calls aimed at the *same*
@@ -776,12 +780,51 @@ class Agent:
                     len(self._recent_delegate_targets) == self.repeated_call_limit
                     and len(set(self._recent_delegate_targets)) == 1
                 ):
-                    return self._fail_repeated(
+                    return self._loop_detected(
                         f"Delegated {self.repeated_call_limit} times in a row "
                         f"aimed at the same target",
                         "delegate", self.repeated_call_limit)
 
         return False
+
+    def _loop_detected(self, message: str, tool_name: str, count: int) -> bool:
+        """React to a detected loop: nudge first, fail only when the recovery
+        budget is exhausted.
+
+        On the detection, if at least one nudge remains we append a plain user
+        message telling the agent it is looping and to change its actual calls,
+        count a recovery attempt, and return False so the run loop continues.
+        If the agent keeps looping (the deques still flag the pattern) the next
+        detection consumes the remaining attempts, and only then -- or
+        immediately when ``repeated_recovery_attempts=0`` -- it force-fails.
+        """
+        if self._repeated_recovery_left > 0:
+            self._repeated_recovery_left -= 1
+            self._repeated_calls_detected = True
+            self._event_bus.emit_activity(ActivityEvent(
+                agent_id=self.id,
+                event_type=ActivityEventType.SAFETY_WARNING,
+                data={
+                    "warning_type": "repeated_calls",
+                    "tool_name": tool_name,
+                    "repeated_count": count,
+                    "nudged": True,
+                    "recovery_remaining": self._repeated_recovery_left,
+                },
+            ))
+            self.context.append({
+                "role": "user",
+                "content": (
+                    "[safety] You are looping — you have repeated "
+                    f"{message.lower()} (tool: {tool_name}) {count} times in a "
+                    "row. This looks stuck. Your next turn must take a genuinely "
+                    "different approach or finish via report/escalate/fail. "
+                    f"You have {self._repeated_recovery_left + 1} more such "
+                    "warning(s) before this run is failed."
+                ),
+            })
+            return False
+        return self._fail_repeated(message, tool_name, count)
 
     def _fail_repeated(self, message: str, tool_name: str, count: int) -> bool:
         self._repeated_calls_detected = True

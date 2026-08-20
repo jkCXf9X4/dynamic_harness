@@ -70,7 +70,8 @@ def format_event(
         if wtype == "max_iterations":
             return f"{lead(WARN if emoji else '')}\u26a0 max iterations ({d.get('iteration', 0)}/{d.get('limit', 0)})"
         if wtype in ("repeated_calls",):
-            return f"{lead(WARN if emoji else '')}\u26a0 repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})"
+            kind = "nudged\t" if d.get("nudged") else "\u26a0"
+            return f"{lead(WARN if emoji else '')}{kind} repeated calls ({d.get('tool_name', '?')} x{d.get('repeated_count', 0)})"
         if wtype == "timeout":
             return f"{lead(WARN if emoji else '')}\u26a0 timeout ({d.get('timeout_seconds', 0)}s after {d.get('iteration', 0)} iters)"
         if wtype == "agent_error":

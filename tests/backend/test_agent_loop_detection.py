@@ -50,8 +50,14 @@ def _make_agent(
     task: Task,
     safety_max_iterations: int = 50,
     repeated_call_limit: int = 5,
+    repeated_recovery_attempts: int = 1,
 ) -> Agent:
-    agent = Agent("test-agent", task, runtime, safety_max_iterations=safety_max_iterations, repeated_call_limit=repeated_call_limit)
+    agent = Agent(
+        "test-agent", task, runtime,
+        safety_max_iterations=safety_max_iterations,
+        repeated_call_limit=repeated_call_limit,
+        repeated_recovery_attempts=repeated_recovery_attempts,
+    )
     task.status = TaskStatus.running
     runtime._agents[agent.id] = agent
     return agent
@@ -79,6 +85,68 @@ async def test_repeated_identical_calls_trigger_safety(runtime: Runtime) -> None
     await root.run()
 
     assert root.task.status.value == "failed"
+
+
+@pytest.mark.asyncio
+async def test_loop_detection_nudges_once_before_failing(runtime: Runtime) -> None:
+    """The agent is given one recovery chance before repeated-call detection
+    force-fails it: a plain 'you are looping' user message is appended to its
+    context and it gets another turn."""
+    llm = _LoopToolLLM()
+    runtime.set_llm(llm)
+
+    root = _make_agent(runtime, Task(description="Looping task"), safety_max_iterations=100, repeated_call_limit=3, repeated_recovery_attempts=1)
+
+    await root.run()
+
+    assert root.task.status.value == "failed"
+    assert root._repeated_calls_detected is True
+    # The nudge must have been appended as a user message the LLM saw.
+    assert any(
+        m.get("role") == "user" and "You are looping" in str(m.get("content", ""))
+        for m in root.context.messages
+    )
+    # With limit=3 the identical batch trips detection on the 3rd turn, but the
+    # nudge buys one more turn before the 4th turn force-fails.
+    assert llm.call_count >= 4
+
+
+@pytest.mark.asyncio
+async def test_agent_recovers_after_loop_nudge(runtime: Runtime) -> None:
+    """A model that changes course after being told it is looping must not be
+    force-failed: the run completes normally."""
+    class RecoveringLLM(LLMProvider):
+        def __init__(self):
+            self.saw_nudge = False
+
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            text = " ".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
+            if "[safety] You are looping" in text:
+                self.saw_nudge = True
+                return ToolCallResponse(content="done writing the report", model="mock")
+            return ToolCallResponse(
+                content=None, model="mock",
+                tool_calls=[ToolCallData(
+                    id=f"c{self.saw_nudge}",
+                    name="write",
+                    arguments={"path": "/workspace/out.txt", "content": "final"},
+                )],
+            )
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    runtime.set_llm(RecoveringLLM())
+
+    root = _make_agent(runtime, Task(description="Recovery task"), safety_max_iterations=100, repeated_call_limit=3)
+
+    await root.run()
+
+    assert root.task.status.value == "completed"
+    assert root._repeated_calls_detected is True
 
 
 @pytest.mark.asyncio
@@ -147,7 +215,7 @@ def test_delegate_target_signature_extracts_path() -> None:
 @pytest.mark.asyncio
 async def test_repeated_delegate_to_same_file_triggers_safety(runtime: Runtime) -> None:
     root = _make_agent(runtime, Task(description="orchestrate"),
-                       repeated_call_limit=3)
+                       repeated_call_limit=3, repeated_recovery_attempts=0)
     root._recent_batches = deque(maxlen=3)
     root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
 
@@ -186,7 +254,8 @@ async def test_alternating_batches_trigger_sliding_window(runtime: Runtime) -> N
     """Catch the trace failure mode: two near-identical command variants
     interleaved so no N batches are byte-identical, yet the same tool call
     recurs N times in a short window."""
-    root = _make_agent(runtime, Task(description="loop"), repeated_call_limit=3)
+    root = _make_agent(runtime, Task(description="loop"), repeated_call_limit=3,
+                       repeated_recovery_attempts=0)
     root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
 
     def resp(i: int) -> ToolCallResponse:
@@ -236,9 +305,25 @@ def test_runtime_wires_timeout_from_config(tmp_path) -> None:
         config=cfg,
     )
     assert rt._safety_timeout_seconds == 60.5
+    assert rt._repeated_recovery_attempts == 1  # default
     task = Task(description="t")
     agent = rt.delegate(task)
     assert agent._safety_timeout_seconds == 60.5
+    assert agent._repeated_recovery_left == 1
+
+
+def test_runtime_wires_recovery_from_config(tmp_path) -> None:
+    cfg = HarnessConfig(safety=SafetyConfig(repeated_recovery_attempts=3))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    assert rt._repeated_recovery_attempts == 3
+    task = Task(description="t")
+    agent = rt.delegate(task)
+    assert agent._repeated_recovery_left == 3
 
 
 @pytest.mark.asyncio

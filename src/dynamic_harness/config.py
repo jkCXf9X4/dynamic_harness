@@ -35,6 +35,14 @@ class LLMProviderConfig(BaseModel):
 class SafetyConfig(BaseModel):
     max_iterations: int = 500
     repeated_call_limit: int = 5
+    repeated_recovery_attempts: int = Field(
+        default=1, ge=0,
+        description="How many times a looping agent is nudged (a plain 'you are "
+                    "repeating yourself, change strategy' user message is appended "
+                    "and it gets another turn) before repeated-call detection "
+                    "force-fails it. 0 preserves the old behavior of failing "
+                    "immediately on first detection.",
+    )
     timeout_seconds: float | None = Field(
         default=None, gt=0,
         description="Wall-clock budget for a single agent's ENTIRE run (its whole "
