@@ -23,6 +23,9 @@ class AgentNode:
     status: str
     tokens: int = 0
     messages: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
     artifact_ids: list[str] = field(default_factory=list)
     trace_path: str | None = None
     children: list[AgentNode] = field(default_factory=list)
@@ -37,11 +40,23 @@ class AgentNode:
 
     @property
     def usage(self) -> str:
-        return (
-            f" ({self.tokens}t, {self.messages}msgs)"
-            if (self.tokens or self.messages)
-            else ""
-        )
+        if not (self.tokens or self.messages):
+            return ""
+        # Show the provider-billed breakdown so a cache-heavy prompt isn't
+        # hidden behind a single inflated total: `prompt` is the FULL prompt
+        # (cached portion included, billed alongside as `cached`).
+        parts = []
+        if self.prompt_tokens or self.completion_tokens:
+            parts.append(f"{self.prompt_tokens}p")
+            if self.completion_tokens:
+                parts.append(f"{self.completion_tokens}c")
+            if self.cached_tokens:
+                parts.append(f"{self.cached_tokens}cr")
+        elif self.tokens:
+            parts.append(f"{self.tokens}t")
+        if self.messages:
+            parts.append(f"{self.messages}msgs")
+        return f" ({', '.join(parts)})"
 
 
 @dataclass
@@ -70,6 +85,9 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             description=agent.task.description,
             status=agent.task.status.value,
             tokens=usage.get("total_tokens", 0),
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            cached_tokens=usage.get("cached_tokens", 0),
             messages=agent.message_count,
             artifact_ids=prov["artifact_ids"],
             trace_path=prov["trace_path"],

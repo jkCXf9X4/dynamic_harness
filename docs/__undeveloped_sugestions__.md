@@ -83,3 +83,13 @@ lets ensure that sub-orchestrators can not time out as well
 ---
 
 parents should also be able to evaluate if children has crashed and kill them
+
+
+
+---
+
+
+---
+
+enable input during execution
+The token counter in the cli is way off, please investigate

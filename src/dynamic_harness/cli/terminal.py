@@ -229,6 +229,16 @@ def _read_input(prompt: str) -> str:
     return "".join(text)
 
 
+def _stdin_has_input() -> bool:
+    """True when stdin currently has buffered data (a line being typed)."""
+    if not sys.stdin.isatty():
+        return False
+    try:
+        return bool(select.select([sys.stdin], [], [], 0)[0])
+    except (ValueError, OSError):
+        return False
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="dynamic-harness",
@@ -324,6 +334,21 @@ async def _run_with_live(
                 live.stop()
                 console.print()
                 Prompt.ask(f"[bold cyan]Agent asks:[/] {question}")
+                live.start()
+            if _stdin_has_input():
+                # A keystroke during a live run opens the input box; the message
+                # is passed to the active root agent (queued if it is working,
+                # injected immediately if it is blocked on its children).
+                live.stop()
+                console.print()
+                line = _read_input("[bold]>>>[/] ")
+                answer = line.strip()
+                root = runtime.active_root()
+                if answer and root is not None and root.task.status.value not in (
+                    "completed", "failed", "escalated",
+                ):
+                    root.submit_input(answer)
+                    events.append(f"[dim]you → [/]{answer[:60]}")
                 live.start()
             await asyncio.sleep(0.25)
     root = await run_task

@@ -116,6 +116,15 @@ class Agent:
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()
 
+        # Mid-run user input (interactive terminal / API): a queue the caller
+        # fills while this agent is executing. Messages land as fresh user
+        # context between turns (a working agent finishes its current turn
+        # first) and an injection also unblocks a child-gather early, so a
+        # parent waiting on its children reacts to the input immediately while
+        # still-running children switch to fire-and-forget.
+        self._inject_queue: asyncio.Queue[str] = asyncio.Queue()
+        self._inject_event = asyncio.Event()
+
         # Streaming mode (config `agent.stream_children`): when True, delegations
         # are fire-and-forget and children settle asynchronously; the run loop is
         # re-admitted as each child completes so a parent can act on child events
@@ -1059,6 +1068,27 @@ class Agent:
         ))
         self.context.append({"role": "user", "content": note})
 
+    def submit_input(self, message: str) -> None:
+        """Queue a mid-run user message for this agent.
+
+        A working agent finishes its current turn before the message lands as a
+        fresh user turn; if the agent is instead blocked waiting on its children
+        (deferred or streaming gather), the injection interrupts that wait so it
+        reacts immediately (still-running children continue in the background)."""
+        self._inject_queue.put_nowait(message)
+        self._inject_event.set()
+
+    def _drain_inject_input(self) -> list[str]:
+        """Append all queued user messages to the live context and return them."""
+        msgs: list[str] = []
+        while not self._inject_queue.empty():
+            msgs.append(self._inject_queue.get_nowait())
+        if msgs:
+            self._inject_event.clear()
+            for m in msgs:
+                self.context.append({"role": "user", "content": m})
+        return msgs
+
     async def _run_loop(self) -> None:
         tools = self._tool_registry.openai_schemas(role=self.task.role)
 
@@ -1072,6 +1102,10 @@ class Agent:
 
             prompt_tokens = self.context.estimate_prompt_tokens()
             self._emit_iteration(prompt_tokens)
+
+            # Surface queued mid-run input as fresh user context before taking
+            # the message snapshot, so it reaches the provider this turn.
+            self._drain_inject_input()
 
             sent = list(self.context.messages)
             ts = self._trace_store
@@ -1137,23 +1171,38 @@ class Agent:
         pending = self._deferred_delegates
         self._deferred_delegates = None
 
-        children = [child for _, child, _ in pending]
-        outcomes = await asyncio.gather(
-            *(task for _, _, task in pending),
-            return_exceptions=True,
-        )
+        # Race the full child-gather against mid-run user input so a parent
+        # blocked on its children reacts to injected input immediately, with
+        # still-running children demoted to fire-and-forget (their commits and
+        # artifacts still land; only the parent's in-context formatting is
+        # skipped).
+        inject_waiter = asyncio.create_task(self._inject_event.wait())
+        try:
+            done, _ = await asyncio.wait(
+                [t for _, _, t in pending] + [inject_waiter],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        finally:
+            if not inject_waiter.done():
+                inject_waiter.cancel()
 
+        if inject_waiter.done():
+            # User input interrupted the wait: return without framing the
+            # children's results. Still-running children continue in the
+            # background; the run loop's next turn drains the queued input as a
+            # fresh user message (always *after* the current turn is committed,
+            # so the message ordering stays valid).
+            return
+
+        children = [child for _, child, _ in pending]
+        outcomes = [await asyncio.wait_for(t, None) for _, _, t in pending]
         deferred_map: dict[str, Agent] = {}
-        for (tcid, child, _), outcome in zip(pending, outcomes):
+        for (tcid, child, task), outcome in zip(pending, outcomes):
             deferred_map[tcid] = child
             if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
                 if not child.last_report and not child.last_failure:
                     child.fail(f"Child agent raised: {outcome}")
 
-        # Self-heal: recover failed children (resume-once or fresh worker) so the
-        # parent format step below reflects the healed result, not the failure.
-        # Also heal a child that *completed* without an on-disk deliverable
-        # (prose-only report) — the exact case self-healing Layer 1 targets.
         for tcid, child in list(deferred_map.items()):
             if not self._runtime._has_deliverable(child):
                 deferred_map[tcid] = await self._runtime._recover(child)
@@ -1176,13 +1225,25 @@ class Agent:
         when there is nothing pending (or a safety limit fired while waiting)."""
         if not self._stream_pending:
             return False
+        last_inject_waiter: asyncio.Task[bool] | None = None
         while True:
             if self._safety_check():
                 return False
             tasks = [t for _, _, t in self._stream_pending.values()]
+            inject_waiter = asyncio.create_task(self._inject_event.wait())
+            if last_inject_waiter is not None and not last_inject_waiter.done():
+                last_inject_waiter.cancel()
+            last_inject_waiter = inject_waiter
             done, _ = await asyncio.wait(
-                tasks, return_when=asyncio.FIRST_COMPLETED, timeout=1.0
+                tasks + [inject_waiter],
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=1.0,
             )
+            if inject_waiter.done():
+                # Mid-run input while waiting on streamed children: react now.
+                # The loop re-admits, drains the message into context, and calls
+                # the LLM; children stay pending and surface when they settle.
+                return True
             if done:
                 break
         for tcid, (_, child, task) in list(self._stream_pending.items()):

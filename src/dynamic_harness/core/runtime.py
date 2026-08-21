@@ -118,6 +118,9 @@ class Runtime:
 
         self.event_bus = EventBus()
         self.usage_tracker = UsageTracker()
+        # The most recent live root agent (or latest self-heal successor), used
+        # by the interactive terminal as the target for mid-run injections.
+        self._active_root: Agent | None = None
 
         self.tool_registry = ToolRegistry()
         register_default_tools(self.tool_registry)
@@ -207,6 +210,7 @@ class Runtime:
         for the result.
         """
         if root_agent is not None:
+            self._active_root = root_agent
             await root_agent.continue_with_input(description)
             return root_agent
         task = Task(
@@ -216,12 +220,14 @@ class Runtime:
         )
         root = self.delegate(task, agent_type=agent_type)
         root._expected_outputs = list(expected_outputs) if expected_outputs else None
+        self._active_root = root
         # The top agent is exempted from the full-run wall-clock cap by
         # `delegate()` (parent is None) when configured: it runs until it finishes
         # on its own (the oversee caller decides when to kill it). Child agents
         # spawned later inherit the runtime cap from `delegate`.
         await root.run()
         root = await self._recover(root)
+        self._active_root = root
         return root
 
     async def resume(self, agent_id: str, *, message: str | None = None) -> Agent:
@@ -235,6 +241,7 @@ class Runtime:
         """
         live = self._agents.get(agent_id)
         if live is not None:
+            self._active_root = live
             if message:
                 await live.continue_with_input(message)
             return live
@@ -277,6 +284,7 @@ class Runtime:
             "continue the work, reach the deliverable, and finish with report()."
         )
         await agent.continue_with_input(nudge)
+        self._active_root = agent
         return agent
 
     # -- self-heal (docs/concepts/self-healing.md) ------------------------
@@ -599,6 +607,10 @@ class Runtime:
 
     def all_agents(self) -> dict[str, Agent]:
         return dict(self._agents)
+
+    def active_root(self) -> Agent | None:
+        """The most recent live root agent (or self-heal successor)."""
+        return self._active_root
 
     def task_graph(self) -> dict[str, list[str]]:
         return dict(self._task_graph)
