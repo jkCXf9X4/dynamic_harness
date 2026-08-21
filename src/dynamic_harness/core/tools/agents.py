@@ -131,6 +131,44 @@ TOOL_CONVERSE_DEF = ToolDef(
     },
 )
 
+TOOL_KILL_DEF = ToolDef(
+    name="kill",
+    description="Kill a child agent you delegated, cancelling its in-flight work "
+                "and marking it failed. Use when a child is stuck/looping, has "
+                "gone rogue, or its work is no longer needed. Already-written "
+                "artifacts and commits are preserved; only live steps stop. Pass "
+                "recursive=true to also kill the child's own descendants. Returns "
+                "the ids and count of everything terminated.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "ID of the child agent to kill (must be one you delegated — use the child_id returned by delegate())."},
+            "reason": {"type": "string", "description": "Optional reason recorded on the child's failure (why it was killed)."},
+            "recursive": {"type": "boolean", "description": "When true, also kill all of the child's descendants (recursively)."},
+        },
+        "required": ["agent_id"],
+    },
+)
+
+TOOL_STATUS_DEF = ToolDef(
+    name="status",
+    description="Read the live status of this agent's delegated children "
+                "(or one direct child, by id). Children that are running, "
+                "completed, failed, or were killed are each returned with their "
+                "summary/failure reason, artifact id, done+pending plan steps, "
+                "checkpoint notes, and a salvage of recent in-context progress "
+                "(partial_data). Use this after a child fails or is killed to "
+                "recover its partial work, then re-delegate with that salvage to "
+                "retry — instead of starting from zero.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "Optional: ID of a direct child to inspect. Omit to list all of your children."},
+        },
+        "required": [],
+    },
+)
+
 TOOL_USAGE_DEF = ToolDef(
     name="usage",
     description="Read this agent's current message + token usage. Returns cumulative "
@@ -306,6 +344,20 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
     summary = ctx.latest_assistant_message(agent_id)
     status = target.task.status.value
     return f"[Agent {agent_id[:8]}] {summary}\n(Status: {status})"
+
+
+async def kill(
+    *,
+    ctx: ToolContext,
+    agent_id: str,
+    reason: str | None = None,
+    recursive: bool = False,
+) -> str:
+    return await ctx.kill(agent_id, reason=reason, recursive=recursive)
+
+
+async def status(*, ctx: ToolContext, agent_id: str | None = None) -> str:
+    return await ctx.status(agent_id)
 
 
 async def usage(*, ctx: ToolContext) -> str:

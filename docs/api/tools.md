@@ -82,7 +82,9 @@ class ToolResult:
 | 14 | `prune` | `prune_ids?: list[str]` | No | Context |
 | 15 | `restore` | `prune_id: str` | No | Context |
 | 16 | `converse` | `agent_id: str, message: str` | No | Communication |
-| 17 | `read_artifact` | `artifact_id: str` | No | Artifact |
+| 17 | `kill` | `agent_id: str, reason?: str, recursive?: bool` | No | Orchestration |
+| 18 | `status` | `agent_id?: str` | No | Orchestration |
+| 19 | `read_artifact` | `artifact_id: str` | No | Artifact |
 
 Terminal tools (report, escalate, fail) set the agent's task status and stop the tool-calling loop.
 
@@ -395,7 +397,41 @@ Terminates the agent with `TaskStatus.failed`.
 
 ---
 
-### 17. `read_artifact` — Read an artifact by ID
+### 17. `kill` — Kill a child agent
+
+```json
+{
+  "name": "kill",
+  "parameters": {
+    "agent_id": { "type": "string", "description": "ID of a direct child to kill" },
+    "reason": { "type": "string", "description": "Optional reason recorded on the child's failure" },
+    "recursive": { "type": "boolean", "description": "Also kill the child's descendants (default false)" }
+  },
+  "required": ["agent_id"]
+}
+```
+
+**Implementation:** Cancels the child's in-flight run task and marks it `failed` (with the optional reason), preserving already-written artifacts/commits. Killed agents are flagged `_killed` and excluded from self-heal, so they are never resurrected. Only a child this agent directly delegated may be killed. The result embeds `salvage` — a map of killed agent id → `runtime_snapshot()` — capturing each killed agent's summary, plan (done+pending), and recent in-context progress so the parent can retry.
+
+---
+
+### 18. `status` — Read child status(es) + partial progress
+
+```json
+{
+  "name": "status",
+  "parameters": {
+    "agent_id": { "type": "string", "description": "Optional: ID of a direct child to inspect. Omit to list all children." }
+  },
+  "required": []
+}
+```
+
+**Implementation:** Returns a snapshot per child (or one child by id): `status`, `outcome` (`running`/`completed`/`failed`/`killed`/`escalated`), `killed`, final `summary` (or failure reason), `artifact_id`, the plan (`done`+`pending` steps, objective, deliverable), `checkpoint_notes`, iterations, and `partial_data` — a bounded tail of the child's recent in-context activity. Use it after a child fails/is killed to recover its partial work, then re-delegate with that salvage to retry. Restricted to direct children.
+
+---
+
+### 19. `read_artifact` — Read an artifact by ID
 
 ```json
 {

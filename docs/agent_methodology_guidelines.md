@@ -161,9 +161,13 @@ See [examples/anti_patterns.md](examples/anti_patterns.md) for detailed descript
 
 ## Failure Recovery
 
+See [references/guidelines.md](references/guidelines.md) → "The Kill → Inspect → Retry
+loop" for the full salvage-and-retry protocol. Short version:
+
 | Failure | Recovery |
 |---|---|
-| Child returns failed | converse() → if clearable, re-delegate; else escalate |
+| Child returns failed | `status()` → inspect salvage → if clearable, re-delegate *with the salvage folded in*; else escalate |
+| Child stuck / looping / rogue | `kill()` (recursive for a subtree) → read the `salvage` on the kill result → re-delegate carrying done/pending + key findings |
 | Artifact empty/missing | converse("Did you write findings?") → read correct path or re-delegate |
 | Safety limits hit | Task too broad. Re-delegate with narrower description. |
 | Child escalated | Read escalation context. Resolve or pass up via your own escalate(). |

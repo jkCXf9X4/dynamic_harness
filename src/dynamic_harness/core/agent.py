@@ -115,6 +115,9 @@ class Agent:
         self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()
+        # Set by Runtime.kill_agent when this agent is killed by its parent.
+        # Suppresses self-heal (a killed agent must never be resurrected).
+        self._killed: bool = False
 
         # Mid-run user input (interactive terminal / API): a queue the caller
         # fills while this agent is executing. Messages land as fresh user
@@ -187,6 +190,10 @@ class Agent:
         self._checkpoint_notes: list[str] = []
         self._environment_info: EnvironmentInfo | None = None
         self._environment_render: str = ""
+        # Set once this agent's heavyweight in-memory context has been reclaimed
+        # by ``collect_garbage()``. Guards repeated collection and lets a parent
+        # know its child is already just a lightweight outcome stub.
+        self._context_freed: bool = False
 
     # -- outcome accessors ----------------------------------------------------
 
@@ -225,6 +232,57 @@ class Agent:
             or self._terminated_by_safety
             or self._iteration >= ROT_ITERATION_THRESHOLD
         )
+
+    # -- garbage collection --------------------------------------------
+
+    def collect_garbage(self) -> bool:
+        """Reclaim this agent's heavyweight in-memory context once it is done.
+
+        A terminal (reported/escalated/failed) agent is still needed by its
+        parent only for its outcome state — ``last_report`` / ``_report_artifact_id``
+        / ``last_failure`` / ``_iteration`` — all of which are retained. The
+        large, `non-essential` buffer — the full system/user/tool message list,
+        per-turn bodies, and pruning markers — is dropped so the process keeps
+        only the lightweight result instead of the whole conversation.
+
+        This loses nothing recoverable: durable state already lives in the on-disk
+        checkpoint (``persist_checkpoint`` runs after every committed turn), so an
+        interrupted agent can still be resumed from disk. An agent with
+        un-reclaimed children is left alone (its parent may need to format them
+        into a result), as is any agent that has not yet run.
+
+        Returns True when this agent's context was reclaimed (or was already
+        ``IDEMPOTENT``); False when it is not yet eligible.
+        """
+        if self._context_freed:
+            return True
+        if self.task.status not in (
+            TaskStatus.completed,
+            TaskStatus.failed,
+            TaskStatus.escalated,
+        ):
+            return False
+        # Do not reclaim a parent whose children are still resident: a caller
+        # may still inspect a child's context (e.g. a future kill/status).
+        for child in self.children:
+            if not child._context_freed:
+                return False
+        self._context_freed = True
+
+        self.context.messages = []
+        self.context.turns = {}
+        self.context.turn_order = []
+        self.context.pruned = set()
+        self.context.prune_markers = {}
+        # Reset turn accounting so a resumed context rebuilds cleanly.
+        self.context.turn_counter = 0
+        # The loop-guard deques are only meaningful mid-run; drop their contents.
+        self._recent_batches.clear()
+        self._recent_tool_signatures.clear()
+        self._recent_messages.clear()
+        self._recent_delegate_targets.clear()
+        self._recent_near_identical.clear()
+        return True
 
     # -- context knobs -----------------------------------------------------
     # Public tunable knobs (adjustable after construction) live on the
@@ -1212,6 +1270,13 @@ class Agent:
             if tcid in deferred_map:
                 r["content"] = self._format_delegate_result(deferred_map[tcid])
 
+        # Once a child's result is folded into the parent's context, its own
+        # full conversation is dead weight — reclaim it to keep the runtime lean.
+        for tcid in list(deferred_map):
+            child = deferred_map[tcid]
+            if child is not self:
+                child.collect_garbage()
+
     # -- streaming child events (agent.stream_children) ------------------
 
     async def _harvest_streamed_child(self) -> bool:
@@ -1256,6 +1321,7 @@ class Agent:
                 "role": "user",
                 "content": f"[child settled]\n{self._format_delegate_result(child)}",
             })
+            child.collect_garbage()
             break
         return True
 
@@ -1295,6 +1361,47 @@ class Agent:
     def get_other_agent(self, agent_id: str) -> Agent | None:
         return self._runtime.get_agent(agent_id)
 
+    async def kill(
+        self,
+        agent_id: str,
+        *,
+        reason: str | None = None,
+        recursive: bool = False,
+    ) -> str:
+        """Kill a child agent this agent delegated, cancelling its in-flight work
+        and marking it failed. Returns a JSON summary of what was terminated."""
+        target = self.get_other_agent(agent_id)
+        if target is None:
+            return json.dumps({"error": f"no agent found with ID {agent_id}"})
+        if target.parent is not self:
+            return json.dumps({
+                "error": f"agent {agent_id} is not one of your direct children; "
+                         "you may only kill agents you delegated",
+            })
+        if target.task.status in (
+            TaskStatus.completed,
+            TaskStatus.failed,
+            TaskStatus.escalated,
+        ):
+            return json.dumps({
+                "error": f"agent {agent_id} already {target.task.status.value}; "
+                         "nothing to kill",
+            })
+        killed = self._runtime.kill_agent(
+            target.id, reason=reason or "", recursive=recursive
+        )
+        salvage: dict[str, dict[str, Any]] = {}
+        for kid in sorted(killed):
+            a = self._runtime.get_agent(kid)
+            if a is not None:
+                salvage[kid] = a.runtime_snapshot()
+        return json.dumps({
+            "killed": sorted(killed),
+            "count": len(killed),
+            "status": "failed",
+            "salvage": salvage,
+        }, indent=2)
+
     def get_gitignore_filter(self) -> Any:
         return self._runtime.get_gitignore_filter()
 
@@ -1320,6 +1427,94 @@ class Agent:
             if msg.get("role") == "assistant" and msg.get("content"):
                 return msg["content"][:500]
         return ""
+
+    def _context_tail(
+        self, *, n_messages: int = 8, char_budget: int = 3000
+    ) -> str:
+        """Compact recent-activity tail from this agent's live context.
+
+        Used by ``runtime_snapshot`` to hand a parent the partial progress a
+        child made before it died/was killed, so the parent can fold that
+        salvage into a fresh retry instead of starting from zero. Pulls the most
+        recent assistant text and tool results (oldest→newest), bounded by a
+        message count and char budget.
+        """
+        parts: list[str] = []
+        budget = char_budget
+        remaining = n_messages
+        for msg in reversed(self.context.messages[1:]):  # skip system message
+            if remaining <= 0 or budget <= 0:
+                break
+            role = msg.get("role", "")
+            if role == "assistant" and msg.get("tool_calls"):
+                calls = ", ".join(
+                    f"{tc.get('function', {}).get('name', '?')}"
+                    for tc in msg["tool_calls"]
+                )
+                text = f"agent_action: {calls}"
+            elif role == "tool":
+                text = "tool_result: " + str(msg.get("content") or "")
+            else:
+                text = str(msg.get("content") or "")
+            text = text.strip()
+            if not text:
+                continue
+            text = text[: budget + 200]
+            parts.append(f"[{role}] {text}")
+            budget -= len(text)
+            remaining -= 1
+        parts.reverse()
+        return "\n".join(parts)
+
+    def runtime_snapshot(self) -> dict[str, Any]:
+        """Public live snapshot of this agent: status + salvageable partial work.
+
+        A parent reads this (via the ``status`` tool, or embedded in a ``kill``
+        result) to decide whether-and-how to retry a child: what already
+        succeeded (done plan steps, artifact, summary) vs what was left undone
+        (pending steps, recent in-context activity). ``killed``/``outcome`` let
+        the parent distinguish a deliberately-killed child (retry fresh) from a
+        failed one (retry carrying the failure)."""
+        outcome = "running"
+        if self.task.status is TaskStatus.completed:
+            outcome = "completed"
+        elif self._killed:
+            outcome = "killed"
+        elif self.task.status is TaskStatus.escalated:
+            outcome = "escalated"
+        elif self.task.status is TaskStatus.failed:
+            outcome = "failed"
+
+        summary = ""
+        if self.last_report and self.last_report.summary:
+            summary = self.last_report.summary
+        elif self.last_failure and self.last_failure.error:
+            summary = self.last_failure.error
+        elif self.last_escalation:
+            summary = self.last_escalation.issue
+        if not summary:
+            summary = self.latest_assistant_message()
+
+        focus = self._focus
+        return {
+            "agent_id": self.id,
+            "task_id": self.task.id,
+            "status": self.task.status.value,
+            "outcome": outcome,
+            "killed": self._killed,
+            "summary": summary[:500],
+            "artifact_id": self._report_artifact_id,
+            "plan": {
+                "objective": focus.objective,
+                "deliverable": focus.deliverable,
+                "acceptance": list(focus.acceptance),
+                "done": list(focus.done),
+                "pending": list(focus.pending),
+            },
+            "checkpoint_notes": list(self._checkpoint_notes),
+            "iterations": self._iteration,
+            "partial_data": self._context_tail(),
+        }
 
     async def run_delegate_tool(
         self,
@@ -1359,6 +1554,7 @@ class Agent:
         ))
         task = asyncio.create_task(child.run())
         self._runtime.track_agent_task(task)
+        self._runtime.set_agent_run_task(child.id, task)
         if self.stream_children:
             self._stream_pending[tool_call_id] = (tool_call_id, child, task)
             return json.dumps({"child_id": child.id, "status": "running"}, indent=2)
@@ -1368,7 +1564,9 @@ class Agent:
         await task
         if not self._runtime._has_deliverable(child):
             child = await self._runtime._recover(child)
-        return self._format_delegate_result(child)
+        result = self._format_delegate_result(child)
+        child.collect_garbage()
+        return result
 
     def report(self, payload: ReportPayload) -> None:
         if self.stream_children:

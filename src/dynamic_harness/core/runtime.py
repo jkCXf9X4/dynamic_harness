@@ -72,6 +72,9 @@ class Runtime:
         self._agents: dict[str, Agent] = {}
         self._agent_retries: dict[str, int] = {}
         self._agent_run_tasks: set[asyncio.Task[Any]] = set()
+        # Map of agent id -> its currently-running asyncio task (created by the
+        # delegate tool). Kill uses this to cancel a child's in-flight work.
+        self._agent_run_tasks_by_agent: dict[str, asyncio.Task[Any]] = {}
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
         self._llm: LLMProvider | None = None
@@ -227,6 +230,10 @@ class Runtime:
         # spawned later inherit the runtime cap from `delegate`.
         await root.run()
         root = await self._recover(root)
+        # Reclaim the completed subtree's in-memory contexts now that the run
+        # has produced its final result; keep the active root so the interactive
+        # caller can still continue/re-inspect it.
+        self.collect_garbage(preserve_active_root=True)
         self._active_root = root
         return root
 
@@ -240,7 +247,10 @@ class Runtime:
         otherwise a fresh resume instruction is used.
         """
         live = self._agents.get(agent_id)
-        if live is not None:
+        # An in-memory agent whose context was garbage-collected can no longer
+        # be continued in place; fall through to the on-disk checkpoint rebuild
+        # below (which restores its full conversation from disk).
+        if live is not None and not live._context_freed:
             self._active_root = live
             if message:
                 await live.continue_with_input(message)
@@ -417,6 +427,8 @@ class Runtime:
         # No LLM → nothing to resume; leave the agent as-is.
         if not self._self_heal_mode or self._llm is None:
             return agent
+        if getattr(agent, "_killed", False):
+            return agent  # deliberately killed — never resurrect
         if agent.task.status is TaskStatus.escalated:
             return agent
         if agent.last_failure is None and self._has_deliverable(agent):
@@ -618,6 +630,43 @@ class Runtime:
     def agent_count(self) -> int:
         return len(self._agents)
 
+    def collect_garbage(
+        self, agent_id: str | None = None, *, preserve_active_root: bool = True
+    ) -> int:
+        """Reclaim in-memory agent contexts, bottom-up.
+
+        With ``agent_id`` given, targets that agent's subtree; otherwise every
+        agent in the runtime. An agent is reclaimed only once it is terminal
+        (reported/escalated/failed) and all of its children have also been
+        reclaimed — children are freed before parents, so a completed parent
+        never loses a child result it still needs. A running agent, or the
+        active root (when ``preserve_active_root`` is set — the interactive
+        terminal continues it between turns), is left untouched.
+
+        Returns the number of agents whose heavyweight contexts were freed.
+        """
+        if agent_id is not None:
+            ids = [agent_id, *self._task_graph.get(agent_id, [])]
+        else:
+            ids = list(self._agents)
+        if preserve_active_root and self._active_root is not None:
+            ids = [aid for aid in ids if aid != self._active_root.id]
+
+        freed = 0
+        # Loop until quiescent so a parent unlocked by a reclaimed child is
+        # given its chance in the same pass (bottom-up ordering).
+        changed = True
+        while changed:
+            changed = False
+            for aid in list(ids):
+                agent = self._agents.get(aid)
+                if agent is None or agent._context_freed:
+                    continue
+                if agent.collect_garbage():
+                    freed += 1
+                    changed = True
+        return freed
+
     async def record_usage(
         self,
         agent_id: str,
@@ -656,6 +705,47 @@ class Runtime:
         can cancel in-flight work."""
         self._agent_run_tasks.add(task)
         task.add_done_callback(self._agent_run_tasks.discard)
+
+    def set_agent_run_task(self, agent_id: str, task: asyncio.Task[Any]) -> None:
+        """Record the live asyncio task driving an agent's run (created by the
+        delegate tool). The ``kill`` tool cancels it to stop the child."""
+        self._agent_run_tasks_by_agent[agent_id] = task
+
+    def kill_agent(
+        self, agent_id: str, *, reason: str = "", recursive: bool = False
+    ) -> set[str]:
+        """Kill an agent (and optionally its descendants): cancel in-flight work
+        and mark it failed.
+
+        Already-written artifacts and commits are preserved; only live steps
+        stop. Returns the set of agent ids terminated (may be empty if the
+        agent is already gone).
+        """
+        agent = self._agents.get(agent_id)
+        if agent is None:
+            return set()
+        killed: set[str] = set()
+        if recursive:
+            for child_id in list(self._task_graph.get(agent_id, [])):
+                if child_id in self._agents:
+                    killed |= self.kill_agent(
+                        child_id, reason=reason, recursive=True
+                    )
+        if agent.task.status in (
+            TaskStatus.completed,
+            TaskStatus.failed,
+            TaskStatus.escalated,
+        ):
+            return killed
+        agent._killed = True
+        if not agent.last_report and not agent.last_failure:
+            note = "Agent killed" + (f": {reason}" if reason else "")
+            agent.fail(note)
+        task = self._agent_run_tasks_by_agent.pop(agent_id, None)
+        if task is not None and not task.done() and not task.cancelled():
+            task.cancel()
+        killed.add(agent_id)
+        return killed
 
     def total_usage(self) -> dict:
         return self.usage_tracker.total_usage()
@@ -763,5 +853,6 @@ class Runtime:
         self._path_locks.clear()
         self._agent_retries.clear()
         self._heal_counts.clear()
+        self._agent_run_tasks_by_agent.clear()
         if clear_handlers:
             self.event_bus.clear()

@@ -28,5 +28,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_planning.TOOL_PLAN_DEF, _planning.plan)
     registry.register(_planning.TOOL_CHECKPOINT_DEF, _planning.checkpoint)
     registry.register(_agents.TOOL_CONVERSE_DEF, _agents.converse)
+    registry.register(_agents.TOOL_KILL_DEF, _agents.kill)
+    registry.register(_agents.TOOL_STATUS_DEF, _agents.status)
     registry.register(_agents.TOOL_READ_ARTIFACT_DEF, _agents.read_artifact)
     registry.register(_agents.TOOL_USAGE_DEF, _agents.usage)

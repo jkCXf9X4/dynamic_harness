@@ -195,3 +195,78 @@ def test_write_provenance_index_round_trips(tmp_path) -> None:
     assert row["headline"] == "indexed"
 
 
+@pytest.mark.asyncio
+async def test_collect_garbage_reclaims_terminal_context_preserves_outcome(
+    runtime: Runtime,
+) -> None:
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.context.append(
+                {"role": "assistant", "content": "a large in-context payload"}
+            )
+            self.report(ReportPayload(
+                task_id=self.task.id, summary="done", full_report="full body",
+            ))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    leaf = runtime.delegate(Task(description="leaf"), agent_type="LeafAgent")
+    await leaf.run()
+
+    assert leaf.task.status.value == "completed"
+    assert leaf._context_freed is False
+    assert len(leaf.context.messages) > 0  # the seeded in-context payload
+
+    freed = runtime.collect_garbage(leaf.id)
+    assert freed == 1
+    assert leaf._context_freed is True
+    assert leaf.context.messages == []
+    assert leaf.context.turns == {}
+    # Outcome (the lightweight result) is retained for the parent to consume.
+    assert leaf.last_report is not None
+    assert leaf.last_report.summary == "done"
+    assert leaf.last_report.full_report == "full body"
+    # Idempotent: a second pass reports nothing new.
+    assert runtime.collect_garbage(leaf.id) == 0
+
+
+@pytest.mark.asyncio
+async def test_collect_garbage_leaves_running_agents_untouched(runtime: Runtime) -> None:
+    running = runtime.delegate(Task(description="still going"))
+    assert running._has_run is False
+    assert runtime.collect_garbage(running.id) == 0
+    assert running._context_freed is False
+
+
+@pytest.mark.asyncio
+async def test_run_auto_collects_descendants_preserves_root(runtime: Runtime) -> None:
+    class LeafAgent(Agent):
+        async def run(self) -> None:
+            self.context.append(
+                {"role": "assistant", "content": "leaf context payload"}
+            )
+            self.report(ReportPayload(task_id=self.task.id, summary="leaf done"))
+
+    class BranchAgent(Agent):
+        async def run(self) -> None:
+            leaf = self.delegate("leaf", agent_type="LeafAgent")
+            await leaf.run()
+            self.report(ReportPayload(task_id=self.task.id, summary="branch done"))
+
+    runtime.register_agent_class("LeafAgent", LeafAgent)
+    runtime.register_agent_class("BranchAgent", BranchAgent)
+
+    root = await runtime.run("root", agent_type="BranchAgent")
+
+    # Descendants are reclaimed automatically once the run settles; the active
+    # root is preserved so the interactive caller can still continue/inspect it.
+    leaf = next(
+        ag for aid, ag in runtime.all_agents().items() if aid != root.id
+    )
+    assert leaf._context_freed is True
+    assert leaf.context.messages == []
+    # The root stays resident (preserve_active_root) and its result is intact.
+    assert root._context_freed is False
+    assert root.last_report is not None
+    assert root.last_report.summary == "branch done"
+
+

@@ -58,3 +58,35 @@ first. A one-turn `ask()` is cheaper than a wasted delegation tree.
 - **Context growth** → manage it actively: `prune` stale completed turns, `compress`
   past ~50 messages, keep context as small as possible each turn.
 - Repeated similar calls (3+) → stop grinding, delegate instead.
+- **Stuck / looping / rogue child** → stop it, salvage its partial work, and retry.
+
+## The Kill → Inspect → Retry loop (salvage-and-retry)
+
+A parent owns its children's outcomes. When a child fails, lingers past its budget, or
+starts looping, the parent must *not* silently fan it out again from scratch — it should
+**reset the dead child, recover the partial work, and re-delegate with that salvage** so
+the retry resumes progress instead of discarding it.
+
+1. **Kill** the child — `kill(agent_id)`. This cancels its in-flight run (authored
+   artifacts/commits are preserved) and marks it failed. Use `recursive=true` to stop a
+   poisoned subtree. A killed agent is excluded from self-heal — it will never be
+   resurrected on its own.
+2. **Inspect the salvage** — the kill result (and the `status <agent_id>` tool) returns
+   the child's snapshot: `outcome`, the failure reason / `summary`, which plan steps were
+   `done` vs `pending`, and `partial_data` — a bounded tail of what it was working on.
+   This is the concrete evidence of *what already succeeded* and *where it stopped*.
+3. **Retry with the salvage folded in** — re-`delegate` the same objective, *baking the
+   recovered facts into the new brief*: "child `<id>` already confirmed `X`; continue
+   from `Y`; `Z` failed with (reason) — fix and finish." The fresh worker starts with the
+   dead child's partial data as context instead of an empty slate.
+
+**When to kill + retry carrying salvage vs. escalate:**
+
+- Stuck/looping/clearable transient → kill + retry (fold salvage in).
+- A genuinely *structural* problem (bad requirement, missing resource the child cannot
+  fix) → do **not** burn a fresh worker; escalate with the salvage attached instead.
+
+**Trade-off:** a salvage-bearing retry is cheaper and faster than a cold restart — you
+keep verified progress and skip re-deriving it. But it is still a fresh context, so never
+*replay* the dead child's whole transcript; only hand it the **conclusions** (done/pending
+items + key findings), not the raw steps.

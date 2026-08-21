@@ -251,7 +251,7 @@ ReportPayload(
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 20 Built-in Tools
+## 22 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -273,10 +273,12 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 14 | `prune` | `prune_ids?: list[str]` | No |
 | 15 | `restore` | `prune_id: str` | No |
 | 16 | `converse` | `agent_id: str, message: str` | No |
-| 17 | `read_artifact` | `artifact_id: str, file?: str, level?: str` | No |
-| 18 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
-| 19 | `checkpoint` | `note: str` | No |
-| 20 | `usage` | *(none)* | No |
+| 17 | `kill` | `agent_id: str, reason?: str, recursive?: bool` | No |
+| 18 | `status` | `agent_id?: str` | No |
+| 19 | `read_artifact` | `artifact_id: str, file?: str, level?: str` | No |
+| 20 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
+| 21 | `checkpoint` | `note: str` | No |
+| 22 | `usage` | *(none)* | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its

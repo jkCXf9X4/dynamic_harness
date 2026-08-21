@@ -152,6 +152,43 @@ class ToolContext:
     def get_other_agent(self, agent_id: str) -> Any:
         return self._agent.get_other_agent(agent_id)
 
+    async def kill(
+        self,
+        agent_id: str,
+        *,
+        reason: str | None = None,
+        recursive: bool = False,
+    ) -> str:
+        """Kill a child agent: cancel its in-flight work and mark it failed."""
+        return await self._agent.kill(
+            agent_id, reason=reason, recursive=recursive,
+        )
+
+    async def status(self, agent_id: str | None = None) -> str:
+        """Snapshot child status(es) + partial progress.
+
+        With ``agent_id``: the snapshot of that (direct) child. Without: a list
+        of snapshots for every child this agent delegated. Each snapshot carries
+        the child's status/outcome, final summary (or failure reason), artifact,
+        its plan (done + pending steps) and recent in-context progress, so the
+        caller can salvage partial data and retry a dead child."""
+        import json
+        if agent_id:
+            child = self._agent.get_other_agent(agent_id)
+            if child is None:
+                return json.dumps({"error": f"no agent found with ID {agent_id}"})
+            if child.parent is not self._agent:
+                return json.dumps({
+                    "error": f"agent {agent_id} is not one of your direct "
+                             "children; you may only read status of agents you "
+                             "delegated",
+                })
+            return json.dumps(child.runtime_snapshot(), indent=2)
+        snapshots = [
+            c.runtime_snapshot() for c in self._agent.children
+        ]
+        return json.dumps(snapshots, indent=2)
+
     async def continue_with_input(self, agent_id: str, message: str) -> None:
         """Resume another agent with a new message (used by ``converse``)."""
         target = self._agent.get_other_agent(agent_id)
