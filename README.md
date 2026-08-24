@@ -104,18 +104,24 @@ Full details: [docs/api/tools.md](docs/api/tools.md)
 dynamic-harness
 ```
 
-Opens a Rich-rendered interactive REPL:
+Opens a prompt-only REPL (no dashboard, no live tree). Type a task, or use `/help`:
 
 | Command | Action |
 |---------|--------|
 | `/help` | Show commands |
-| `/history` | Task history |
-| `/tree` | Agent task graph |
+| `/tree` | Print the agent tree (status/messages/tokens) |
 | `/agents` | Agent count, commits, tokens |
+| `/provenance <id>` | Map an agent to trace/artifacts/commits |
+| `/artifacts [id]` | List artifacts |
+| `/checkpoints` | List resumable agents |
+| `/resume <id>` | Resume an agent from a checkpoint |
 | `/reset` | Clear agents and graph |
-| `/new` | Fresh root agent |
-| `/kill` | Kill running agent |
-| `/verbose` / `/quiet` | Toggle activity events |
+
+During a run the terminal shows only a one-line running token counter + prompts.
+**Everything else is persisted to the run directory** (`.dynamic-harness/<ts>_<id>/`)
+for traceability and automated inspection: `agents.txt` (text agent tree,
+updated live), `agent_tree.json`, `stats.json`, `events.jsonl`, `index.jsonl`.
+See [requirements](docs/requirements.md).
 
 ### Single-shot
 
@@ -125,6 +131,9 @@ dynamic-harness --no-llm "test without AI"
 dynamic-harness --model gpt-4o --api-key sk-... "analyze this repo"
 dynamic-harness -m task_file.txt
 ```
+
+Runs the task headlessly, prints the final outcome + aggregate, and writes the
+run's persisted overview (agents/tree/stats/events) to `.dynamic-harness/<ts>_<id>/`.
 
 ### Programmatic
 

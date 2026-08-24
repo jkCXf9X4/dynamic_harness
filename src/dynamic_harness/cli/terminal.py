@@ -7,23 +7,21 @@ import select
 import sys
 import termios
 import tty
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
-from rich.live import Live
-from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
-from rich.text import Text
-from rich.tree import Tree
 
 from ..core.agent import Agent
 from ..core.prompts import ORCHESTRATOR_ROLE
+from ..core.task import ActivityEventType
 from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from .common import build_runtime
-from .present import build_agent_tree, build_stats
-from .render import render_event, render_rich_tree
+from .present import build_agent_tree, render_text_tree
+from .state import StateWriter, attach_events
 
 console = Console()
 
@@ -229,16 +227,6 @@ def _read_input(prompt: str) -> str:
     return "".join(text)
 
 
-def _stdin_has_input() -> bool:
-    """True when stdin currently has buffered data (a line being typed)."""
-    if not sys.stdin.isatty():
-        return False
-    try:
-        return bool(select.select([sys.stdin], [], [], 0)[0])
-    except (ValueError, OSError):
-        return False
-
-
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="dynamic-harness",
@@ -256,103 +244,128 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-dir", help="Directory for commit repository")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
     parser.add_argument("--resume", metavar="AGENT_ID", help="Resume an interrupted/failed agent from its persisted checkpoint")
-    parser.add_argument("--print-provenance", action="store_true",
-                        help="After a run, print agent->trace/artifact maps and write index.jsonl")
     return parser.parse_args(argv)
 
 
-def _install_ask_tool(runtime: Runtime, ask_queue: asyncio.Queue[str] | None = None) -> None:
+def _install_ask_tool(runtime: Runtime, ask_queue: asyncio.Queue[str]) -> None:
     async def _ask(*, ctx, question: str) -> str:
-        if ask_queue is None:
-            console.print()
-            answer = Prompt.ask(f"[bold cyan]Agent {ctx.agent_id[:8]} asks:[/] {question}")
-            return answer.strip()
         await ask_queue.put(question)
         return (await ask_queue.get()).strip()
     runtime.tool_registry.register(TOOL_ASK_DEF, _ask)
 
 
-def _make_tree(runtime: Runtime) -> Tree:
-    return render_rich_tree(build_agent_tree(runtime))
+def _make_writer(runtime: Runtime) -> StateWriter:
+    """Persist overview files in the run root, next to artifacts/repo/traces."""
+    return StateWriter(runtime.artifact_store.root.parent)
 
 
-def _make_status(runtime: Runtime) -> Table:
-    t = Table.grid(padding=(0, 1))
-    t.add_column()
-    stats = build_stats(runtime)
-    t.add_row(f"Agents: [bold]{stats.agents}[/]")
-    t.add_row(f"Commits: [bold]{stats.commits}[/]")
-    t.add_row(f"Tokens: [bold]{stats.tokens}[/]")
-    return t
+class _ProgressLine:
+    """Single-line `\\r` token counter, refreshed on a background task.
+
+    Each frame fully clears the line (`\\x1b[2K`) before rewriting, so a shorter
+    token count or label never leaves residue behind. Written straight to
+    stdout to avoid Rich's console buffering mangling the raw `\\r`.
+    """
+
+    def __init__(self, get_tokens: Callable[[], int]) -> None:
+        self._get_tokens = get_tokens
+        self._label = ""
+        self._task: asyncio.Task[None] | None = None
+
+    def _render(self) -> None:
+        label = f" \u00b7 {self._label}" if self._label else ""
+        sys.stdout.write(f"\r\x1b[2K{self._get_tokens()} tokens{label}")
+        sys.stdout.flush()
+
+    async def _refresh(self) -> None:
+        try:
+            while True:
+                self._render()
+                await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            pass
+
+    def start(self) -> None:
+        if self._task is None or self._task.done():
+            self._task = asyncio.ensure_future(self._refresh())
+
+    def set_label(self, label: str) -> None:
+        self._label = label
+
+    def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
+        sys.stdout.write("\r\x1b[K")
+        sys.stdout.flush()
 
 
-def _render(runtime: Runtime, events: list[str]) -> Table:
-    layout = Table.grid(padding=1)
-    layout.add_column(ratio=1)
-    row = Table.grid(padding=1)
-    row.add_column(ratio=2)
-    row.add_column(ratio=1)
-    row.add_row(_make_tree(runtime), _make_status(runtime))
-    layout.add_row(row)
-    lines = events[-8:]
-    text = Text("\n".join(lines) if lines else "Waiting...")
-    layout.add_row(Panel(text, title="Events", border_style="blue"))
-    return layout
+def _progress_label(event) -> str:
+    """Short single-line label for the token counter, from an ActivityEvent."""
+    d = event.data
+    et = event.event_type
+    if et == ActivityEventType.TOOL_CALL_START:
+        return f"{event.agent_id[:8]} \u2192 {d.get('tool_name', '?')}"
+    if et == ActivityEventType.DELEGATION_START:
+        child = d.get("child_id", "?")[:8]
+        return f"delegate \u2192 {child} \"{(d.get('description', '') or '')[:40]}\""
+    if et == ActivityEventType.COMPRESSION:
+        return f"({event.agent_id[:8]}) compress ({d.get('saved', 0)} saved)"
+    if et == ActivityEventType.SELF_HEAL:
+        return f"({event.agent_id[:8]}) {d.get('action', 'heal')} ({d.get('diagnosis', '')})"
+    return ""
 
 
-async def _run_with_live(
+async def _run(
     runtime: Runtime,
     description: str,
+    *,
     root_agent: Agent | None = None,
     resume_id: str | None = None,
-) -> Agent:
+) -> tuple[Agent, StateWriter]:
+    """Run a task to completion, streaming state/events to files and showing
+    a single-line token counter while it works."""
+    writer = _make_writer(runtime)
     runtime.event_bus.clear()
+    attach_events(runtime, writer)
 
-    events: list[str] = []
-    runtime.on_report(lambda aid, p: events.append(f"\u2713 {aid[:8]} report done"))
-    runtime.on_failure(lambda aid, f: events.append(f"\u2717 {aid[:8]} fail: {f.error[:60]}"))
-    runtime.on_activity(lambda e: events.append(render_event(e)) if render_event(e) else None)
-
+    progress = _ProgressLine(
+        lambda: runtime.total_usage().get("total_tokens", 0)
+    )
     ask_queue: asyncio.Queue[str] = asyncio.Queue()
     _install_ask_tool(runtime, ask_queue)
 
-    with Live(
-        get_renderable=lambda: _render(runtime, events),
-        refresh_per_second=4,
-        console=console,
-        screen=True,
-    ) as live:
+    def label_event(event) -> None:
+        label = _progress_label(event)
+        if label:
+            progress.set_label(label)
+
+    runtime.on_activity(label_event)
+
+    async def run_task() -> Agent:
         if resume_id:
-            run_task = asyncio.create_task(runtime.resume(resume_id))
-        else:
-            run_task = asyncio.create_task(
-                runtime.run(description, role=ORCHESTRATOR_ROLE, root_agent=root_agent)
-            )
-        while not run_task.done():
-            while not ask_queue.empty():
-                question: str = ask_queue.get_nowait()
-                live.stop()
+            return await runtime.resume(resume_id)
+        return await runtime.run(
+            description, role=ORCHESTRATOR_ROLE, root_agent=root_agent
+        )
+
+    task = asyncio.ensure_future(run_task())
+    progress.start()
+    try:
+        while not task.done():
+            if not ask_queue.empty():
+                question = ask_queue.get_nowait()
+                progress.stop()
                 console.print()
-                Prompt.ask(f"[bold cyan]Agent asks:[/] {question}")
-                live.start()
-            if _stdin_has_input():
-                # A keystroke during a live run opens the input box; the message
-                # is passed to the active root agent (queued if it is working,
-                # injected immediately if it is blocked on its children).
-                live.stop()
-                console.print()
-                line = _read_input("[bold]>>>[/] ")
-                answer = line.strip()
-                root = runtime.active_root()
-                if answer and root is not None and root.task.status.value not in (
-                    "completed", "failed", "escalated",
-                ):
-                    root.submit_input(answer)
-                    events.append(f"[dim]you → [/]{answer[:60]}")
-                live.start()
-            await asyncio.sleep(0.25)
-    root = await run_task
-    return root
+                answer = Prompt.ask(f"[bold cyan]Agent asks:[/] {question}")
+                ask_queue.put_nowait(answer.strip())
+                progress.start()
+            await asyncio.sleep(0.1)
+        root = await task
+    finally:
+        progress.stop()
+        writer.snapshot(runtime)
+    return root, writer
 
 
 def _print_outcome(root: Agent) -> None:
@@ -373,7 +386,6 @@ def _print_provenance(runtime: Runtime, agent_id: str) -> None:
     if not prov["artifact_ids"] and not prov["trace_path"] and not prov["commit_ids"]:
         console.print(f"[red]No records found for agent id '{agent_id}'.[/]  Try /artifacts to list all.")
         return
-
     table = Table(title=f"Provenance — agent {agent_id}", title_justify="left")
     table.add_column("Key")
     table.add_column("Value")
@@ -410,15 +422,28 @@ def _write_provenance_index(runtime: Runtime) -> Path:
 
 
 def _run_batch(runtime: Runtime, prompt: str, *, resume_id: str | None = None) -> None:
-    root = asyncio.run(_run_with_live(runtime, prompt, resume_id=resume_id))
+    root, writer = asyncio.run(_run(runtime, prompt, resume_id=resume_id))
     _print_outcome(root)
 
     usage = runtime.total_usage()
     console.print(f"[dim]Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}[/]")
+    _print_tree(runtime)
+    _print_state_files(writer)
 
-    # Per-run provenance index (C): a flat, greppable artifact->agent map.
+    # Per-run provenance index: a flat, greppable artifact->agent map.
     if runtime.artifact_store.all():
         _write_provenance_index(runtime)
+
+
+def _print_state_files(writer: StateWriter) -> None:
+    console.print(
+        f"[dim]State: {writer.agents_txt_path}, {writer.tree_path}, {writer.stats_path}, {writer.events_path}[/]"
+    )
+
+
+def _print_tree(runtime: Runtime) -> None:
+    """Print a plain-text agent tree (ids, status, messages, token usage)."""
+    console.print(render_text_tree(build_agent_tree(runtime)))
 
 
 async def _run_interactive_async(runtime: Runtime) -> None:
@@ -445,7 +470,8 @@ async def _run_interactive_async(runtime: Runtime) -> None:
             cmd = parts[0].lower()
             arg = parts[1] if len(parts) > 1 else ""
             if cmd == "/help":
-                console.print("[bold]Commands:[/]  /help  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /checkpoints  /resume <id>  /reset  exit/quit")
+                console.print("[bold]Commands:[/]  /help  /tree  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /checkpoints  /resume <id>  /reset  exit/quit")
+                console.print("  /tree             — print the agent tree (id/status/messages/tokens)")
                 console.print("  /provenance <id>  — task/trace/artifact/commit map for an agent")
                 console.print("  /trace <id>       — path to an agent's trace.jsonl on disk")
                 console.print("  /artifacts [id]   — list artifacts (optionally filter by agent)")
@@ -464,8 +490,11 @@ async def _run_interactive_async(runtime: Runtime) -> None:
                 elif not arg.strip():
                     console.print("[yellow]Usage: /resume <agent_id>  (see /checkpoints)[/]")
                 else:
-                    agent = await _run_with_live(runtime, "", resume_id=arg.strip())
-                    _print_outcome(agent)
+                    root, writer = await _run(runtime, "", resume_id=arg.strip())
+                    _print_outcome(root)
+                    _print_state_files(writer)
+            elif cmd == "/tree":
+                _print_tree(runtime)
             elif cmd == "/agents":
                 u = runtime.total_usage()
                 console.print(f"Agents: {runtime.agent_count()}  Commits: {runtime.repository.count()}  Tokens: {u['total_tokens']}")
@@ -486,10 +515,11 @@ async def _run_interactive_async(runtime: Runtime) -> None:
                 console.print(f"Unknown: {cmd}. Try /help")
             continue
 
-        root = await _run_with_live(runtime, text, root_agent=root_agent)
+        root, writer = await _run(runtime, text, root_agent=root_agent)
         if root_agent is None:
             root_agent = root
         _print_outcome(root)
+        _print_state_files(writer)
 
 
 def main() -> None:
@@ -505,12 +535,6 @@ def main() -> None:
         _run_batch(runtime, " ".join(args.prompt))
     else:
         asyncio.run(_run_interactive_async(runtime))
-
-    if args.print_provenance:
-        for agent_id in sorted(runtime.all_agents()):
-            _print_provenance(runtime, agent_id)
-        if runtime.artifact_store.all():
-            _write_provenance_index(runtime)
 
 
 if __name__ == "__main__":

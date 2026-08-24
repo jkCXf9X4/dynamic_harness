@@ -51,13 +51,32 @@ discover targets, `read` each file's current content, aggregate, and write rows
 as they are validated. A hard cap on turns per item with escalation/retry
 prevents a single bad file from grinding the whole tree.
 
+## Scenario C — Headless job monitoring via persisted overview
+
+> "Run the nightly extraction job as a background process. Monitor its
+> progress, and surface a link or file the ops team can tail."
+
+**Why it fits:** the CLI is prompt-only, so the job can be launched batch-style
+inside a workflow without dashboard noise. The run's progress is continuously
+streamed to the run directory:
+
+| File | What to watch |
+|------|---------------|
+| `agents.txt` | text tree — updated on every terminal event; tail it live |
+| `events.jsonl` | appended events — `tail -f` for tool calls/delegations |
+| `stats.json` | aggregate token/commit/agent counts |
+| `checkpoints/` | resume handle if the job is interrupted |
+
+Instead of a status TUI, the ops tooling reads these files while the process
+runs and can `--resume <agent_id>` after a restart.
+
 ## Resumability (self-healing for jobs)
 
 For a long job that may be *interrupted* (a crash, a timed-out batch call, a
 stopped container):
 
 1. **Checkpoint**: the run loop auto-persists an `AgentCheckpoint` after every
-   committed turn; the `/checkpoints` TUI command and the on-disk store list
+   committed turn; the `/checkpoints` CLI command and the on-disk store list
    resumable agents.
 2. **Resume**: `--resume <agent_id>` (CLI) or `Runtime.resume(agent_id)` (async)
    rebuilds the agent from the persisted checkpoint and continues to completion.
@@ -83,5 +102,9 @@ stopped container):
 - **Watch**: `bash` has no pipes/redirects, so "`ls | wc -l`" must be
   decomposed into plain single commands; sort/aggregate in Python or `sort`/`uniq`
   as separate calls.
+- **Watch**: `bash` has no pipes/redirects, so "`ls | wc -l`" must be
+  decomposed into plain single commands; sort/aggregate in Python or `sort`/`uniq`
+  as separate calls.
 - **Not a fit**: interactive "watching" loops; an agent is not a long-running
-  daemon — work is one run (resumable), then terminate.
+  daemon — work is one run (resumable), then terminate. Monitoring a live run
+  is done by tailing the persisted overview files, not by a TUI.

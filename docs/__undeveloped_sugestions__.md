@@ -105,6 +105,12 @@ ensure garbage collection of completed agents unnecessary data, like context or 
 
 ---
 
+---
+> **RESOLVED** — status/agent tree moved out of the terminal into persisted
+> files (`agents.txt`, `agent_tree.json`, `stats.json`, `events.jsonl`) written
+> to the run root; the CLI is prompt-only with a lightweight token counter and a
+> final outcome. See docs/requirements.md.
+
 move status terminal and agent tree out to separate files, lets keep the cli to only prompts
 
 lets move direction a bit, lets keep the cli as clean as possible and persist all other data to files for traceability and overview

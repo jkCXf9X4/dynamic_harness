@@ -98,7 +98,10 @@ export OPENAI_API_KEY=sk-your-key-here
 dynamic-harness
 ```
 
-Opens the default Rich-rendered interactive REPL. Type a task and press Enter. Live rendering shows the agent tree (left), status, and streaming events.
+Opens the prompt-only interactive terminal. Type a task and press Enter.
+The CLI prints only prompts and a final outcome line; everything else — the
+agent tree, status, and event stream — is persisted to files under the run
+directory for telemetry and automated inspection (see [Persisted Overview](#persisted-overview)).
 
 ### Single-Shot Mode
 
@@ -106,7 +109,8 @@ Opens the default Rich-rendered interactive REPL. Type a task and press Enter. L
 dynamic-harness "Find the 3 largest Python files in this project"
 ```
 
-Runs the task and exits. The output shows each agent's actions and final report.
+Runs the task headlessly, prints the final outcome + aggregate, and writes the
+run's persisted overview (agents/tree/stats/events) to `.dynamic-harness/<ts>_<id>/`.
 
 ### Interactive REPL
 
@@ -114,9 +118,10 @@ Runs the task and exits. The output shows each agent's actions and final report.
 dynamic-harness
 ```
 
-Opens a Rich-rendered interactive prompt: type a task, or use `/help` for
-commands (`/agents`, `/reset`, `exit`/`quit`). Continues the same root agent
-across turns so you can iterate on a task in one conversation.
+Opens the prompt-only interactive terminal: type a task, or use `/help` for
+commands (`/tree`, `/agents`, `/provenance`, `/reset`, `exit`/`quit`).
+Continues the same root agent across turns so you can iterate on a task in one
+conversation.
 
 ### No-LLM Mode (testing)
 
@@ -133,38 +138,65 @@ report — expect a failure, not a summary.
 
 ### Agent Reports
 
-When an agent completes, you see:
+When an agent completes, the CLI shows a compact outcome:
 
 ```
-Agent abc123 completed:
-  Summary: Found 3 files: main.py (245 lines), runtime.py (166 lines), agent.py (409 lines)
-  Artifacts: /tmp/artifacts/def456/file_list.json
-  Confidence: 0.95
+✓ Agent abc123 completed:
+  Found 3 files: main.py (245 lines), runtime.py (166 lines), agent.py (409 lines)
 ```
+
+Along with a one-line aggregate and the paths to the persisted state files.
+
+### Persisted Overview
+
+The terminal stays prompt-only, but a full, continuously-refreshed overview is
+written to the **run directory** (`.dynamic-harness/<timestamp>_<id>/`, the
+parent of `artifacts/`, `repo/`, and `traces/`):
+
+| File | Content |
+|------|---------|
+| `agents.txt` | Plain-text agent tree: id, `[status]`, description, messages, token usage — one line per agent. Rewritten on every terminal event, so you can tail it while a run is live. |
+| `agent_tree.json` | Same tree as structured JSON (for machine parsing). |
+| `stats.json` | Aggregate counts (agents, commits, tokens). |
+| `events.jsonl` | Append-only structured event stream (report/failure/escalation/activity). |
+| `index.jsonl` | Flat artifact→agent/task/path map (written after the run when artifacts exist). |
+
+This mirrors the project direction of keeping the CLI clean and persisting all
+other data to files, so a long-running or batch run is fully traceable and
+inspectable by external tooling even after the process exits.
 
 ### The Task Tree
 
-Every task creates a tree of agents:
+Every task creates a tree of agents. The same tree is available in two forms
+for a quick status/message/token overview:
+
+- on disk as `agents.txt` (updates continuously during the run), and
+- on demand in the terminal via `/tree`:
 
 ```
-Root (analyze codebase)
-  ├── Security Auditor (completed)
-  ├── Test Coverage Checker (completed)
-  └── Style Checker (failed — re-delegated)
-        └── Style Checker (retry) (completed)
+└ 3a1f9c02 [completed] analyze codebase (1200t, 14msgs)
+  ├ b2e8d4aa [completed] Security Auditor (800t, 9msgs)
+  ├ c9f3e771 [completed] Test Coverage Checker (1100t, 12msgs)
+  └ d4a5b2ef [failed] Style Checker (300t, 6msgs)
+    └ e6f0c113 [completed] Style Checker (retry) (900t, 10msgs)
 ```
 
-### TUI Commands
+Status + messages + token usage per agent is enough to spot a stuck or looping
+prompt at a glance.
+
+### Terminal Commands
 
 | Command | Action |
 |---------|--------|
 | `/help` | Show available commands |
-| `/history` | Show task history |
-| `/tree` | Show agent task graph |
+| `/tree` | Print the agent tree (status/messages/tokens) |
 | `/agents` | Show agent count, commits, tokens |
+| `/provenance <id>` | Map an agent to its trace/artifacts/commits |
+| `/artifacts [id]` | List artifacts (optionally filter by agent) |
+| `/checkpoints` | List persisted (resumable) agents |
+| `/resume <id>` | Resume an agent from its checkpoint |
+| `/index` | Write the run's `index.jsonl` |
 | `/reset` | Clear all agents and state |
-| `/new` | Start a fresh root agent |
-| `/kill` | Kill the running agent |
 | `exit` | Quit |
 
 ## Next Steps
@@ -187,4 +219,6 @@ Copy `harness.json.example` to `harness.json` and edit to your needs. Without it
 If an agent exceeds 500 turns or makes 5 identical tool calls, it's force-failed. The task was likely too broad — try decomposing it into smaller pieces.
 
 ### High token costs
-Use the `/agents` command in the TUI to see per-agent token usage. If a single agent uses >50K tokens, the task should be decomposed into sub-agents.
+Use `/tree` (or `agents.txt`) to see per-agent token usage, or `/agents` for the
+running total. If a single agent uses >50K tokens, the task should be
+decomposed into sub-agents.

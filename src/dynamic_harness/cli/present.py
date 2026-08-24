@@ -106,3 +106,31 @@ def build_stats(runtime: Runtime) -> Stats:
         commits=runtime.repository.count(),
         tokens=total["total_tokens"],
     )
+
+
+def render_text_tree(nodes: list[AgentNode]) -> str:
+    """Plain-text agent tree for quick operator evaluation.
+
+    One line per agent showing id, status, description, messages, and a
+    compact token breakdown — enough to spot a stuck/looping agent without a
+    live dashboard. Engine-agnostic (no terminal-library markup) so it can be
+    persisted to disk.
+    """
+    if not nodes:
+        return "(no agents)\n"
+
+    lines: list[str] = []
+
+    def walk(nodes: list[AgentNode], prefix: str, last: bool) -> None:
+        for i, node in enumerate(nodes):
+            is_last = i == len(nodes) - 1
+            branch = "└" if is_last else "├"
+            lines.append(
+                f"{prefix}{branch} {node.short_id} [{node.status}] "
+                f"{node.short_description}{node.usage}"
+            )
+            child_prefix = prefix + ("  " if is_last else "│ ")
+            walk(node.children, child_prefix, is_last)
+
+    walk(nodes, "", last=True)
+    return "\n".join(lines) + "\n"

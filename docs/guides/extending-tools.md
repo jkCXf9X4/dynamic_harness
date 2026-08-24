@@ -73,7 +73,7 @@ async def my_tool(*, ctx, query: str) -> str:
     # Get the LLM
     llm = ctx.llm
 
-    # Emit an activity event (for the CLI/TUI/logs)
+    # Emit an activity event (streamed to events.jsonl by the CLI/layout)
     ctx.emit_activity(event)
 
     # File sandbox root (where read/write tools operate)

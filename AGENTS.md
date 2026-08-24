@@ -50,7 +50,7 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 ```
 src/dynamic_harness/
 ├── __init__.py              → exports Harness + TraceStore
-├── __main__.py              → entry: python -m dynamic_harness (Rich terminal CLI)
+├── __main__.py              → entry: python -m dynamic_harness (prompt-only terminal CLI)
 ├── config.py                → HarnessConfig, LLMProviderConfig, SafetyConfig, harness.json loading
 ├── api/
 │   └── harness.py           → Harness (high-level programmatic Python API)
@@ -77,9 +77,9 @@ src/dynamic_harness/
 │       ├── planning.py      → plan, checkpoint
 │       └── context.py       → compress, prune, restore
 ├── cli/
-│   ├── terminal.py          → DEFAULT CLI: Rich Live-rendered terminal (batch, -i REPL)
-│   ├── present.py           → AgentNode/Stats view-models (build_agent_tree, build_stats)
-│   ├── render.py            → Rich adapter over present.py
+│   ├── terminal.py          → DEFAULT CLI: prompt-only (batch, -i REPL); outcome printed
+│   ├── present.py           → AgentNode/Stats view-models + render_text_tree (pure text)
+│   ├── state.py             → StateWriter: persists agents.txt / agent_tree.json / stats.json / events.jsonl
 │   └── common.py            → workspace_dir(), build_runtime()
 ├── artifact/
 │   ├── store.py             → ArtifactView, Artifact, ArtifactStore (progressive disclosure)
@@ -107,10 +107,12 @@ tests/
 │   ├── test_e2e.py               → end-to-end report flows with rich views
 │   └── test_benchmark.py         → scoring/aggregation
 └── cli/
-    └── test_present.py           → build_agent_tree / build_stats view-models
+    ├── test_present.py           → build_agent_tree / build_stats view-models
+    └── test_state.py             → StateWriter JSON + events.jsonl persistence
 
 docs/
 ├── VISION.md                 → Architectural vision and success criteria
+├── requirements.md           → CLI direction & requirements (prompt-only + persisted overview)
 ├── agent_methodology_guidelines.md → Mandatory agent workflow and anti-patterns
 ├── AGENTS.md                 → This file
 ├── references/               → Durable rationale library that survives prompt optimization
@@ -304,7 +306,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 ## Process (CLI / programmatic)
 
-- Default CLI = `cli/terminal.py` (Rich Live-rendered, batch + `-i` REPL).
+- Default CLI = `cli/terminal.py` (prompt-only; batch + `-i` REPL prints the final outcome).
 - The `agent_system_prompt.txt` is loaded at import time into `AGENT_SYSTEM_PROMPT`.
 - Applies `harness.json` via `config.load_harness_config()` (discovery: `--config` → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults).
 - No-LLM mode: without `set_llm()`, `Agent.run()` fails with "No LLM provider configured".

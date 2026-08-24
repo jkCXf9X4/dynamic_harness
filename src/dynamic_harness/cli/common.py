@@ -22,13 +22,7 @@ def workspace_dir() -> Path:
     return Path.cwd() / ".dynamic-harness" / f"{ts}_{tmp_id}"
 
 
-def build_runtime(
-    args: argparse.Namespace,
-    *,
-    register_handlers: bool = True,
-    on_report=None,
-    on_failure=None,
-) -> Runtime:
+def build_runtime(args: argparse.Namespace) -> Runtime:
     if args.temp:
         artifact_root = Path(args.artifact_dir) if args.artifact_dir else Path(tempfile.mkdtemp())
         repo_root = Path(args.repo_dir) if args.repo_dir else Path(tempfile.mkdtemp())
@@ -52,12 +46,6 @@ def build_runtime(
         checkpoint_root=checkpoint_root,
         config=config,
     )
-
-    if register_handlers:
-        if on_report:
-            rt.on_report(on_report)
-        if on_failure:
-            rt.on_failure(on_failure)
 
     if not args.no_llm:
         load_dotenv()
