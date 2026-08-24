@@ -93,3 +93,42 @@ parents should also be able to evaluate if children has crashed and kill them
 
 enable input during execution
 The token counter in the cli is way off, please investigate
+
+---
+
+add the tool to kill children and get status of children
+
+---
+
+ensure garbage collection of completed agents unnecessary data, like context or similar, to clear out memory of the application and enable faster access of the remaining
+
+
+---
+
+move status terminal and agent tree out to separate files, lets keep the cli to only prompts
+
+lets move direction a bit, lets keep the cli as clean as possible and persist all other data to files for traceability and overview
+
+this is a directional change to make the application more usable as a part of a larger automated workflow
+
+---
+
+I have found this project specific prompt to give consistent results, is there any generic learnings that we could extract and improve the system prompt with to provide better consistent results:
+
+Iterate and improve upon the trading platform until you deem it ready for unsupervised live capital.
+verify that the strategy would perform under reasonable assumptions. 
+
+ensure existing functionality before proceeding with new items
+
+If relevant information is available in working directories, move it into the general project for proper storage. Clean up old, stale information from previous tasks if found
+Prefer removing to archiving to keep future context clean, be strict
+
+Make sure that relevant evaluations are well documented and stored properly to ensure that future improvement runs do not need to search the same design space
+
+use docs/roadmap/LIVE_CAPITAL_READINESS.md, a to-do list for tracking to progress needed for it to be ready for unsupervised live capital, update as information gets available and keep this up to date.
+
+
+treat the folder .dynamic-harness/ as a temp dir, consider that items created might not be available next time you run 
+Make sure to clean up working items and incorporate relevant information into the project, do not leave stray files that might pollute future context
+
+Existing reports and artifacts may be available under .dynamic-harness/ that could be of use

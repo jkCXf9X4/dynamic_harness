@@ -60,6 +60,38 @@ first. A one-turn `ask()` is cheaper than a wasted delegation tree.
 - Repeated similar calls (3+) → stop grinding, delegate instead.
 - **Stuck / looping / rogue child** → stop it, salvage its partial work, and retry.
 
+## Cross-run continuity: don't re-traverse closed design space
+
+Agents are recursive and runs are resumable, but each *fresh* invocation risks
+starting from zero. The discipline below makes knowledge durable across runs so a new
+agent inherits prior conclusions instead of rediscovering them. Cost goes to closing
+space, not re-opening it.
+
+- **Harvest before you build.** On start, scan the working root for existing reports and
+  artifacts (`read_artifact`, `glob`, the eval log). Reuse and extend them. Never re-search
+  a design space the prior run already traversed — that is pure waste, and worse, it can
+  *silently contradict* a stored verdict if the re-derived result drifts.
+- **Consolidate into the durable project.** Relevant findings that live in temp/working
+  dirs (e.g. `.dynamic-harness/`) belong in the tracked project where they survive.
+  Moves the knowledge from scratch state to lasting state.
+- **Clean strict, prefer removal.** Remove stale/stray items left by prior runs. Prefer
+  *removal over archiving*: an archive is still a scanned distraction, and the goal is a
+  lean durable context. Only keep what a future run needs.
+- **Close the design space.** Persist each evaluation's verdict. The point of an eval is
+  that its conclusion becomes a fact the project no longer needs to re-check. Future runs
+  read the verdict and skip the exploration.
+- **Maintain a goal-aligned roadmap.** One markdown checklist (`docs/roadmap/<goal>.md`)
+  tracks progress against the explicit readiness bar, updated each turn as facts land.
+  It is the state handoff between runs: what is done, what remains, and what the finish
+  line looks like.
+
+## Baseline guard before new capability
+
+Never add a feature before confirming existing behavior still holds — regression before
+extension. And validate under *realistic* assumptions, not best-case: a strategy that
+succeeds only at optimistic inputs is not ready. Iterate against the readiness criterion,
+then report.
+
 ## The Kill → Inspect → Retry loop (salvage-and-retry)
 
 A parent owns its children's outcomes. When a child fails, lingers past its budget, or
