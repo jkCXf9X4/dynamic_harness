@@ -21,6 +21,7 @@ from openai import (
 
 from .context import AgentContext
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
+from .telemetry import Telemetry
 from ..llm.provider import LLMConfig
 from .tools.registry import ToolResult
 from .task import (
@@ -181,12 +182,20 @@ class Agent:
         self._runtime = runtime
         self._event_bus = runtime.event_bus
         self._tool_registry = runtime.tool_registry
-        self._usage_tracker = runtime.usage_tracker
         self._llm = runtime.provider
-        self._trace_store = runtime.trace_store
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
-        self._checkpoint_store = runtime.checkpoint_store
+        # Everything the run loop treats as a *side effect* — token usage,
+        # JSONL tracing, activity events, checkpoint persistence — is owned by
+        # this facade, so the loop stays a pure orchestrator and stores are
+        # wired in exactly one place.
+        self._telemetry = Telemetry(
+            agent=self,
+            event_bus=runtime.event_bus,
+            usage_tracker=runtime.usage_tracker,
+            trace_store=runtime.trace_store,
+            checkpoint_store=runtime.checkpoint_store,
+        )
         self._checkpoint_notes: list[str] = []
         self._environment_info: EnvironmentInfo | None = None
         self._environment_render: str = ""
@@ -347,25 +356,14 @@ class Agent:
         plans or checkpoints, so an interrupted run can be resumed from disk.
         No-op when no checkpoint store is configured.
 
-        Checkpoint writes are best-effort and NEVER fatal: a filesystem error
+        Delegates to ``Telemetry``, which concentrates checkpoint persistence
+        (and its best-effort error handling) outside the run loop. Checkpoint
+        writes are best-effort and NEVER fatal: a filesystem error
         (missing/permission-denied dir, disk full) must not crash or fail the
-        run, even at the top agent. We log it to the trace and emit a warning
-        activity, then continue — the agent keeps working with state in memory.
+        run. We log it to the trace and emit a warning activity, then continue
+        — the agent keeps working with state in memory.
         """
-        store = self._checkpoint_store
-        if store is None:
-            return
-        try:
-            store.save(self)
-        except Exception as exc:
-            ts = self._trace_store
-            if ts:
-                ts.record_event(self.id, "checkpoint_error", error=str(exc))
-            self._event_bus.emit_activity(ActivityEvent(
-                agent_id=self.id,
-                event_type=ActivityEventType.SAFETY_WARNING,
-                data={"warning_type": "checkpoint_error", "error": str(exc)},
-            ))
+        self._telemetry.persist_checkpoint()
 
     def set_plan(
         self,
@@ -460,9 +458,7 @@ class Agent:
             if not self.last_report and not self.last_failure:
                 self.fail(f"Unhandled agent error: {exc}", trace=type(exc).__name__)
             else:
-                ts = self._trace_store
-                if ts:
-                    ts.record_event(self.id, "agent_error", error=str(exc))
+                self._telemetry.event("agent_error", error=str(exc))
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.SAFETY_WARNING,
@@ -699,45 +695,9 @@ class Agent:
             blocks.append(self.environment_info)
         return "\n\n".join(blocks)
 
-    def _emit_iteration(self, prompt_tokens: int) -> None:
-        self._event_bus.emit_activity(ActivityEvent(
-            agent_id=self.id,
-            event_type=ActivityEventType.ITERATION,
-            data={
-                "turn": self._iteration,
-                "messages": len(self.context.messages),
-                "prompt_tokens": prompt_tokens,
-            },
-        ))
-
-    async def _record_usage_and_trace(self, response: Any, sent_messages: list[dict[str, Any]]) -> None:
-        if response.usage:
-            await self._usage_tracker.record_usage(
-                self.id,
-                prompt_tokens=response.usage.get("prompt_tokens", 0),
-                completion_tokens=response.usage.get("completion_tokens", 0),
-                cached_tokens=response.usage.get("cached_tokens", 0),
-                message_count=len(sent_messages),
-            )
-
-    def _emit_llm_end(self, response: Any, tool_names: list[str]) -> None:
-        self._event_bus.emit_activity(ActivityEvent(
-            agent_id=self.id,
-            event_type=ActivityEventType.LLM_CALL_END,
-            data={
-                "model": response.model,
-                "prompt_tokens": response.usage.get("prompt_tokens", 0) if response.usage else 0,
-                "completion_tokens": response.usage.get("completion_tokens", 0) if response.usage else 0,
-                "tool_calls": tool_names,
-            },
-        ))
-
-    async def _handle_tool_calls(self, response: Any, duration_ms: float) -> bool:
+    async def _handle_tool_calls(self, response: Any) -> bool:
         """Execute a response's tool calls. Returns True when the agent must
         stop (a terminal status was reached while dispatching)."""
-        ts = self._trace_store
-        self._emit_llm_end(response, [tc.name for tc in response.tool_calls])
-
         assistant_msg: dict[str, Any] = {
             "role": "assistant",
             "content": response.content or "",
@@ -745,13 +705,7 @@ class Agent:
         assistant_msg["tool_calls"] = []
         results: list[dict[str, Any]] = []
 
-        tc_info = []
         for tc in response.tool_calls:
-            tc_info.append({
-                "id": tc.id,
-                "name": tc.name,
-                "arguments": tc.arguments,
-            })
             assistant_msg["tool_calls"].append({
                 "id": tc.id,
                 "type": "function",
@@ -761,12 +715,6 @@ class Agent:
                 },
             })
 
-        if ts:
-            ts.record_llm_response(
-                self.id, response.content, response.model,
-                response.usage, tc_info, duration_ms=duration_ms,
-            )
-
         has_delegates = any(tc.name == "delegate" for tc in response.tool_calls)
         if has_delegates:
             self._has_delegated = True
@@ -774,13 +722,7 @@ class Agent:
                 self._deferred_delegates = []
 
         for tc in response.tool_calls:
-            self._event_bus.emit_activity(ActivityEvent(
-                agent_id=self.id,
-                event_type=ActivityEventType.TOOL_CALL_START,
-                data={"tool_name": tc.name, "arguments": tc.arguments},
-            ))
-            if ts:
-                ts.record_tool_call(self.id, tc.id, tc.name, tc.arguments)
+            self._telemetry.tool_started(tc)
             kwargs = dict(tc.arguments)
             if tc.name == "delegate":
                 kwargs["_tool_call_id"] = tc.id
@@ -791,32 +733,17 @@ class Agent:
             except Exception as exc:
                 # A single misbehaving tool must never take down the whole run:
                 # surface the failure to the model as tool output and continue.
-                self._event_bus.emit_activity(ActivityEvent(
-                    agent_id=self.id,
-                    event_type=ActivityEventType.TOOL_CALL_END,
-                    data={"tool_name": tc.name, "error": str(exc)},
-                ))
+                self._telemetry.tool_failed(tc, exc)
                 result = ToolResult(
                     tool_call_id=tc.id,
                     content=f"Error executing {tc.name}: {exc}",
                 )
             content = result.content or ""
-            if ts:
-                ts.record_tool_result(self.id, tc.id, tc.name, content)
-            truncated = content
-            self._event_bus.emit_activity(ActivityEvent(
-                agent_id=self.id,
-                event_type=ActivityEventType.TOOL_CALL_END,
-                data={
-                    "tool_name": tc.name,
-                    "result_length": len(content),
-                    "result_preview": content[:200],
-                },
-            ))
+            self._telemetry.tool_finished(tc, content)
             results.append({
                 "role": "tool",
                 "tool_call_id": result.tool_call_id,
-                "content": truncated,
+                "content": content,
             })
 
             if self.task.status in (
@@ -1159,27 +1086,25 @@ class Agent:
             self.persist_checkpoint()
 
             prompt_tokens = self.context.estimate_prompt_tokens()
-            self._emit_iteration(prompt_tokens)
+            self._telemetry.turn_started(prompt_tokens)
 
             # Surface queued mid-run input as fresh user context before taking
             # the message snapshot, so it reaches the provider this turn.
             self._drain_inject_input()
 
             sent = list(self.context.messages)
-            ts = self._trace_store
-            if ts:
-                # Record the REQUEST at its actual send time (before awaiting the
-                # provider), so trace latency shows the real in-flight duration.
-                ts.record_llm_request(self.id, list(sent))
+            # Record the REQUEST at its actual send time (before awaiting the
+            # provider), so trace latency shows the real in-flight duration.
+            self._telemetry.request(sent)
             req_started = time.monotonic()
             response = await self._call_llm_with_run_budget(tools, sent)
             if response is None:
                 return  # safety timeout fired mid-call
             duration_ms = (time.monotonic() - req_started) * 1000.0
-            await self._record_usage_and_trace(response, sent)
+            await self._telemetry.llm_call(response, sent, duration_ms)
 
             if response.tool_calls:
-                if await self._handle_tool_calls(response, duration_ms):
+                if await self._handle_tool_calls(response):
                     self.persist_checkpoint()
                     return
                 # Streaming mode: block (respecting safety) until at least one
@@ -1189,12 +1114,6 @@ class Agent:
                     if await self._harvest_streamed_child():
                         continue
             else:
-                self._emit_llm_end(response, [])
-                if ts:
-                    ts.record_llm_response(
-                        self.id, response.content, response.model, response.usage,
-                        duration_ms=duration_ms,
-                    )
                 content = (response.content or "").strip()
                 if not content:
                     # A response with neither tool calls nor usable text is a
@@ -1595,7 +1514,5 @@ class Agent:
             self._cancel_stream_children()
         f = Failure(task_id=self.task.id, error=error, trace=trace)
         self.outcome.failure = f
-        ts = self._trace_store
-        if ts:
-            ts.record_event(self.id, "fail", error=error, trace=trace)
+        self._telemetry.event("fail", error=error, trace=trace)
         self._runtime.deliver_failure(self.id, f)

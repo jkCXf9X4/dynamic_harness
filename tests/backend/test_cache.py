@@ -177,6 +177,53 @@ async def test_distinct_agents_get_distinct_session_ids(runtime: Runtime) -> Non
 
 
 @pytest.mark.asyncio
+async def test_prune_busts_prefix_cache(runtime: Runtime) -> None:
+    """``prune()`` replaces middle turns with PRUNED markers, so the next request
+    is no longer a strict superset of the previous one. That divergence is a
+    deliberate cache-buster: only the stable leading system+user intro survives.
+    This pins the trade-off — strict append-only is what keeps the cache warm,
+    and any in-place context mutation sacrifices it (the price of prune/compress)."""
+    from dynamic_harness.core.context import AgentContext
+
+    ctx = AgentContext()
+    ctx.reset("system prompt", "user start")
+    provider = _CacheAwareProvider(tool_turns=0)
+
+    def tool_turn(pid: int) -> tuple[dict, list[dict]]:
+        cid = f"c{pid}"
+        assistant = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": cid, "type": "function",
+                "function": {"name": "bash", "arguments": json.dumps({"command": f"echo {pid}"})},
+            }],
+        }
+        return assistant, [{"role": "tool", "tool_call_id": cid, "content": str(pid)}]
+
+    async def send() -> None:
+        await provider.generate_with_tools([dict(m) for m in ctx.messages], tools=[])
+
+    # Warm the cache across two append-only turns.
+    for pid in (1, 2):
+        assistant, results = tool_turn(pid)
+        ctx.commit_turn(assistant, results)
+        await send()
+
+    warm = provider.usages[-1]["cached_tokens"]
+    assert warm > 0
+
+    # Prune the first turn: the middle is replaced by a PRUNED marker.
+    ctx.prune(["t0"])
+    post = [dict(m) for m in ctx.messages]
+    await send()
+
+    intro_tokens = sum(msg_tokens(m) for m in post[:2])  # system + user intro
+    assert provider.usages[-1]["cached_tokens"] == intro_tokens
+    assert provider.usages[-1]["cached_tokens"] < warm
+
+
+@pytest.mark.asyncio
 async def test_cached_tokens_record_and_accumulate() -> None:
     tracker = UsageTracker()
     await tracker.record_usage("a1", prompt_tokens=1000, completion_tokens=10, cached_tokens=3328)

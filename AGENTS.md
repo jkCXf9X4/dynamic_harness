@@ -22,6 +22,7 @@ api_modules:
   - dynamic_harness.core.runtime
   - dynamic_harness.core.tools.registry
   - dynamic_harness.core.events_format
+  - dynamic_harness.core.telemetry
   - dynamic_harness.artifact.store
   - dynamic_harness.artifact.summary
   - dynamic_harness.memory.repository
@@ -66,6 +67,7 @@ src/dynamic_harness/
 │   ├── events_format.py     → format_event() — single event→text source
 │   ├── usage.py             → UsageTracker (per-agent/total token tracking)
 │   ├── trace.py             → TraceStore (JSONL debug trace)
+│   ├── telemetry.py         → Telemetry (per-agent facade isolating the run loop from usage/trace/activity/checkpoint I/O)
 │   ├── checkpoint.py        → AgentCheckpoint + CheckpointStore (plan/progress persisted to JSON for resumability)
 │   └── tools/               → ToolDef/ToolResult/ToolRegistry + 19 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)

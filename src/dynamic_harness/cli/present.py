@@ -14,6 +14,18 @@ def _clip(text: str, n: int) -> str:
     return text[:n]
 
 
+def cache_hit_rate(prompt_tokens: int, cached_tokens: int) -> float:
+    """Fraction of billed prompt tokens that the provider cache covered.
+
+    ``cached_tokens`` counts tokens read from the cache within the billed
+    prompt (``prompt_tokens``), so the ratio is ``cached / prompt``. A
+    zero-denominator (no prompt tokens reported) yields ``0.0``.
+    """
+    if prompt_tokens <= 0:
+        return 0.0
+    return min(1.0, cached_tokens / prompt_tokens)
+
+
 @dataclass
 class AgentNode:
     """Tree node view-model: engine-agnostic representation of one agent."""
@@ -39,6 +51,10 @@ class AgentNode:
         return _clip(self.description, TREE_DESC_CHARS)
 
     @property
+    def cache_hit_rate(self) -> float:
+        return cache_hit_rate(self.prompt_tokens, self.cached_tokens)
+
+    @property
     def usage(self) -> str:
         if not (self.tokens or self.messages):
             return ""
@@ -51,7 +67,8 @@ class AgentNode:
             if self.completion_tokens:
                 parts.append(f"{self.completion_tokens}c")
             if self.cached_tokens:
-                parts.append(f"{self.cached_tokens}cr")
+                pct = round(self.cache_hit_rate * 100)
+                parts.append(f"{self.cached_tokens}cr, {pct}%cached")
         elif self.tokens:
             parts.append(f"{self.tokens}t")
         if self.messages:
@@ -64,6 +81,9 @@ class Stats:
     agents: int = 0
     commits: int = 0
     tokens: int = 0
+    prompt_tokens: int = 0
+    cached_tokens: int = 0
+    cache_hit_rate: float = 0.0
 
 
 def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
@@ -114,10 +134,15 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
 
 def build_stats(runtime: Runtime) -> Stats:
     total = runtime.total_usage()
+    prompt = total.get("prompt_tokens", 0)
+    cached = total.get("cached_tokens", 0)
     return Stats(
         agents=runtime.agent_count(),
         commits=runtime.repository.count(),
         tokens=total["total_tokens"],
+        prompt_tokens=prompt,
+        cached_tokens=cached,
+        cache_hit_rate=cache_hit_rate(prompt, cached),
     )
 
 

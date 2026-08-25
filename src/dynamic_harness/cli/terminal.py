@@ -19,7 +19,7 @@ from ..core.task import ActivityEventType
 from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from .common import build_runtime
-from .present import build_agent_tree, render_text_tree
+from .present import build_agent_tree, build_stats, render_text_tree
 from .profile import RunProfiler, run_meta
 from .state import StateWriter, attach_events
 
@@ -533,7 +533,9 @@ def _run_batch(runtime: Runtime, prompt: str, *, resume_id: str | None = None) -
     _print_outcome(root)
 
     usage = runtime.total_usage()
-    console.print(f"[dim]Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}[/]")
+    stats = build_stats(runtime)
+    cache = f" | Cache: {round(stats.cache_hit_rate * 100)}% ({stats.cached_tokens} of {stats.prompt_tokens}p)" if stats.prompt_tokens else ""
+    console.print(f"[dim]Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}{cache}[/]")
     _print_tree(runtime)
     _print_state_files(writer)
 

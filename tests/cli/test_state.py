@@ -24,7 +24,10 @@ def test_snapshot_writes_tree_and_stats_empty(runtime, tmp_path):
     w = StateWriter(tmp_path)
     w.snapshot(runtime)
     assert json.loads(w.tree_path.read_text()) == []
-    assert json.loads(w.stats_path.read_text()) == {"agents": 0, "commits": 0, "tokens": 0}
+    assert json.loads(w.stats_path.read_text()) == {
+        "agents": 0, "commits": 0, "tokens": 0,
+        "prompt_tokens": 0, "cached_tokens": 0, "cache_hit_rate": 0.0,
+    }
 
 
 def test_snapshot_includes_nested_agents(runtime, tmp_path):
@@ -43,6 +46,33 @@ def test_node_dict_is_json_serializable():
         children=[AgentNode(agent_id="c", description="x", status="done")],
     )
     assert json.loads(json.dumps(_node_dict(node)))["children"][0]["status"] == "done"
+
+
+def test_node_dict_includes_cache_hit_rate():
+    node = AgentNode(
+        agent_id="id", description="desc", status="running",
+        prompt_tokens=4000, cached_tokens=3000,
+    )
+    d = _node_dict(node)
+    assert d["prompt_tokens"] == 4000
+    assert d["cached_tokens"] == 3000
+    assert d["cache_hit_rate"] == 0.75
+
+
+def test_snapshot_stats_includes_cache_fields(runtime, tmp_path):
+    import asyncio
+
+    agent = runtime.delegate(Task(description="t"))
+    asyncio.run(runtime.record_usage(
+        agent.id, prompt_tokens=2000, completion_tokens=10, cached_tokens=500, message_count=1,
+    ))
+    w = StateWriter(tmp_path)
+    w.snapshot(runtime)
+    stats = json.loads(w.stats_path.read_text())
+    assert stats["agents"] == 1
+    assert stats["prompt_tokens"] == 2000
+    assert stats["cached_tokens"] == 500
+    assert stats["cache_hit_rate"] == 0.25
 
 
 def test_attach_logs_report_and_activity(runtime, tmp_path):
