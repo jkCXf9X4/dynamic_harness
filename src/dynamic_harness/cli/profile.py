@@ -118,7 +118,10 @@ def run_meta(args: Any) -> dict[str, Any]:
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "argv": list(sys.argv),
-        "interactive": bool(getattr(args, "interactive", False)),
+        "interactive": (
+            bool(getattr(args, "interactive", False))
+            or not any(getattr(args, k, None) for k in ("prompt", "m", "resume"))
+        ),
         "model": getattr(args, "model", None),
         "resume": getattr(args, "resume", None),
         "prompt_chars": sum(len(p) for p in getattr(args, "prompt", []) or []),

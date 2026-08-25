@@ -7,6 +7,7 @@ class UsageTracker:
     def __init__(self) -> None:
         self._agent_usage: dict[str, dict] = {}
         self._usage_locks: dict[str, asyncio.Lock] = {}
+        self._total_cache: dict | None = None
 
     async def record_usage(
         self,
@@ -35,6 +36,7 @@ class UsageTracker:
             prev["cached_tokens"] += cached_tokens
             prev["message_count"] = prev.get("message_count", 0) + message_count
             self._agent_usage[agent_id] = prev
+        self._total_cache = None
 
     def get_usage(self, agent_id: str) -> dict:
         return self._agent_usage.get(
@@ -49,6 +51,8 @@ class UsageTracker:
         )
 
     def total_usage(self) -> dict:
+        if self._total_cache is not None:
+            return self._total_cache
         total = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -60,8 +64,10 @@ class UsageTracker:
             total["completion_tokens"] += u.get("completion_tokens", 0)
             total["total_tokens"] += u.get("total_tokens", 0)
             total["cached_tokens"] += u.get("cached_tokens", 0)
+        self._total_cache = total
         return total
 
     def clear(self) -> None:
         self._agent_usage.clear()
         self._usage_locks.clear()
+        self._total_cache = None

@@ -6,6 +6,7 @@ import os
 import select
 import sys
 import termios
+import time
 import tty
 from pathlib import Path
 
@@ -345,6 +346,7 @@ async def _drive(
     try:
         tty.setraw(fd)
         draw()
+        last_draw = time.monotonic()
         while not task.done():
             if mode == "user" and not question_queue.empty():
                 mode = "ask"
@@ -395,8 +397,13 @@ async def _drive(
                 elif by >= 0x20:
                     buf.insert(pos, chr(by))
                     pos += 1
-            await asyncio.sleep(0)
-            draw()
+                await asyncio.sleep(0)
+                draw()
+                last_draw = time.monotonic()
+            elif time.monotonic() - last_draw >= 0.5:  # throttle the live status to 2 Hz
+                await asyncio.sleep(0)
+                draw()
+                last_draw = time.monotonic()
         if task.cancelled():
             try:
                 await task
