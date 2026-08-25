@@ -59,6 +59,22 @@ delegations, compression, self-heal). The indicator must not corrupt the
 terminal output; the agent `ask` interaction pauses it while prompting on
 stdin.
 
+### FR-3.5. Always-available input during a run
+
+- **FR-3.5.1** The operator can type into the same `>>>` line at any time
+  during a run (commands or messages to the agent).
+- **FR-3.5.2** A message typed while the agent is **busy** (mid-turn) is
+  **queued** and lands as a fresh user turn when the agent finishes its current
+  work.
+- **FR-3.5.3** A message typed while the top agent is **waiting on its
+  children** is **applied immediately** — it interrupts the wait so the agent
+  reacts now (still-running children continue in the background).
+- **FR-3.5.4** Slash commands such as `/tree`, `/agents`, `/provenance` are
+  available **during** the run to inspect live status, not only when idle.
+  Mutating commands (`/resume`, `/reset`) are refused while a run is active.
+- **FR-3.5.5** Non-TTY sessions (batch/pipelines) do not render the input line
+  or token counter at all — output stays clean and machine-parseable.
+
 ### FR-4. Quick operator evaluation
 
 - **FR-4.1** The operator can view a plain-text agent tree showing per-agent
@@ -85,8 +101,9 @@ stdin.
 - **NFR-2. Isolation of rendering** — the presentation layer
   (`cli/present.py`) is pure text/JSON view-models with no terminal-library
   dependency, so it can render to console *or* disk without coupling.
-- **NFR-3. Cheap live helpers** — the token counter is a single background
-  asyncio task with no new dependencies and no live-dashboard machinery.
+- **NFR-3. Cheap live helpers** — the token counter and input line share a
+  single foreground asyncio loop in raw mode with no new dependencies and no
+  live-dashboard machinery.
 - **NFR-4. Atomic, append-only event log** — `events.jsonl` is append-only to
   allow tailing; tree/stats snapshots are atomic rewrites (write-then-replace).
 
@@ -98,5 +115,9 @@ stdin.
   message / token counts progressing.
 - `/tree` in the interactive terminal prints a box-drawn tree of
   id/status/messages/tokens matching `agent_tree.json`.
+- During a run, typing a message either queues it (busy) or interrupts the
+  child-wait (idle), and typing `/tree` prints a live status snapshot without
+  disrupting the run.
+- A non-TTY batch run prints no token counter/input artifacts.
 - The CLI imports with no Rich rendering dependency if Rich is removed from the
   `cli/present.py` render path.

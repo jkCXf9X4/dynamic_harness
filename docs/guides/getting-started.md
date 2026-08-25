@@ -99,7 +99,11 @@ dynamic-harness
 ```
 
 Opens the prompt-only interactive terminal. Type a task and press Enter.
-The CLI prints only prompts and a final outcome line; everything else — the
+During the run a single live line shows a **token counter** + the current
+activity, and the `>>>` input stays **always available**: type a command (e.g.
+`/tree` for a live status snapshot) or send a message to the running agent —
+it is queued while the agent works and applied immediately when the agent is
+waiting on its children. Final outcome prints at the end; everything else — the
 agent tree, status, and event stream — is persisted to files under the run
 directory for telemetry and automated inspection (see [Persisted Overview](#persisted-overview)).
 

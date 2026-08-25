@@ -138,3 +138,15 @@ treat the folder .dynamic-harness/ as a temp dir, consider that items created mi
 Make sure to clean up working items and incorporate relevant information into the project, do not leave stray files that might pollute future context
 
 Existing reports and artifacts may be available under .dynamic-harness/ that could be of use
+
+
+---
+
+---
+> **RESOLVED** — the interactive terminal keeps an always-available `>>>` line
+> during a run. Messages to the agent go through `Agent.submit_input()`: queued
+> while the agent is busy, applied immediately when it is waiting on children.
+> Slash commands (`/tree`, `/agents`, `/provenance`, ...) also run during
+> execution for live status. See docs/requirements.md (FR-3.5).
+
+I would always have the option to insert text, if its busy the the message should be queued, if the top agent is waiting then the new input should be applied. this should also enable inserting commands such as /tree or similar to get the running status during execution 

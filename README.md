@@ -117,7 +117,10 @@ Opens a prompt-only REPL (no dashboard, no live tree). Type a task, or use `/hel
 | `/resume <id>` | Resume an agent from a checkpoint |
 | `/reset` | Clear agents and graph |
 
-During a run the terminal shows only a one-line running token counter + prompts.
+During a run a single live line shows a token counter + current activity, and
+the `>>>` input stays always available: `/tree` (and other inspection commands)
+work **while** the agent runs, and messages you type are queued while the agent
+is busy or applied immediately when it is waiting on its children.
 **Everything else is persisted to the run directory** (`.dynamic-harness/<ts>_<id>/`)
 for traceability and automated inspection: `agents.txt` (text agent tree,
 updated live), `agent_tree.json`, `stats.json`, `events.jsonl`, `index.jsonl`.
