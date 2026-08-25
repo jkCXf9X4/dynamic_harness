@@ -19,6 +19,7 @@ from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from .common import build_runtime
 from .present import build_agent_tree, render_text_tree
+from .profile import RunProfiler, run_meta
 from .state import StateWriter, attach_events
 
 console = Console()
@@ -242,6 +243,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-dir", help="Directory for commit repository")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
     parser.add_argument("--resume", metavar="AGENT_ID", help="Resume an interrupted/failed agent from its persisted checkpoint")
+    parser.add_argument("--profile", action="store_true",
+                        help="Profile the live session; write profile.{prof,txt,json} + meta.json under the run root (or --profile-dir)")
+    parser.add_argument("--profile-dir", metavar="DIR",
+                        help="Directory for profiling artifacts (default: <run root>/profile)")
     return parser.parse_args(argv)
 
 
@@ -643,14 +648,29 @@ def main() -> None:
 
     runtime = build_runtime(args)
 
-    if args.resume:
-        _run_batch(runtime, "", resume_id=args.resume)
-    elif args.m:
-        _run_batch(runtime, Path(args.m).read_text())
-    elif args.prompt:
-        _run_batch(runtime, " ".join(args.prompt))
-    else:
-        asyncio.run(_run_interactive_async(runtime))
+    run_root = runtime.artifact_store.root.parent
+    prof_base = Path(args.profile_dir).resolve() if args.profile_dir else run_root
+    profiler = RunProfiler(prof_base, enabled=args.profile)
+    profiler.start(meta=run_meta(args))
+
+    try:
+        if args.resume:
+            _run_batch(runtime, "", resume_id=args.resume)
+        elif args.m:
+            _run_batch(runtime, Path(args.m).read_text())
+        elif args.prompt:
+            _run_batch(runtime, " ".join(args.prompt))
+        else:
+            asyncio.run(_run_interactive_async(runtime))
+    finally:
+        path = profiler.stop()
+        if path is not None:
+            prof_dir = prof_base / "profile"
+            console.print(
+                f"\n[bold cyan]Profile dumped → {path}[/] "
+                f"({prof_dir / 'profile.txt'}, {prof_dir / 'profile.json'}, "
+                f"{prof_dir / 'meta.json'})"
+            )
 
 
 if __name__ == "__main__":

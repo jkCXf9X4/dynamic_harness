@@ -114,3 +114,39 @@ local CPU/disk — no LLM/cache interaction.
    at the final turn.
 3. A fix is only a win if the relevant ratio stops climbing *and* the live run
    gets faster; keep the scaler run committed to the PR for a before/after.
+
+## 6. Live-run profiling (for bug reports / hand-off to a developer)
+
+The scaler is a synthetic micro-benchmark. When you want to capture what a *real,
+live* run actually did — including real LLM latency, event handling, and CLI
+overheads — re-run the exact failing scenario under the live profiler and send
+the artifacts back:
+
+```
+dynamic-harness --profile "your real prompt..."        # batch
+dynamic-harness --profile -i                            # whole interactive session
+dynamic-harness --profile --profile-dir /path/to/out ...  # control output location
+```
+
+On exit (batch) or when you quit the REPL, it writes under `<run root>/profile/`
+(or `--profile-dir`):
+
+- `profile.prof` — raw binary `cProfile` dump. Developer opens it with:
+  ```
+  python -m pstats <run root>/profile/profile.prof   # interactive; 'sort cumtime'
+  python -m snakeviz   profile.prof                   # if snakeviz is available
+  ```
+- `profile.txt` — human-readable top-40 table (cumulative time), plus
+  environment/version metadata at the top.
+- `profile.json` — machine-readable per-function aggregates (`ncalls`, `tottime`,
+  `cumtime`) + `top_cumtime`/`top_tottime` lists; easy to paste directly into an
+  issue or a script.
+- `meta.json` — captured environment: package version, Python, platform, argv,
+  model, interactive-mode flag. Include it so the developer can reproduce the
+  stack.
+
+Notes:
+- Profiling adds modest CPU overhead (it samples every Python call). It is
+  **opt-in** and never affects caching/LLM behavior — it only observes.
+- It captures the real session exactly as run, so prefer reproducing the actual
+  (slow) task over a toy prompt.
