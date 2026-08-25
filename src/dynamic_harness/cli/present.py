@@ -67,19 +67,32 @@ class Stats:
 
 
 def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
-    """Walk runtime task graph into nested AgentNode view-models (roots only)."""
+    """Walk runtime task graph into nested AgentNode view-models (roots only).
+
+    Provenance (artifact ids, commit ids) is resolved in a single pass via
+    ``runtime.provenance_index()`` instead of ``runtime.provenance()`` per node,
+    so total cost stays linear in agent count rather than O(N·C log C) (the old
+    per-node re-sort of every commit).
+    """
     g = runtime.task_graph()
     agents = runtime.all_agents()
+    prov = runtime.provenance_index()
     roots = [
         aid
         for aid in g
         if aid in agents and agents[aid].parent is None
     ]
 
+    def trace_path(aid: str) -> str | None:
+        if not runtime.trace_store:
+            return None
+        tp = runtime.trace_store.root / aid / "trace.jsonl"
+        return str(tp) if tp.exists() else None
+
     def build(aid: str) -> AgentNode:
         agent = agents[aid]
         usage = runtime.get_usage(aid)
-        prov = runtime.provenance(agent.id)
+        p = prov.get(aid, {})
         return AgentNode(
             agent_id=agent.id,
             description=agent.task.description,
@@ -89,8 +102,8 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             completion_tokens=usage.get("completion_tokens", 0),
             cached_tokens=usage.get("cached_tokens", 0),
             messages=agent.message_count,
-            artifact_ids=prov["artifact_ids"],
-            trace_path=prov["trace_path"],
+            artifact_ids=p.get("artifact_ids", []),
+            trace_path=trace_path(agent.id),
             children=[
                 build(cid) for cid in g.get(aid, []) if cid in agents
             ],

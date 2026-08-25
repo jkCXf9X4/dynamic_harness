@@ -792,21 +792,20 @@ class Runtime:
         no longer in memory (e.g. after a reload/reset).
         """
         agent = self._agents.get(agent_id)
-        task_id = agent.task.id if agent is not None else None
-        commits = [c for c in self.repository.log(limit=1_000_000) if c.agent_id == agent_id]
-        if task_id is None and commits:
-            task_id = commits[0].task_id
-
-        artifact_ids: set[str] = set()
+        entry = self.provenance_index().get(agent_id)
+        task_id = None
+        artifact_ids: list[str] = []
+        commit_ids: list[str] = []
+        if entry is not None:
+            task_id = entry["task_id"]
+            artifact_ids = entry["artifact_ids"]
+            commit_ids = entry["commit_ids"]
+        if task_id is None and agent is not None:
+            task_id = agent.task.id
         if agent is not None and agent._report_artifact_id:
-            artifact_ids.add(agent._report_artifact_id)
-        for c in commits:
-            artifact_ids.update(c.artifact_ids)
-        for art in self.artifact_store.all():
-            if art.agent_id == agent_id:
-                artifact_ids.add(art.id)
+            if agent._report_artifact_id not in artifact_ids:
+                artifact_ids = sorted(set(artifact_ids) | {agent._report_artifact_id})
 
-        ordered = sorted(artifact_ids)
         trace_path = None
         if self.trace_store:
             tp = self.trace_store.root / agent_id / "trace.jsonl"
@@ -818,10 +817,40 @@ class Runtime:
             "task_id": task_id,
             "status": agent.task.status.value if agent else None,
             "trace_path": trace_path,
-            "artifact_ids": ordered,
-            "artifact_paths": [str(self.artifact_store.root / aid) for aid in ordered],
-            "commit_ids": [c.id for c in commits],
+            "artifact_ids": artifact_ids,
+            "artifact_paths": [str(self.artifact_store.root / aid) for aid in artifact_ids],
+            "commit_ids": commit_ids,
         }
+
+    def provenance_index(self) -> dict[str, dict[str, Any]]:
+        """One-pass map of agent_id -> provenance {artifact_ids, commit_ids, task_id}.
+
+        Builds the per-agent provenance for EVERY agent in a single scan of the
+        repository and artifact store. This is the O(N) total version of calling
+        ``provenance()`` per agent, which re-sorts all commits and re-scans the
+        artifact store once per node (O(N log N) each). Tree builders / CLI
+        snapshots should use this so per-event cost stays linear in agent count.
+
+        ``trace_path`` is still resolved per invocation (a cheap stat), not
+        cached here, because it reflects live on-disk state.
+        """
+        by_agent: dict[str, dict[str, Any]] = {}
+        for art in self.artifact_store.all():
+            entry = by_agent.setdefault(
+                art.agent_id, {"artifact_ids": set(), "commit_ids": [], "task_id": None}
+            )
+            entry["artifact_ids"].add(art.id)
+        for c in self.repository.all_commits():
+            entry = by_agent.setdefault(
+                c.agent_id, {"artifact_ids": set(), "commit_ids": [], "task_id": None}
+            )
+            entry["commit_ids"].append(c.id)
+            entry["task_id"] = c.task_id
+            entry["artifact_ids"].update(c.artifact_ids)
+        for aid, entry in by_agent.items():
+            entry["artifact_ids"] = sorted(entry["artifact_ids"])
+        return by_agent
+
 
     def write_provenance_index(self, path: Path | None = None) -> Path:
         """Write a flat, greppable ``index.jsonl`` for the run.

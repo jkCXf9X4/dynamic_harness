@@ -50,14 +50,17 @@ class StateWriter:
 
     def snapshot(self, runtime: Runtime) -> None:
         """Rewrite agent_tree.json + stats.json + agents.txt (text overview)."""
+        # Build the tree once and reuse for both JSON and text output (building
+        # it twice doubles the provenance-index scan on every terminal event).
+        nodes = build_agent_tree(runtime)
         self.tree_path.write_text(
-            json.dumps([_node_dict(n) for n in build_agent_tree(runtime)], indent=2)
+            json.dumps([_node_dict(n) for n in nodes], indent=2)
         )
         self.stats_path.write_text(
             json.dumps(asdict(build_stats(runtime)), indent=2)
         )
         self.agents_txt_path.write_text(
-            render_text_tree(build_agent_tree(runtime))
+            render_text_tree(nodes)
         )
 
     def append_event(

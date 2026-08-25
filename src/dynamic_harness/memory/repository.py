@@ -110,6 +110,15 @@ class Repository:
         sorted_commits = sorted(self._commits.values(), key=lambda c: c.timestamp, reverse=True)
         return sorted_commits[:limit]
 
+    def all_commits(self) -> Sequence[Commit]:
+        """All commits in an arbitrary (insertion) order, without sorting.
+
+        The sorted ``log`` is fine for a single small listing but is called
+        per-node by tree/provenance builders; there, a single pass over the
+        dict is O(N) total instead of O(N log N) per node.
+        """
+        return list(self._commits.values())
+
     def tree(self, root_id: str | None = None) -> dict[str, list[str]]:
         tree: dict[str, list[str]] = {}
         if root_id:

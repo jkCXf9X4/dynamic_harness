@@ -6,12 +6,12 @@
     "provider_allow_fallbacks": true,
     "provider_force": null,
     "verify_ssl": true,
-    "call_timeout_seconds": 120
+    "call_timeout_seconds": 250
   },
   "safety": {
     "max_iterations": 500,
     "repeated_call_limit": 4,
-    "timeout_seconds": 300,
+    "timeout_seconds": 7200,
     "disable_root_timeout": true
   },
   "agent": {
