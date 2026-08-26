@@ -8,6 +8,7 @@ the run root for traceability and post-hoc / automated inspection.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,16 +42,31 @@ class StateWriter:
     ``artifacts/``, ``repo/``, and ``traces/`` for one-run overviews.
     """
 
-    def __init__(self, run_root: Path) -> None:
+    def __init__(self, run_root: Path, *, snapshot_interval: float = 5.0) -> None:
         self.root = Path(run_root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.tree_path = self.root / "agent_tree.json"
         self.stats_path = self.root / "stats.json"
         self.events_path = self.root / "events.jsonl"
         self.agents_txt_path = self.root / "agents.txt"
+        # Throttle for activity-driven snapshots: don't rewrite the tree on
+        # every LLM/tool event (build_agent_tree has a cost per call), only at
+        # most once per interval. Terminal events always force a flush.
+        self.snapshot_interval = snapshot_interval
+        self._last_snapshot = 0.0
 
-    def snapshot(self, runtime: Runtime) -> None:
-        """Rewrite agent_tree.json + stats.json + agents.txt (text overview)."""
+    def snapshot(self, runtime: Runtime, *, force: bool = False) -> None:
+        """Rewrite agent_tree.json + stats.json + agents.txt (text overview).
+
+        Callers that fire frequently (activity events) omit ``force`` so the
+        write is throttled to at most once per ``snapshot_interval``; terminal
+        events (report / failure / escalation) pass ``force=True`` to guarantee
+        the tree reflects the final state immediately.
+        """
+        now = time.monotonic()
+        if not force and now - self._last_snapshot < self.snapshot_interval:
+            return
+        self._last_snapshot = now
         # Build the tree once and reuse for both JSON and text output (building
         # it twice doubles the provenance-index scan on every terminal event).
         nodes = build_agent_tree(runtime)
@@ -85,19 +101,19 @@ def attach_events(runtime: Runtime, writer: StateWriter) -> None:
             "artifact_ids": payload.artifact_ids,
             "files_written": payload.files_written,
         })
-        writer.snapshot(runtime)
+        writer.snapshot(runtime, force=True)
 
     def on_failure(aid: str, fail: Any) -> None:
         writer.append_event({
             "event": "failure", "agent_id": aid, "error": fail.error,
         })
-        writer.snapshot(runtime)
+        writer.snapshot(runtime, force=True)
 
     def on_escalation(aid: str, esc: Any) -> None:
         writer.append_event({
             "event": "escalation", "agent_id": aid, "issue": esc.issue,
         })
-        writer.snapshot(runtime)
+        writer.snapshot(runtime, force=True)
 
     def on_activity(event: Any) -> None:
         writer.append_event({
@@ -106,6 +122,9 @@ def attach_events(runtime: Runtime, writer: StateWriter) -> None:
             "event_type": event.event_type.value,
             "data": event.data,
         }, ts=event.timestamp)
+        # Keep the tree fresh while work progresses (throttled), not only on
+        # terminal events.
+        writer.snapshot(runtime)
 
     runtime.on_report(on_report)
     runtime.on_failure(on_failure)

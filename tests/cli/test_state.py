@@ -95,6 +95,26 @@ def test_terminal_report_snapshot_refreshes_tree(runtime, tmp_path):
     assert w.tree_path.exists()
 
 
+def test_snapshot_throttles_non_forced_calls(runtime, tmp_path):
+    w = StateWriter(tmp_path, snapshot_interval=3600.0)
+    w.snapshot(runtime)
+    first = w.tree_path.read_text()
+    w.tree_path.write_text("stale")
+    w.snapshot(runtime)  # within interval -> throttled, no rewrite
+    assert w.tree_path.read_text() == "stale"
+    w.snapshot(runtime, force=True)  # terminal event -> forced flush
+    assert w.tree_path.read_text() == first
+
+
+def test_activity_event_refreshes_tree_throttled(runtime, tmp_path):
+    w = StateWriter(tmp_path, snapshot_interval=0.0)
+    attach_events(runtime, w)
+    w.tree_path.unlink()
+    agent = runtime.delegate(Task(description="working"))
+    runtime.emit_activity(ActivityEvent(agent_id=agent.id, event_type=ActivityEventType.ITERATION))
+    assert w.tree_path.exists()
+
+
 def test_snapshot_writes_agents_txt(runtime, tmp_path):
     root = runtime.delegate(Task(description="root task"))
     runtime.delegate(Task(description="child task"), parent=root)

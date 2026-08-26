@@ -1,38 +1,93 @@
 """Lightweight live-session profiler that produces developer-facing artifacts.
 
 Enable with ``dynamic-harness --profile`` (+ optional ``--profile-dir``). When
-active, a ``cProfile`` sampler wraps the entire session and, on exit, writes
-three files under the run root (or ``--profile-dir``):
+active, a **sampling** profiler samples the interpreter stack on a fixed timer
+for the entire session and, on exit, writes:
 
-  profile/profile.prof   binary cProfile dump — open with ``pstats``/snakeviz
-  profile/profile.txt    human-readable top-N table (sorted by cumulative time)
+  profile/profile.txt    human-readable top-N table (sorted by self-time)
   profile/profile.json   machine-readable per-function aggregates + run metadata
-                         (easy to attach to an issue / paste into a tool)
+  profile/meta.json      environment / version (easy to attach to an issue)
 
-The profile reflects the *whole live session* (batch or interactive), exactly
-as it ran (including real LLM calls), so it is a faithful diagnostic to hand
-back to a developer instead of a synthetic micro-benchmark.
+Sampling (rather than deterministic tracing like cProfile, which instruments
+*every* Python call) is what keeps ``--profile`` cheap: overhead is one stack
+grab per ``interval`` regardless of how hot the loop is, so the added cost is
+roughly constant instead of scaling with the number of function calls.
 """
 
 from __future__ import annotations
 
-import cProfile
 import importlib.metadata
-import io
 import json
-import pstats
 import platform
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# (file, line, name) -> [top_of_stack_samples, on_stack_samples]
+_SampleKey = tuple[str, int, str]
+_SampleRec = tuple[int, int]
+_Stack = list[_SampleKey]
+
+
+class _Sampler(threading.Thread):
+    """Background thread that periodically captures the main thread's call stack
+    and aggregates sample counts per function."""
+
+    def __init__(self, interval: float, main_thread_id: int) -> None:
+        super().__init__(name="handy-profiler", daemon=True)
+        self.interval = interval
+        self.main_tid = main_thread_id
+        self._evt = threading.Event()
+        self.samples: dict[_SampleKey, _SampleRec] = {}
+        self.total: int = 0
+
+    def stop(self) -> None:
+        self._evt.set()
+        self.join(timeout=0.5)
+
+    def run(self) -> None:
+        while not self._evt.is_set():
+            started = time.perf_counter()
+            frame = sys._current_frames().get(self.main_tid)
+            if frame is not None:
+                self._sample(frame)
+            dt = time.perf_counter() - started
+            self._evt.wait(max(0.0, float(self.interval) - dt))
+
+    def _sample(self, frame: object) -> None:
+        stack: _Stack = []
+        cur = frame
+        while cur is not None:
+            code = cur.f_code
+            stack.append((code.co_filename, code.co_firstlineno, code.co_name))
+            cur = cur.f_back
+        if not stack:
+            return
+        self.total += 1
+        top = stack[0]
+        for key in stack:
+            rec = self.samples.setdefault(key, [0, 0])
+            rec[1] += 1  # seen somewhere in the stack (cumulative proxy)
+        self.samples[top][0] += 1  # at the top of the stack (self-time proxy)
+
 
 class RunProfiler:
-    def __init__(self, run_root: Path, *, enabled: bool = True) -> None:
+    """Sampling profiler wrapper. ``start()``/``stop()`` bracket the session."""
+
+    def __init__(
+        self,
+        run_root: Path,
+        *,
+        enabled: bool = True,
+        interval: float = 0.01,
+    ) -> None:
         self.enabled = enabled
+        self.interval = interval
         self._dir: Path | None = run_root / "profile" if enabled else None
-        self._prof = cProfile.Profile() if enabled else None
+        self._sampler: _Sampler | None = None
         self._started = False
         self._meta: dict[str, Any] = {}
 
@@ -43,64 +98,71 @@ class RunProfiler:
     def start(self, *, meta: dict[str, Any] | None = None) -> None:
         """Begin sampling. ``meta`` becomes part of the produced artifact so the
         developer can see the environment + version the profile was captured on."""
-        if not self.enabled or self._prof is None:
+        if not self.enabled:
             return
         if meta:
             self._meta.update(meta)
         if self._dir is not None:
             self._dir.mkdir(parents=True, exist_ok=True)
-        self._prof.enable()
+        self._sampler = _Sampler(self.interval, threading.current_thread().ident)
+        self._sampler.start()
         self._started = True
 
     def stop(self) -> Path | None:
-        """Stop sampling and write the profile artifacts. Returns the .prof path
-        (or None when profiling is disabled / was never started)."""
-        if not self.enabled or self._prof is None or not self._started:
+        """Stop sampling and write the profile artifacts. Returns the profile.txt
+        path (or None when profiling is disabled / was never started)."""
+        if not self.enabled or self._sampler is None or not self._started:
             return None
-        self._prof.disable()
+        self._sampler.stop()
         self._started = False
         return self._write()
 
-    def _write(self) -> Path:
-        assert self._prof is not None and self._dir is not None
-
-        prof_path = self._dir / "profile.prof"
-        self._prof.dump_stats(str(prof_path))
-
-        # Human-readable top table (also reflects aggregated cumulative time).
-        buf = io.StringIO()
-        ps = pstats.Stats(self._prof, stream=buf)
-        ps.strip_dirs()
-        ps.sort_stats("cumulative")
-        ps.print_stats(40)
-        (self._dir / "profile.txt").write_text(
-            "Profile written by dynamic-harness --profile\n"
-            "Meta:\n"
-            + json.dumps(self._meta, indent=2, default=str)
-            + "\n\n"
-            + buf.getvalue()
-        )
-
-        # Machine-readable aggregates + run metadata.
-        stats = pstats.Stats(self._prof)
-        stats.strip_dirs()
-        rows: list[dict[str, Any]] = []
-        for func, (cc, nc, tt, ct, _callers) in stats.stats.items():
-            filename, lineno, name = func
-            rows.append({
-                "file": filename,
-                "line": lineno,
+    def _rows(self) -> list[dict[str, Any]]:
+        assert self._sampler is not None
+        rows = [
+            {
+                "file": file,
+                "line": line,
                 "name": name,
-                "ncalls": nc,
-                "tottime": tt,
-                "cumtime": ct,
-            })
-        rows.sort(key=lambda r: r["cumtime"], reverse=True)
+                "top_of_stack": is_top,
+                "on_stack": on_stack,
+            }
+            for (file, line, name), (is_top, on_stack) in self._sampler.samples.items()
+        ]
+        rows.sort(key=lambda r: r["top_of_stack"], reverse=True)
+        return rows
+
+    def _write(self) -> Path:
+        assert self._sampler is not None and self._dir is not None
+
+        prof_path = self._dir / "profile.txt"
+        rows = self._rows()
+        total = self._sampler.total
+
+        lines = [
+            "Profile written by dynamic-harness --profile",
+            "Meta:",
+            json.dumps(self._meta, indent=2, default=str),
+            "",
+            f"samples: {total}  (interval: {self.interval:.5f}s)",
+            "",
+            "  self-count  name  file:line",
+        ]
+        for r in rows[:40]:
+            lines.append(
+                f"  {r['top_of_stack']:>9}  {r['name']}  "
+                f"{r['file']}:{r['line']}"
+            )
+        prof_path.write_text("\n".join(lines) + "\n")
+
         overview = {
             "written_at": datetime.now(timezone.utc).isoformat(),
             "meta": self._meta,
-            "top_cumtime": rows[:80],
-            "top_tottime": sorted(rows, key=lambda r: r["tottime"], reverse=True)[:50],
+            "sampling_interval": self.interval,
+            "samples": total,
+            "funcs_seen": len(rows),
+            "top_self": rows[:80],
+            "top_on_stack": sorted(rows, key=lambda r: r["on_stack"], reverse=True)[:50],
         }
         (self._dir / "profile.json").write_text(json.dumps(overview, indent=2))
         (self._dir / "meta.json").write_text(json.dumps(self._meta, indent=2, default=str))

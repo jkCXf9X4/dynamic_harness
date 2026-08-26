@@ -245,9 +245,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive REPL mode")
     parser.add_argument("--resume", metavar="AGENT_ID", help="Resume an interrupted/failed agent from its persisted checkpoint")
     parser.add_argument("--profile", action="store_true",
-                        help="Profile the live session; write profile.{prof,txt,json} + meta.json under the run root (or --profile-dir)")
+                        help="Profile the live session; write profile.txt/json + meta.json under the run root (or --profile-dir)")
     parser.add_argument("--profile-dir", metavar="DIR",
                         help="Directory for profiling artifacts (default: <run root>/profile)")
+    parser.add_argument("--profile-interval", metavar="MS", type=float, default=10.0,
+                        help="Sampling interval in ms for --profile (default: 10)")
     return parser.parse_args(argv)
 
 
@@ -453,7 +455,7 @@ async def _run(
 
     task = asyncio.ensure_future(run_task())
     root = await _drive(runtime, task, question_queue, answer_queue, label_state)
-    writer.snapshot(runtime)
+    writer.snapshot(runtime, force=True)
     return root, writer
 
 
@@ -551,8 +553,14 @@ def _print_state_files(writer: StateWriter) -> None:
 
 
 def _print_tree(runtime: Runtime) -> None:
-    """Print a plain-text agent tree (ids, status, messages, token usage)."""
-    console.print(render_text_tree(build_agent_tree(runtime)), markup=False)
+    """Print a plain-text agent tree (ids, status, messages, token usage).
+
+    Lines are printed one at a time with ``soft_wrap=True`` so rich doesn't
+    reflow long lines across the terminal width — reflowing would break the
+    box-drawing branch characters and indent the continuation oddly.
+    """
+    for line in render_text_tree(build_agent_tree(runtime)).splitlines():
+        console.print(line, markup=False, soft_wrap=True)
 
 
 async def _run_command(
@@ -659,7 +667,8 @@ def main() -> None:
 
     run_root = runtime.artifact_store.root.parent
     prof_base = Path(args.profile_dir).resolve() if args.profile_dir else run_root
-    profiler = RunProfiler(prof_base, enabled=args.profile)
+    profiler = RunProfiler(prof_base, enabled=args.profile,
+                           interval=args.profile_interval / 1000.0)
     profiler.start(meta=run_meta(args))
 
     try:

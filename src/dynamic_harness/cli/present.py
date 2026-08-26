@@ -14,6 +14,16 @@ def _clip(text: str, n: int) -> str:
     return text[:n]
 
 
+def _clip_description(text: str, n: int) -> str:
+    """Clip a description to at most ``n`` chars, cutting at a word boundary
+    and appending ``…`` when truncated so it never ends midline."""
+    if len(text) <= n:
+        return text
+    cut = text[: n - 1].rstrip()
+    cut = cut.rsplit(" ", 1)[0]
+    return cut + "…"
+
+
 def cache_hit_rate(prompt_tokens: int, cached_tokens: int) -> float:
     """Fraction of billed prompt tokens that the provider cache covered.
 
@@ -48,7 +58,7 @@ class AgentNode:
 
     @property
     def short_description(self) -> str:
-        return _clip(self.description, TREE_DESC_CHARS)
+        return _clip_description(self.description, TREE_DESC_CHARS)
 
     @property
     def cache_hit_rate(self) -> float:
