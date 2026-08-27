@@ -77,6 +77,18 @@ space, not re-opening it.
 - **Clean strict, prefer removal.** Remove stale/stray items left by prior runs. Prefer
   *removal over archiving*: an archive is still a scanned distraction, and the goal is a
   lean durable context. Only keep what a future run needs.
+- **Cleanup is a mandatory final pass, not optional hygiene.** Before `report()`, classify
+  every file you produced as either a **deliverable** or a **temp object**. Every temp or
+  intermediate object you will not keep must be *deleted* — never left in place, never
+  archived. Where a finding lives only in a temp/working dir or a transient command, first
+  *migrate* it into the durable record (`findings.md`, roadmap, or an artifact) so no
+  knowledge is lost before deletion. A result you computed but did not persist durably is
+  worthless; if you're tempted to keep a temp file "just in case," it is not temp — persist
+  and record it properly, then delete the scratch. After cleanup, **verify**: re-`ls`/`glob`
+  every dir you wrote to and confirm it holds exactly the intended deliverables, with no
+  stray temp files, partial outputs, or prior-run leftovers. Report only once the working
+  tree is clean enough that a stranger or a resuming agent can tell at a glance which files
+  are real results.
 - **Close the design space.** Persist each evaluation's verdict. The point of an eval is
   that its conclusion becomes a fact the project no longer needs to re-check. Future runs
   read the verdict and skip the exploration.
