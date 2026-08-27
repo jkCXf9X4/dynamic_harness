@@ -157,15 +157,46 @@ TOOL_STATUS_DEF = ToolDef(
                 "completed, failed, or were killed are each returned with their "
                 "summary/failure reason, artifact id, done+pending plan steps, "
                 "checkpoint notes, and a salvage of recent in-context progress "
-                "(partial_data). Use this after a child fails or is killed to "
-                "recover its partial work, then re-delegate with that salvage to "
-                "retry — instead of starting from zero.",
+                "(partial_data). Each snapshot also carries a 'heal' block: the "
+                "runtime's blunt-vs-rot diagnosis (the same signal self-heal "
+                "uses), the resume/fresh counts already spent on that child, and "
+                "whether the child is recoverable. Use this after a child fails "
+                "or is killed to recover its partial work, then re-delegate with "
+                "that salvage to retry — or call resume() on a recoverable child.",
     input_schema={
         "type": "object",
         "properties": {
             "agent_id": {"type": "string", "description": "Optional: ID of a direct child to inspect. Omit to list all of your children."},
         },
         "required": [],
+    },
+)
+
+TOOL_RESUME_DEF = ToolDef(
+    name="resume",
+    description="Resume a direct child agent that failed or finished without "
+                "producing its deliverable. This is the parent-driven sibling "
+                "of the runtime's automatic self-heal: you choose when and how "
+                "to recover a child, instead of relying solely on the automatic "
+                "policy. strategy='automatic' (default) applies the same "
+                "blunt-vs-rot diagnosis as the runtime: a healthy (blunt) "
+                "context is resumed in place with its prior work intact; a "
+                "rotted context (repeated calls / safety stop) is restarted as "
+                "a FRESH worker over the same task, carrying the failure reason. "
+                "Pass strategy='resume' to force resuming the same child, or "
+                "strategy='fresh' to force a clean restart. Use note to give the "
+                "child a targeted corrective instruction (e.g. what it got wrong "
+                "or what deliverable to produce). Escalated or deliberately-"
+                "killed children can never be resumed. Returns the effective "
+                "agent's id/status, the diagnosis, and heal counts consumed.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "ID of the direct child to resume (must be one you delegated — use the child_id returned by delegate())."},
+            "note": {"type": "string", "description": "Optional corrective instruction appended to the child's resume/fresh prompt (what it got wrong, what deliverable to write, where to look)."},
+            "strategy": {"type": "string", "enum": ["automatic", "resume", "fresh"], "description": "automatic (default) = diagnose blunt-vs-rot and pick; resume = force resume the same child (refused if the context is rotted); fresh = always start a clean worker over the same task."},
+        },
+        "required": ["agent_id"],
     },
 )
 
@@ -336,7 +367,9 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
     if target.task.status not in (TaskStatus.completed, TaskStatus.running):
         return (
             f"Error: agent {agent_id} status is "
-            f"'{target.task.status.value}', cannot converse"
+            f"'{target.task.status.value}', cannot converse. "
+            f"If you want to recover a failed/under-delivered child, use "
+            f"resume(agent_id, note=...) instead of converse."
         )
 
     await ctx.continue_with_input(agent_id, message)
@@ -344,6 +377,13 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
     summary = ctx.latest_assistant_message(agent_id)
     status = target.task.status.value
     return f"[Agent {agent_id[:8]}] {summary}\n(Status: {status})"
+
+
+async def resume(
+    *, ctx: ToolContext, agent_id: str,
+    note: str | None = None, strategy: str = "automatic",
+) -> str:
+    return await ctx.resume_child(agent_id, note=note, strategy=strategy)
 
 
 async def kill(

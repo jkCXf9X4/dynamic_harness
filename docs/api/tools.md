@@ -84,7 +84,8 @@ class ToolResult:
 | 16 | `converse` | `agent_id: str, message: str` | No | Communication |
 | 17 | `kill` | `agent_id: str, reason?: str, recursive?: bool` | No | Orchestration |
 | 18 | `status` | `agent_id?: str` | No | Orchestration |
-| 19 | `read_artifact` | `artifact_id: str` | No | Artifact |
+| 19 | `resume` | `agent_id: str, note?: str, strategy?: str` | No | Orchestration |
+| 20 | `read_artifact` | `artifact_id: str` | No | Artifact |
 
 Terminal tools (report, escalate, fail) set the agent's task status and stop the tool-calling loop.
 
@@ -393,7 +394,7 @@ Terminates the agent with `TaskStatus.failed`.
 }
 ```
 
-**Implementation:** Resumes the target agent via `target.continue_with_input(message)`. Returns the target's latest assistant response and status. Only works on agents with `completed` or `running` status.
+**Implementation:** Resumes the target agent via `target.continue_with_input(message)`. Returns the target's latest assistant response and status. Only works on agents with `completed` or `running` status; for a failed/under-delivered child, use the `resume` tool instead.
 
 ---
 
@@ -427,11 +428,51 @@ Terminates the agent with `TaskStatus.failed`.
 }
 ```
 
-**Implementation:** Returns a snapshot per child (or one child by id): `status`, `outcome` (`running`/`completed`/`failed`/`killed`/`escalated`), `killed`, final `summary` (or failure reason), `artifact_id`, the plan (`done`+`pending` steps, objective, deliverable), `checkpoint_notes`, iterations, and `partial_data` — a bounded tail of the child's recent in-context activity. Use it after a child fails/is killed to recover its partial work, then re-delegate with that salvage to retry. Restricted to direct children.
+**Implementation:** Returns a snapshot per child (or one child by id): `status`, `outcome` (`running`/`completed`/`failed`/`killed`/`escalated`), `killed`, final `summary` (or failure reason), `artifact_id`, the plan (`done`+`pending` steps, objective, deliverable), `checkpoint_notes`, iterations, and `partial_data` — a bounded tail of the child's recent in-context activity. Each snapshot also carries a `heal` block: the runtime's blunt-vs-rot `diagnosis` (the same signal self-heal uses), `resumes`/`fresh` heal counts already spent on the child, and a `recoverable` boolean. Use it after a child fails/is killed to recover its partial work, then re-delegate with that salvage to retry — or call `resume` on a recoverable child. Restricted to direct children.
 
 ---
 
-### 19. `read_artifact` — Read an artifact by ID
+### 19. `resume` — Resume a failed/under-delivered child
+
+```json
+{
+  "name": "resume",
+  "parameters": {
+    "agent_id": { "type": "string", "description": "ID of a direct child to resume" },
+    "note": { "type": "string", "description": "Optional corrective instruction appended to the child's resume/fresh prompt" },
+    "strategy": { "type": "string", "enum": ["automatic", "resume", "fresh"], "description": "default automatic" }
+  },
+  "required": ["agent_id"]
+}
+```
+
+**Implementation:** The parent-driven sibling of the runtime's automatic
+self-heal (`Runtime._recover`). The parent chooses when and how to recover a
+child that failed or finished without an on-disk deliverable, instead of relying
+only on the automatic policy. Guards mirror `kill`/`status` — only direct
+children, never an escalated child, never a deliberately-killed child
+(`_killed`). Two recovery layers, both budgeted by the child's own heal counts:
+
+- **`resume`** (blunt / force): resumes the SAME child via
+  `Runtime.resume(id, message=..., parent=...)`. A healthy (blunt) context keeps
+  its prior work and is corrected with a nudge carrying the failure reason and
+  the parent's `note`. If the context is rotted (repeated calls / safety stop /
+  many iterations) a forced `resume` is *refused* — replaying it would repeat
+  the problem — and the parent is told to use `fresh`.
+- **`fresh`** (rot / after resume misses): starts a clean worker over the same
+  task via `Runtime._fresh_restart`, injecting the failure reason, prior
+  artifact ids, and the parent's `note`. Rot is diagnosed identically to
+  self-heal via `agent.is_rot()`.
+
+When the child's context was garbage-collected, `Runtime.resume` rebuilds it
+from the on-disk checkpoint (a new agent id); the parent's `children` list is
+re-pointed at the effective agent. Returns the effective agent's id/status, the
+`diagnosis`, `heal_counts` consumed, `healed`, and a summary/artifact id.
+Escalations are never resumed.
+
+---
+
+### 20. `read_artifact` — Read an artifact by ID
 
 ```json
 {

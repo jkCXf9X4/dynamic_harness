@@ -41,7 +41,7 @@ Runtime(
 runtime.artifact_store: ArtifactStore     # In-memory + on-disk artifact storage
 runtime.repository: Repository            # Git-like commit provenance
 runtime.trace_store: TraceStore | None    # JSONL debug traces
-runtime.tool_registry: ToolRegistry       # Registered tools (17 default)
+runtime.tool_registry: ToolRegistry       # Registered tools (24 default)
 runtime.generated_root: Path | None       # Generated output directory
 ```
 
@@ -63,6 +63,20 @@ await agent.run()
 ### `get_agent(agent_id: str) -> Agent | None`
 
 Look up an agent by its 12-char hex ID.
+
+### `async resume(agent_id: str, *, message: str | None = None, parent: Agent | None = None) -> Agent`
+
+Resumes an aborted or failed agent from its persisted checkpoint. If the agent
+is live in memory (context not garbage-collected) it is continued in place;
+otherwise its full conversation, plan, and progress are rebuilt from the JSON
+checkpoint on disk and it is continued. `message` appends a user nudge
+(defaults to a generic resume instruction).
+
+`parent` re-wires the rebuilt agent's parent linkage. The checkpoint stores the
+task (and its `parent_id`) but not the live parent object, so a disk-rebuilt
+agent otherwise has `parent=None` and would not be recognized as a direct child
+by its parent's `kill`/`status`/`resume` tools. The parent-driven `resume` tool
+(`Agent.resume_child`) passes `parent=self`.
 
 ### `task_graph() -> dict[str, list[str]]`
 

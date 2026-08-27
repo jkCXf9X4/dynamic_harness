@@ -256,7 +256,7 @@ ReportPayload(
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 23 Built-in Tools
+## 24 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -280,17 +280,22 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 16 | `converse` | `agent_id: str, message: str` | No |
 | 17 | `kill` | `agent_id: str, reason?: str, recursive?: bool` | No |
 | 18 | `status` | `agent_id?: str` | No |
-| 19 | `read_artifact` | `artifact_id: str, file?: str, level?: str` | No |
-| 20 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
-| 21 | `checkpoint` | `note: str` | No |
-| 22 | `usage` | *(none)* | No |
-| 23 | `archive` | `content?: str, path?: str, label?: str, summary?: str` | No |
+| 19 | `resume` | `agent_id: str, note?: str, strategy?: str` | No |
+| 20 | `read_artifact` | `artifact_id: str, file?: str, level?: str` | No |
+| 21 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
+| 22 | `checkpoint` | `note: str` | No |
+| 23 | `usage` | *(none)* | No |
+| 24 | `archive` | `content?: str, path?: str, label?: str, summary?: str` | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its
 checkpoint); `checkpoint` writes a milestone note to disk. `usage` returns the
 agent's own cumulative message/token counts and live-context estimate so it can
-self-regulate (no per-turn observation message — see Safety Invariants). The run
+self-regulate (no per-turn observation message — see Safety Invariants). `resume`
+lets a parent recover a failed/under-delivered child: `automatic` diagnoses
+blunt-vs-rot (resume the same child vs spawn a fresh worker), `resume` forces
+same-child, `fresh` forces a clean restart; a parent `note` is appended as a
+corrective instruction, and it shares the child's self-heal budget. The run
 loop also auto-persists a structured `AgentCheckpoint` after every committed
 turn, so an interrupted or failed task can be resumed from disk via
 `Runtime.resume(agent_id)` (e.g. `--resume <id>` in the CLI) — state lives in

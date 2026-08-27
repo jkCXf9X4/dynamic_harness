@@ -94,8 +94,8 @@ def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
     assert "question" in td.input_schema.get("properties", {})
 
 
-def test_default_tools_all_twenty_two(runtime: Runtime) -> None:
-    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "kill", "status", "read_artifact", "plan", "checkpoint", "usage", "archive"}
+def test_default_tools_all_twenty_three(runtime: Runtime) -> None:
+    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "kill", "status", "resume", "read_artifact", "plan", "checkpoint", "usage", "archive"}
     assert set(runtime.tool_registry.list_tools()) == expected
 
 

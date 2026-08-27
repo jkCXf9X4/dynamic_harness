@@ -1448,6 +1448,21 @@ class Agent:
             "status": self.task.status.value,
             "outcome": outcome,
             "killed": self._killed,
+            "heal": {
+                "diagnosis": self._runtime.heal_diagnosis(self),
+                "resumes": self._runtime.get_heal_count(self.id, "resume"),
+                "fresh": self._runtime.get_heal_count(self.id, "fresh"),
+                # True when the runtime would re-run its automatic self-heal
+                # over this agent right now (failed, or no on-disk deliverable).
+                "recoverable": (
+                    not self._killed
+                    and self.task.status is not TaskStatus.escalated
+                    and not (
+                        self.last_report is not None
+                        and self._runtime._has_deliverable(self)
+                    )
+                ),
+            },
             "summary": summary[:500],
             "artifact_id": self._report_artifact_id,
             "plan": {
@@ -1519,6 +1534,212 @@ class Agent:
             self._cancel_stream_children()
         self.outcome.report = payload
         self._runtime.deliver_report(self.id, payload)
+
+    async def resume_child(
+        self,
+        agent_id: str,
+        *,
+        note: str | None = None,
+        strategy: str = "automatic",
+    ) -> str:
+        """Resume a failed (or under-delivered) child agent, returning a JSON
+        summary of the attempt. Parent-facing half of the ``resume`` tool.
+
+        Applies the same diagnosis-driven policy as the runtime's automatic
+        self-heal, but with the parent's intent and a parent-supplied note:
+
+        - ``automatic`` (default): run the blunt-vs-rot diagnosis and pick the
+          layer — blunt (healthy context) resumes the SAME agent; rot (context
+          is the problem: repeated calls, safety stop, huge iteration count)
+          spawns a FRESH worker over the same task via ``_fresh_restart``.
+        - ``resume``: force resume the same agent (only legal if not rot; a
+          rotted agent is refused rather than blindly replayed).
+        - ``fresh``: always spawn a fresh worker over the same task.
+
+        Guards mirror ``kill``/``status``: only direct children, never an
+        escalated child, never a *killed* child (a deliberately-killed agent
+        must not be resurrected). Both layers are budgeted by the child's own
+        heal counts (``self_heal.max_resumes`` / ``max_fresh_retries``); when a
+        layer is exhausted the child is left as-is and the parent is told why.
+        The (possibly fresh) effective agent is returned resolved as JSON.
+        """
+        target = self.get_other_agent(agent_id)
+        if target is None:
+            return json.dumps({"error": f"no agent found with ID {agent_id}"})
+        if target.parent is not self:
+            return json.dumps({
+                "error": f"agent {agent_id} is not one of your direct children; "
+                         f"you may only resume agents you delegated",
+            })
+        if target.task.status is TaskStatus.escalated:
+            return json.dumps({
+                "error": f"agent {agent_id} {target.task.status.value}; "
+                         "escalations are never resumed",
+            })
+        if target.task.status is TaskStatus.running:
+            return json.dumps({
+                "error": f"agent {agent_id} is still running; nothing to resume",
+            })
+        if target._killed:
+            return json.dumps({
+                "error": f"agent {agent_id} was deliberately killed; "
+                         "it cannot be resurrected — re-delegate instead",
+            })
+        if (
+            target.last_report is not None
+            and self._runtime._has_deliverable(target)
+        ):
+            return json.dumps({
+                "agent_id": agent_id,
+                "status": "already_delivered",
+                "message": "child already reported with an on-disk deliverable; "
+                           "nothing to resume",
+            })
+
+        strategy = (strategy or "automatic").strip().lower()
+        if strategy not in ("automatic", "resume", "fresh"):
+            return json.dumps({
+                "error": f"unknown strategy '{strategy}'. One of: "
+                         f"automatic | resume | fresh",
+            })
+
+        failures: list[str] = []
+        effective: Agent = target
+        diagnosis = self._runtime._diagnose(target)
+        counts = self._runtime._heal_counts_for(target.id)
+        note_text = note.strip() if note else ""
+
+        def _resume_nudge(child: Agent) -> str:
+            reason = (
+                child.last_failure.error[:600]
+                if child.last_failure
+                else "the previous attempt did not produce an on-disk deliverable"
+            )
+            base = (
+                f"A previous attempt of this task failed with: {reason}. "
+                f"Resume your current work — your prior context (plan, steps, "
+                f"partial results) is intact. Correct the failure; do not repeat "
+                f"the same mistake — then write your deliverable(s) to disk and "
+                f"finish with report()."
+            )
+            return f"{base}\n\nParent instruction: {note_text}" if note_text else base
+
+        healed = False
+        if strategy == "resume" and diagnosis == "rot":
+            return json.dumps({
+                "agent_id": agent_id,
+                "status": "refused_rot",
+                "diagnosis": diagnosis,
+                "error": "the child's context is rotted (repeated calls / safety "
+                         "stop / many iterations); force-resuming would replay the "
+                         "problem. Use strategy='fresh' to restart it cleanly.",
+            })
+
+        # Layer 1: resume the same child on a blunt miss.
+        if strategy in ("automatic", "resume") and (
+            diagnosis == "blunt" or strategy == "resume"
+        ):
+            if counts["resume"] < self._runtime._self_heal_max_resumes:
+                counts["resume"] += 1
+                self._event_bus.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.SELF_HEAL,
+                    data={
+                        "action": "parent_resume",
+                        "child_id": target.id,
+                        "diagnosis": diagnosis,
+                        "attempt": counts["resume"],
+                    },
+                ))
+                try:
+                    effective = await self._runtime.resume(
+                        target.id, message=_resume_nudge(target), parent=self
+                    )
+                except Exception as exc:
+                    failures.append(f"resume errored: {exc}")
+                healed = (
+                    effective.last_report is not None
+                    and self._runtime._has_deliverable(effective)
+                )
+            else:
+                failures.append(
+                    "resume budget exhausted "
+                    f"(self_heal.max_resumes={self._runtime._self_heal_max_resumes})"
+                )
+
+        # Layer 2: fresh worker when resuming didn't heal (or rot / forced).
+        if (
+            not healed
+            and strategy != "resume"
+        ):
+            if counts["fresh"] < self._runtime._self_heal_max_fresh:
+                counts["fresh"] += 1
+                self._event_bus.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.SELF_HEAL,
+                    data={
+                        "action": "parent_fresh",
+                        "child_id": target.id,
+                        "diagnosis": diagnosis,
+                        "attempt": counts["fresh"],
+                    },
+                ))
+                fresh = self._runtime._fresh_restart(target, note=note_text or None)
+                fresh_task = asyncio.create_task(fresh.run())
+                self._runtime.track_agent_task(fresh_task)
+                self._runtime.set_agent_run_task(fresh.id, fresh_task)
+                try:
+                    await fresh_task
+                except Exception as exc:
+                    failures.append(f"fresh worker errored: {exc}")
+                healed = (
+                    fresh.last_report is not None
+                    and self._runtime._has_deliverable(fresh)
+                )
+                effective = fresh
+            else:
+                failures.append(
+                    "fresh budget exhausted "
+                    f"(self_heal.max_fresh_retries={self._runtime._self_heal_max_fresh})"
+                )
+
+        # Keep the parent's children list in sync when recovery replaced the
+        # stub (disk-rebuild resume via Runtime.resume, or a fresh worker): the
+        # effective agent is what the parent's status/resume will touch next.
+        if effective is not target:
+            for i, c in enumerate(self.children):
+                if c is target:
+                    self.children[i] = effective
+                    break
+            target.collect_garbage()
+
+        result: dict[str, Any] = {
+            "agent_id": effective.id,
+            "origin_agent_id": agent_id,
+            "status": effective.task.status.value,
+            "diagnosis": diagnosis,
+            "heal_counts": {
+                "resume": counts["resume"],
+                "fresh": counts["fresh"],
+            },
+            "healed": healed,
+            "strategy": strategy,
+            "summary": (
+                (effective.last_report.summary[:2000]
+                 if effective.last_report and effective.last_report.summary else "")
+                or (effective.last_failure.error[:2000]
+                    if effective.last_failure else ""),
+            ),
+        }
+        if effective.last_report and effective._report_artifact_id:
+            result["artifact_id"] = effective._report_artifact_id
+        if healed:
+            result["message"] = "child recovered"
+        elif failures:
+            result["error"] = "; ".join(failures)
+        else:
+            result["message"] = "no recovery applied (nothing further to do)"
+        return json.dumps(result, indent=2)
 
     def request_more_budget(self, current_usage: int, requested: int, reason: str) -> None:
         req = BudgetRequest(

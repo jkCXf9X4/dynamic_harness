@@ -260,7 +260,13 @@ class Runtime:
         self._active_root = root
         return root
 
-    async def resume(self, agent_id: str, *, message: str | None = None) -> Agent:
+    async def resume(
+        self,
+        agent_id: str,
+        *,
+        message: str | None = None,
+        parent: Agent | None = None,
+    ) -> Agent:
         """Resume an aborted or failed agent from its persisted checkpoint.
 
         Rebuilds the agent (conversation, plan, and progress) from the JSON
@@ -268,6 +274,14 @@ class Runtime:
         process restart. If the agent is already live in this runtime, it is
         continued in place. ``message`` (optional) is appended as a user nudge;
         otherwise a fresh resume instruction is used.
+
+        ``parent`` re-wires the rebuilt agent's parent linkage when it is
+        resumed from disk. The checkpoint stores the task (and its parent_id)
+        but not the live parent Agent object, so without this argument a
+        disk-rebuilt agent has ``parent=None`` and would not be recognized as a
+        direct child by its parent's kill/status/resume tool guards. A live
+        in-memory agent is always continued in place (its own parent object is
+        retained), so ``parent`` only matters for the disk-rebuild path.
         """
         live = self._agents.get(agent_id)
         # An in-memory agent whose context was garbage-collected can no longer
@@ -292,7 +306,7 @@ class Runtime:
             created_at=cp.task.created_at,
             metadata=dict(cp.task.metadata or {}),
         )
-        agent = self.delegate(task, agent_type=cp.agent_type)
+        agent = self.delegate(task, agent_type=cp.agent_type, parent=parent)
         agent._has_run = True
         agent._iteration = 0
         agent.session_id = cp.session_id or agent.id
@@ -311,6 +325,10 @@ class Runtime:
         agent.context.turns = dict(cp.turns or {})
         agent.context.pruned = set(cp.pruned or [])
         agent.context.prune_markers = dict(cp.prune_markers or {})
+        if live is not None:
+            agent._expected_outputs = list(
+                getattr(live, "_expected_outputs", None) or []
+            ) or None
         nudge = message or (
             "A previous attempt of this task was interrupted. Resume NOW from your "
             "persisted plan and prior results (already in your context): "
@@ -335,6 +353,16 @@ class Runtime:
     def _diagnose(self, agent: Agent) -> str:
         """Rot (poisoned context → fresh worker) vs blunt (healthy → resume)."""
         return "rot" if agent.is_rot() else "blunt"
+
+    def heal_diagnosis(self, agent: Agent) -> str:
+        """Public blunt-vs-rot diagnosis for an agent (used by the ``status``
+        tool so a parent sees the same signal the runtime's self-heal uses)."""
+        if agent.task.status is TaskStatus.failed or (
+            agent.task.status is TaskStatus.completed
+            and not self._has_deliverable(agent)
+        ):
+            return self._diagnose(agent)
+        return "none"
 
     def _has_deliverable(self, agent: Agent) -> bool:
         """True when the agent produced its required on-disk deliverable.
@@ -406,30 +434,35 @@ class Runtime:
             f"complete the task to a final report."
         )
 
-    def _fresh_restart(self, agent: Agent) -> Agent:
-        """Spawn a fresh worker over the same task, carrying the failure reason."""
+    def _fresh_restart(self, agent: Agent, *, note: str | None = None) -> Agent:
+        """Spawn a fresh worker over the same task, carrying the failure reason.
+
+        ``note`` (optional) appends an extra corrective instruction from the
+        caller (a parent's ``resume`` tool), folded in after the reason."""
         task = agent.task
         if agent.last_failure:
             reason = agent.last_failure.error or "the prior attempt failed"
-            note = (
+            note_block = (
                 f"[Note: a prior attempt failed — {reason}. Begin from a clean "
                 f"slate and complete the task; do not repeat the prior failure.]"
             )
         else:
             outputs = getattr(agent, "_expected_outputs", None)
             if outputs:
-                note = (
+                note_block = (
                     f"[Note: a prior attempt finished without writing "
                     f"{', '.join(outputs)}. Begin from a clean slate and complete "
                     f"the task, writing those files and reporting them.]"
                 )
             else:
-                note = (
+                note_block = (
                     f"[Note: a prior attempt finished without producing an "
                     f"on-disk deliverable. Begin from a clean slate and complete "
                     f"the task, writing your findings to disk and reporting them.]"
                 )
-        desc = f"{task.description}\n\n{note}"
+        if note:
+            note_block += f"\n\nParent instruction: {note}"
+        desc = f"{task.description}\n\n{note_block}"
         new_task = Task(
             description=desc,
             role=task.role,
@@ -437,7 +470,10 @@ class Runtime:
             metadata=dict(task.metadata),
             parent_id=task.parent_id,
         )
-        return self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)
+        fresh = self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)
+        outs = getattr(agent, "_expected_outputs", None)
+        fresh._expected_outputs = list(outs) if outs else None
+        return fresh
 
     async def _recover(self, agent: Agent) -> Agent:
         """Bounded, diagnosis-driven recovery. Returns the effective agent.

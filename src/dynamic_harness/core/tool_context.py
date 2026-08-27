@@ -171,6 +171,18 @@ class ToolContext:
             agent_id, reason=reason, recursive=recursive,
         )
 
+    async def resume_child(
+        self,
+        agent_id: str,
+        *,
+        note: str | None = None,
+        strategy: str = "automatic",
+    ) -> str:
+        """Resume a failed/under-delivered child agent (see ``Agent.resume_child``)."""
+        return await self._agent.resume_child(
+            agent_id, note=note, strategy=strategy,
+        )
+
     async def status(self, agent_id: str | None = None) -> str:
         """Snapshot child status(es) + partial progress.
 
