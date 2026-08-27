@@ -95,6 +95,11 @@ class Agent:
         # repeated-call detection force-fails it (0 = fail on first detection).
         self._repeated_recovery_left = repeated_recovery_attempts
         self._safety_timeout_seconds = safety_timeout_seconds
+        # Hard total-request deadline per LLM call (llm.call_timeout_seconds),
+        # enforced here via asyncio.wait_for. Distinct from the run-level
+        # `_safety_timeout_seconds` budget; set by Runtime from config. When None
+        # the call is bounded only by the provider's httpx/SDK timeout.
+        self._call_timeout_seconds: float | None = None
         self._started_at: float | None = None
         self._has_run: bool = False
         self._iteration: int = 0
@@ -490,16 +495,36 @@ class Agent:
 
         for attempt in range(max_retries + 1):
             try:
-                return await llm.generate_with_tools(msgs, tools, config=cfg)
+                coro = llm.generate_with_tools(msgs, tools, config=cfg)
+                if self._call_timeout_seconds is not None:
+                    # Hard total-deadline per call: asyncio.wait_for aborts the
+                    # WHOLE request after the configured cap, unlike the httpx/SDK
+                    # timeout which is an idle-per-read bound a streaming provider
+                    # can stretch indefinitely. Retried like any transient failure.
+                    return await asyncio.wait_for(
+                        coro, timeout=self._call_timeout_seconds
+                    )
+                return await coro
             except Exception as e:
                 last_error = e
                 if not self._is_retryable(e) or attempt >= max_retries:
+                    if (
+                        isinstance(e, asyncio.TimeoutError)
+                        and self._call_timeout_seconds is not None
+                    ):
+                        # The per-call deadline (llm.call_timeout_seconds) hit on
+                        # every attempt. Raise distinctly from asyncio.TimeoutError
+                        # so the caller's run-level budget handler
+                        # (`_call_llm_with_run_budget`) doesn't misreport this as
+                        # safety.timeout_seconds being exhausted.
+                        raise RuntimeError(
+                            f"LLM call exceeded the {self._call_timeout_seconds}s "
+                            f"per-call timeout on all {max_retries + 1} attempt(s)"
+                        ) from e
                     raise
                 self._runtime.record_retry(self.id)
                 delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
                 await asyncio.sleep(delay)
-
-        raise last_error  # type: ignore[misc]
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
@@ -514,6 +539,7 @@ class Agent:
             InternalServerError,
             httpx.TimeoutException,
             httpx.TransportError,
+            asyncio.TimeoutError,
         ):
             if isinstance(exc, cls):
                 return True

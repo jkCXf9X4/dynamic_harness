@@ -104,6 +104,13 @@ class Runtime:
         self._disable_root_timeout = (
             config.safety.disable_root_timeout if config else True
         )
+        # Per-call LLM deadline (llm.call_timeout_seconds). Unlike the httpx/SDK
+        # timeout — which is an idle-per-read cap that a streaming provider can
+        # silently stretch for many minutes — this is a hard total-request bound
+        # enforced by the agent via asyncio.wait_for.
+        self._call_timeout_seconds = (
+            config.llm.call_timeout_seconds if config else 120.0
+        )
         self._max_agent_tokens = (
             config.safety.max_agent_tokens if config else None
         ) or None
@@ -521,6 +528,7 @@ class Runtime:
                 near_identical_warning_attempts=self._near_identical_warning_attempts,
             )
         agent.max_agent_tokens = self._max_agent_tokens
+        agent._call_timeout_seconds = self._call_timeout_seconds
         agent.set_environment_info(self._environment_info)
         agent.agent_type = agent_type
         self._agents[agent_id] = agent

@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from dynamic_harness.config import HarnessConfig, SafetyConfig
+from dynamic_harness.config import HarnessConfig, LLMProviderConfig, SafetyConfig
 from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
@@ -374,6 +374,22 @@ def test_runtime_wires_recovery_from_config(tmp_path) -> None:
     assert agent._repeated_recovery_left == 3
 
 
+def test_runtime_wires_call_timeout_to_agent(tmp_path) -> None:
+    """llm.call_timeout_seconds is threaded from config through Runtime to each agent."""
+    cfg = HarnessConfig(llm=LLMProviderConfig(call_timeout_seconds=45.5))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    assert rt._call_timeout_seconds == 45.5
+    root = rt.delegate(Task(description="t"))
+    assert root._call_timeout_seconds == 45.5
+    child = rt.delegate(Task(description="c"), parent=root)
+    assert child._call_timeout_seconds == 45.5
+
+
 @pytest.mark.asyncio
 async def test_run_timeout_binds_mid_call(runtime: Runtime) -> None:
     """A slow LLM call must not overshoot the full-run budget: the run timeout
@@ -398,6 +414,71 @@ async def test_run_timeout_binds_mid_call(runtime: Runtime) -> None:
     await root._run_loop()
     assert root.task.status.value == "failed"
     assert root._terminated_by_safety is True
+
+
+@staticmethod
+def _hang_llm(sleep: float) -> type[LLMProvider]:
+    class HangingLLM(LLMProvider):
+        def __init__(self):
+            self.calls = 0
+
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            self.calls += 1
+            await asyncio.sleep(sleep)
+            return ToolCallResponse(content="done", model="mock")
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    return HangingLLM
+
+
+async def _run_slow_agent(runtime: Runtime, llm_cls: type[LLMProvider], *, call_timeout: float) -> Agent:
+    """Run an agent whose LLM call hangs with a per-call timeout of ``call_timeout``.
+    Returns the finished agent (status reflects the outcome)."""
+    runtime.set_llm(llm_cls())
+    root = _make_agent(runtime, Task(description="slow"))
+    root._call_timeout_seconds = call_timeout
+    await root.run()
+    return root
+
+
+@pytest.mark.asyncio
+async def test_call_timeout_binds_single_hung_call(runtime: Runtime) -> None:
+    """llm.call_timeout_seconds is a hard total-request deadline: a provider that
+    never returns (longer than the cap) is abandoned, not awaited indefinitely."""
+    # The hang (5s) far exceeds the 0.25s per-call cap.
+    root = await _run_slow_agent(runtime, _hang_llm(5.0), call_timeout=0.25)
+    assert root.task.status.value == "failed"
+    assert "per-call" in (root.last_failure.error if root.last_failure else "")
+
+
+@pytest.mark.asyncio
+async def test_call_timeout_retries_then_fails(runtime: Runtime) -> None:
+    """Each per-call timeout is retried (transient) and only fails after the last
+    attempt, so one slow call doesn't instantly kill the agent on its first trip."""
+    llm = _hang_llm(5.0)()
+    runtime.set_llm(llm)
+    root = _make_agent(runtime, Task(description="slow"))
+    root._call_timeout_seconds = 0.25
+    await root.run()
+    # default max_retries=3 -> the call should have been attempted 4 times.
+    assert llm.calls == 4
+    assert root.task.status.value == "failed"
+
+
+@pytest.mark.asyncio
+async def test_call_timeout_does_not_affect_fast_calls(runtime: Runtime) -> None:
+    """A fast LLM call is untouched by the per-call cap."""
+    llm = _hang_llm(0.0)()
+    runtime.set_llm(llm)
+    root = _make_agent(runtime, Task(description="fast"))
+    root._call_timeout_seconds = 0.25
+    await root.run()
+    assert root.task.status.value == "completed"
 
 
 def test_delegate_nudge_fires_once_for_non_delegating_agent(runtime: Runtime) -> None:
