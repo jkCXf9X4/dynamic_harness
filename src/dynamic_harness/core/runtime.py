@@ -59,6 +59,8 @@ class Runtime:
         if generated_root:
             generated_root.mkdir(parents=True, exist_ok=True)
         self._generated_root = generated_root
+        self._artifact_root = Path(artifact_root)
+        self._repo_root = Path(repo_root)
         # Structured per-agent state persists here so aborted/failed runs can be
         # resumed from a fresh process. Defaults to under generated_root when set,
         # otherwise under the untracked `.dynamic-harness/` work dir (keeps stray
@@ -124,6 +126,20 @@ class Runtime:
         notes = list(config.agent.environment_notes if config else [])
         if refs_index:
             notes.append(refs_index)
+        # Tell agents where the durable storage roots live so they can route
+        # working/temp files and findings into the artifact store / repo instead
+        # of leaving them scattered in the scratch root.
+        notes.append(
+            "[Storage] Scratch root: %s. Artifact store: %s. Commit/repo root: %s. "
+            "Use the `archive` tool (or report()'s artifact_ids) to persist "
+            "working/temp findings into the artifact store for durable, "
+            "discoverable storage."
+            % (
+                self._generated_root or Path.cwd() / ".dynamic-harness",
+                self._artifact_root,
+                self._repo_root,
+            )
+        )
         self._environment_info: EnvironmentInfo = build_environment_info(notes=notes)
 
         self.event_bus = EventBus()
@@ -567,11 +583,14 @@ class Runtime:
         if payload.files_written:
             self._store_written_files(artifact, payload.files_written)
 
+        artifact_ids = list(dict.fromkeys(
+            [artifact.id, *(getattr(agent, "_archived_artifact_ids", None) or [])]
+        ))
         commit = Commit(
             task_id=agent.task.id,
             agent_id=agent_id,
             summary=payload.summary,
-            artifact_ids=[artifact.id],
+            artifact_ids=artifact_ids,
             parent_ids=self.repository.commit_ids_for_tasks(
                 [agent.task.parent_id] if agent.task.parent_id else []
             ),

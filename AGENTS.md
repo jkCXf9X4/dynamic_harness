@@ -69,7 +69,7 @@ src/dynamic_harness/
 │   ├── trace.py             → TraceStore (JSONL debug trace)
 │   ├── telemetry.py         → Telemetry (per-agent facade isolating the run loop from usage/trace/activity/checkpoint I/O)
 │   ├── checkpoint.py        → AgentCheckpoint + CheckpointStore (plan/progress persisted to JSON for resumability)
-│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 19 tools split by concern
+│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 23 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()
 │       ├── filesystem.py    → read, write, glob, grep, edit (+ sandbox helpers)
@@ -256,7 +256,7 @@ ReportPayload(
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 22 Built-in Tools
+## 23 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -284,6 +284,7 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 20 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No |
 | 21 | `checkpoint` | `note: str` | No |
 | 22 | `usage` | *(none)* | No |
+| 23 | `archive` | `content?: str, path?: str, label?: str, summary?: str` | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its

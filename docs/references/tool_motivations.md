@@ -48,6 +48,12 @@ another, has been optimized away, recover it here via `read`.
   from-scratch restart. Killed agents are excluded from self-heal (never resurrected).
 - **read_artifact** — read a stored artifact by ID across the progressive-disclosure
   view (headline → summary → technical). Verify children by summary first.
+- **archive** — persist a working file (or inline findings) into the durable artifact
+  store *during* the run, returning a stable artifact id. The runtime only auto-creates
+  an artifact at `report()`, so without this tool any mid-run temp/finding is stranded as
+  a loose scratch file. Use archive to keep working artifacts discoverable and to route
+  them into repo provenance (its ids are attached to the report commit) instead of
+  leaving them scattered in the working dir.
 - **usage** — read your own cumulative message/token counters and live-context
   estimate. The cache-friendly way to self-monitor: consult it when work grows
   repetitive (before delegating/pruning/compressing) instead of waiting for a
@@ -90,3 +96,7 @@ another, has been optimized away, recover it here via `read`.
   failure, done/pending plan, salvaged progress); read_artifact reads the *content* it
   produced. Use status to decide *whether/how* to retry; use read_artifact to consume
   what it succeeded in writing.
+- **archive vs write**: write puts a byte-for-byte file on disk (for you/your children to
+  consume directly); archive promotes a file or findings into the durable artifact store
+  where it becomes discoverable, ID-addressed, and provenance-linked. Write for scratch +
+  cursor; archive for anything with ongoing value. Then delete the scratch copy in cleanup.

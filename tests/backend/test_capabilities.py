@@ -94,8 +94,8 @@ def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
     assert "question" in td.input_schema.get("properties", {})
 
 
-def test_default_tools_all_nineteen(runtime: Runtime) -> None:
-    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "kill", "status", "read_artifact", "plan", "checkpoint", "usage"}
+def test_default_tools_all_twenty_two(runtime: Runtime) -> None:
+    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "kill", "status", "read_artifact", "plan", "checkpoint", "usage", "archive"}
     assert set(runtime.tool_registry.list_tools()) == expected
 
 
@@ -477,4 +477,61 @@ async def test_read_artifact_resolves_by_agent_id(runtime: Runtime) -> None:
     result_full = await runtime.tool_registry.execute(
         "read_artifact", "tc3", agent=parent, artifact_id=child.id, level="full")
     assert "CHILD_FULL_BODY" in result_full.content
+
+
+@pytest.mark.asyncio
+async def test_archive_tool_inline_content(runtime: Runtime, tmp_path: Path) -> None:
+    agent = runtime.delegate(Task(description="archive inline"))
+    out = await runtime.tool_registry.execute(
+        "archive", "tc1", agent=agent,
+        content="working finding #1", label="analysis.md", summary="summary here")
+    assert "Archived" in out.content
+    aid = out.content.split("Archived ", 1)[1].split(" ", 1)[0]
+
+    art = runtime.artifact_store.get(aid)
+    assert art is not None
+    assert art.get_view("headline") == "analysis.md"
+    assert runtime.artifact_store.read_text(aid, "analysis.md") == "working finding #1"
+    assert aid in agent._archived_artifact_ids
+
+    # archive returns the full on-disk path so ordinary tools can keep working.
+    path = str(runtime.artifact_store.root / aid / "analysis.md")
+    assert path in out.content
+    write = await runtime.tool_registry.execute("write", "tc2", agent=agent,
+                                                path=path, content="updated content")
+    assert runtime.artifact_store.read_text(aid, "analysis.md") == "updated content"
+
+
+@pytest.mark.asyncio
+async def test_archive_tool_from_path(runtime: Runtime, tmp_path: Path) -> None:
+    src = tmp_path / "scratch.txt"
+    src.write_text("persisted scratch content")
+    runtime.set_generated_root(tmp_path)
+    agent = runtime.delegate(Task(description="archive path"))
+    out = await runtime.tool_registry.execute(
+        "archive", "tc1", agent=agent, path="scratch.txt")
+    aid = out.content.split("Archived ", 1)[1].split(" ", 1)[0]
+    assert runtime.artifact_store.read_text(aid, "scratch.txt") == "persisted scratch content"
+    assert str(runtime.artifact_store.root / aid / "scratch.txt") in out.content
+
+
+@pytest.mark.asyncio
+async def test_archive_tool_requires_content_or_path(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="archive empty"))
+    out = await runtime.tool_registry.execute("archive", "tc1", agent=agent)
+    assert "Error" in out.content
+
+
+@pytest.mark.asyncio
+async def test_archive_ids_linked_into_report_commit(runtime: Runtime) -> None:
+    agent = runtime.delegate(Task(description="archive + report"))
+    agent.report = lambda payload: runtime.deliver_report(agent.id, payload)
+    out = await runtime.tool_registry.execute(
+        "archive", "tc1", agent=agent, content="persisted", label="note.txt")
+    aid = out.content.split("Archived ", 1)[1].split(" ", 1)[0]
+
+    await runtime.tool_registry.execute("report", "tc2", agent=agent, summary="done")
+    commit = runtime.repository.commit_for_task(agent.task.id)
+    assert commit is not None
+    assert aid in commit.artifact_ids
 

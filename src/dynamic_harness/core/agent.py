@@ -118,6 +118,7 @@ class Agent:
             maxlen=max(repeated_call_limit * 3, 1)
         )
         self._report_artifact_id: str | None = None
+        self._archived_artifact_ids: list[str] = []
         self.outcome: AgentOutcome = AgentOutcome()
         self._deferred_delegates: list[tuple[str, Agent, asyncio.Task[None]]] | None = None
         self._loop_lock = asyncio.Lock()

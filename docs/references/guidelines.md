@@ -89,6 +89,14 @@ space, not re-opening it.
   stray temp files, partial outputs, or prior-run leftovers. Report only once the working
   tree is clean enough that a stranger or a resuming agent can tell at a glance which files
   are real results.
+- **Route durable work through the artifact/repo structure, not loose files.** The runtime
+  only auto-creates an artifact at `report()`; anything you want to keep before then must be
+  parked deliberately. Use the `archive` tool (or `report(artifact_ids=...)`) to place
+  working temp files and findings into the artifact store, which addresses them by a stable
+  id and links them into the repository's commit provenance. Scratch files that only serve
+  intermediate steps should be *deleted* after archiving — keep the artifact store/repo as
+  the discoverable home of durable work, and the working dir as a throwaway scratchpad.
+  The `[Storage]` line in `[Environment]` names the scratch and artifact roots.
 - **Close the design space.** Persist each evaluation's verdict. The point of an eval is
   that its conclusion becomes a fact the project no longer needs to re-check. Future runs
   read the verdict and skip the exploration.

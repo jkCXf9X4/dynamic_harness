@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from . import agents as _agents
+from . import artifacts as _artifacts
 from . import context as _context
 from . import filesystem as _filesystem
 from . import network as _network
@@ -32,3 +33,4 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_agents.TOOL_STATUS_DEF, _agents.status)
     registry.register(_agents.TOOL_READ_ARTIFACT_DEF, _agents.read_artifact)
     registry.register(_agents.TOOL_USAGE_DEF, _agents.usage)
+    registry.register(_artifacts.TOOL_ARCHIVE_DEF, _artifacts.archive)

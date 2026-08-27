@@ -88,6 +88,13 @@ class ToolContext:
     def artifact_store(self) -> Any:
         return self._agent.artifact_store
 
+    def record_archived_artifact(self, artifact_id: str) -> None:
+        """Track an artifact this agent archived mid-run (via the `archive` tool).
+        These ids are linked into the agent's final report commit so temp/working
+        artifacts show up in repository provenance, not just the artifact index.
+        """
+        self._agent._archived_artifact_ids.append(artifact_id)
+
     def latest_assistant_message(self, agent_id: str) -> str:
         """Latest assistant text from another agent (empty if none)."""
         agent = self._agent.get_other_agent(agent_id)
