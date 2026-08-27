@@ -75,6 +75,13 @@ class Agent:
         near_identical_similarity: float = 0.6,
         near_identical_tools: list[str] | None = None,
         near_identical_warning_attempts: int = 2,
+        # When the agent comes within `iteration_warning_margin` iterations of
+        # its `safety_max_iterations` limit, append ONE hard user message telling
+        # it to wrap up: report remaining items + relevant info to its parent so
+        # unfinished work can be scheduled in other tasks. Tail-append-only and
+        # rare so the prompt prefix (and provider cache) stays contiguous.
+        iteration_warning_margin: int = 50,
+        iteration_warning_attempts: int = 1,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -162,6 +169,11 @@ class Agent:
             tuple(near_identical_tools) if near_identical_tools is not None else ("bash",)
         )
         self._near_identical_warning_left: int = max(int(near_identical_warning_attempts), 0)
+        # Low-iteration warning: fires a hard wrap-up notice once when remaining
+        # turns drop to `iteration_warning_margin` or fewer before the hard limit.
+        self._iteration_warning_margin: int = max(int(iteration_warning_margin), 1)
+        self._iteration_warning_attempts: int = max(int(iteration_warning_attempts), 0)
+        self._iteration_warning_left: int = self._iteration_warning_attempts
         # (core sig, full sig, tool name) triples, sliding window.
         self._recent_near_identical: deque[tuple[str, str, str]] = deque(
             maxlen=self._near_identical_window
@@ -446,6 +458,7 @@ class Agent:
         self._recent_delegate_targets.clear()
         self._has_delegated = False
         self._delegate_nudge_left = self._delegate_nudge_attempts
+        self._iteration_warning_left = self._iteration_warning_attempts
         self._started_at = time.monotonic()
         await self._run_guarded()
 
@@ -1080,6 +1093,52 @@ class Agent:
         ))
         self.context.append({"role": "user", "content": note})
 
+    def _maybe_warn_iterations_low(self) -> None:
+        """Inject ONE hard wrap-up message when iterations are running low.
+
+        When remaining iterations (``safety_max_iterations - iteration``) drop to
+        ``_iteration_warning_margin`` or fewer, append a fixed, assertive notice
+        telling the agent to stop expanding scope, finish off what it can, and
+        hand the unfinished remainder plus any relevant context to its parent so
+        it can decide what to schedule in other tasks. Fires at most
+        ``_iteration_warning_attempts`` times; tail-append-only so the prompt
+        prefix (and the provider's cache contiguity) is preserved.
+        """
+        if self._iteration_warning_left <= 0:
+            return
+        remaining = self._safety_max_iterations - self._iteration
+        if remaining > self._iteration_warning_margin:
+            return
+        if remaining < 0:
+            remaining = 0
+        self._iteration_warning_left -= 1
+
+        note = (
+            "Your iteration budget is almost exhausted: you have roughly "
+            f"{remaining} iterations left before the hard limit at "
+            f"{self._safety_max_iterations} (you are on iteration "
+            f"{self._iteration}). Stop starting new work. Finish whatever is "
+            "naturally closable right now. For anything you cannot complete, "
+            "return the remaining items and all relevant intermediate context "
+            "(discoveries, file paths, partial results, and what the parent "
+            "would need to pick this up) to your parent, and report / escalate / "
+            "fail as appropriate so the parent can decide what is reasonable to "
+            "finish off in other tasks."
+        )
+
+        self._event_bus.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.SAFETY_WARNING,
+            data={
+                "warning_type": "iterations_running_low",
+                "iteration": self._iteration,
+                "remaining": remaining,
+                "limit": self._safety_max_iterations,
+                "attempts_remaining": self._iteration_warning_left,
+            },
+        ))
+        self.context.append({"role": "user", "content": note})
+
     def submit_input(self, message: str) -> None:
         """Queue a mid-run user message for this agent.
 
@@ -1162,6 +1221,7 @@ class Agent:
             # without delegating, append (don't mutate) a stable nudge so the
             # next turn sees it without breaking the cached prompt prefix.
             self._maybe_nudge_delegation()
+            self._maybe_warn_iterations_low()
             self.persist_checkpoint()
 
     async def _gather_deferred_and_finalize(

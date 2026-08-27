@@ -79,6 +79,53 @@ async def test_safety_max_iterations_limit_reached(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
+async def test_low_iteration_warning_injected_before_hard_limit(runtime: Runtime) -> None:
+    """With a small max-iterations cap, the agent gets a hard wrap-up notice
+    injected into its context once it comes within the warning margin of the
+    limit, telling it to finish off and hand remaining work to its parent."""
+    llm = _LoopToolLLM()
+    runtime.set_llm(llm)
+
+    root = _make_agent(
+        runtime, Task(description="Looping task"),
+        safety_max_iterations=10, repeated_call_limit=100,
+        iteration_warning_margin=5,
+    )
+
+    await root.run()
+
+    assert root.task.status.value == "failed"
+    # The wrap-up notice must have been appended as a user message the LLM saw,
+    # before the hard limit was reached.
+    assert any(
+        m.get("role") == "user" and "iteration budget is almost exhausted" in str(m.get("content", ""))
+        for m in root.context.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_iteration_warning_fires_once(runtime: Runtime) -> None:
+    """The low-iteration notice is injected at most once per run."""
+    llm = _LoopToolLLM()
+    runtime.set_llm(llm)
+
+    root = _make_agent(
+        runtime, Task(description="Looping task"),
+        safety_max_iterations=10, repeated_call_limit=100,
+        iteration_warning_margin=5,
+    )
+
+    await root.run()
+
+    warnings = [
+        m for m in root.context.messages
+        if m.get("role") == "user"
+        and "iteration budget is almost exhausted" in str(m.get("content", ""))
+    ]
+    assert len(warnings) == 1
+
+
+@pytest.mark.asyncio
 async def test_repeated_identical_calls_trigger_safety(runtime: Runtime) -> None:
     llm = _LoopToolLLM()
     runtime.set_llm(llm)

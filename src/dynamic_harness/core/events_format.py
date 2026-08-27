@@ -78,6 +78,12 @@ def format_event(
                 f"({d.get('tool_name', '?')} x{d.get('similar_count', 0)} "
                 f"in last {d.get('window', 0)})"
             )
+        if wtype == "iterations_running_low":
+            return (
+                f"{lead(WARN if emoji else '')}\u26a0 low on iterations "
+                f"({d.get('iteration', 0)}/~{d.get('remaining', 0)} left "
+                f"of {d.get('limit', 0)})"
+            )
         if wtype == "timeout":
             return f"{lead(WARN if emoji else '')}\u26a0 timeout ({d.get('timeout_seconds', 0)}s after {d.get('iteration', 0)} iters)"
         if wtype == "agent_error":

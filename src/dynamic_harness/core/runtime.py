@@ -102,6 +102,12 @@ class Runtime:
         self._near_identical_warning_attempts = (
             config.safety.near_identical_warning_attempts if config else 2
         )
+        self._iteration_warning_margin = (
+            config.safety.iteration_warning_margin if config else 50
+        )
+        self._iteration_warning_attempts = (
+            config.safety.iteration_warning_attempts if config else 1
+        )
         self._safety_timeout_seconds = config.safety.timeout_seconds if config else 900
         self._disable_root_timeout = (
             config.safety.disable_root_timeout if config else True
@@ -563,6 +569,8 @@ class Runtime:
                 near_identical_similarity=self._near_identical_similarity,
                 near_identical_tools=self._near_identical_tools,
                 near_identical_warning_attempts=self._near_identical_warning_attempts,
+                iteration_warning_margin=self._iteration_warning_margin,
+                iteration_warning_attempts=self._iteration_warning_attempts,
             )
         else:
             agent = Agent(
@@ -578,6 +586,8 @@ class Runtime:
                 near_identical_similarity=self._near_identical_similarity,
                 near_identical_tools=self._near_identical_tools,
                 near_identical_warning_attempts=self._near_identical_warning_attempts,
+                iteration_warning_margin=self._iteration_warning_margin,
+                iteration_warning_attempts=self._iteration_warning_attempts,
             )
         agent.max_agent_tokens = self._max_agent_tokens
         agent._call_timeout_seconds = self._call_timeout_seconds

@@ -78,6 +78,19 @@ class SafetyConfig(BaseModel):
         description="How many times the near-identical notice may be (re-)injected "
                     "over the whole run. 0 disables the feature entirely.",
     )
+    iteration_warning_margin: int = Field(
+        default=50, ge=1,
+        description="How many iterations before `max_iterations` the agent gets a "
+                    "hard wrap-up notice injected into its context telling it to "
+                    "stop starting new work, finish what it can, and hand remaining "
+                    "items + relevant context to its parent so it can decide what "
+                    "to schedule in other tasks.",
+    )
+    iteration_warning_attempts: int = Field(
+        default=1, ge=0,
+        description="How many times the low-iteration wrap-up notice may be injected "
+                    "over the whole run. 0 disables the feature entirely.",
+    )
     timeout_seconds: float | None = Field(
         default=None, gt=0,
         description="Wall-clock budget for a single agent's ENTIRE run (its whole "
