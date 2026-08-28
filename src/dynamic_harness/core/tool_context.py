@@ -107,8 +107,8 @@ class ToolContext:
             steps=steps, objective=objective, acceptance=acceptance, deliverable=deliverable,
         )
 
-    def checkpoint(self, note: str) -> str:
-        return self._agent.checkpoint(note)
+    def checkpoint(self, note: str, *, done: list[str] | None = None) -> str:
+        return self._agent.checkpoint(note, done=done)
 
     async def compress(self) -> dict[str, Any]:
         compression_prompt = "\n".join([

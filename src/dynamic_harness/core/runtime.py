@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..memory.repository import Commit, Repository
-from .agent import Agent
+from .agent import Agent, progress_summary_block
 from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
@@ -340,6 +340,20 @@ class Runtime:
             "persisted plan and prior results (already in your context): "
             "continue the work, reach the deliverable, and finish with report()."
         )
+        if not message:
+            focus = cp.focus or {}
+            nudge = (
+                nudge
+                + "\n\n"
+                + progress_summary_block(
+                    objective=str(focus.get("objective", "") or ""),
+                    deliverable=str(focus.get("deliverable", "") or ""),
+                    acceptance=list(focus.get("acceptance") or []),
+                    pending=list(focus.get("pending") or []),
+                    done=list(focus.get("done") or []),
+                    checkpoint_notes=list(cp.checkpoint_notes or []),
+                )
+            )
         await agent.continue_with_input(nudge)
         self._active_root = agent
         return agent

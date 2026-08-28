@@ -49,13 +49,21 @@ TOOL_CHECKPOINT_DEF = ToolDef(
                 "writing a file or finishing a sub-analysis) so the task can be "
                 "resumed from this point if aborted or failed. Your plan and all "
                 "prior turns are saved automatically; this records an explicit "
-                "milestone marker and guarantees durability now.",
+                "milestone marker that is surfaced again on resume, and "
+                "guarantees durability now. Pass the plan step(s) just completed "
+                "via ``done`` so your progress ledger advances and resume does "
+                "not re-make finished work.",
     input_schema={
         "type": "object",
         "properties": {
             "note": {
                 "type": "string",
                 "description": "Short note describing what was completed at this milestone",
+            },
+            "done": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional exact plan step(s) completed at this milestone (must match plan() step text)",
             },
         },
         "required": ["note"],
@@ -79,5 +87,5 @@ async def plan(
     )
 
 
-async def checkpoint(*, ctx: ToolContext, note: str) -> str:
-    return ctx.checkpoint(note)
+async def checkpoint(*, ctx: ToolContext, note: str, done: list[str] | None = None) -> str:
+    return ctx.checkpoint(note, done=done)

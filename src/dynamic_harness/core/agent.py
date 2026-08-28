@@ -45,6 +45,41 @@ if TYPE_CHECKING:
 ROT_ITERATION_THRESHOLD = 40
 
 
+def progress_summary_block(
+    *,
+    objective: str = "",
+    deliverable: str = "",
+    acceptance: list[str] | None = None,
+    pending: list[str] | None = None,
+    done: list[str] | None = None,
+    checkpoint_notes: list[str] | None = None,
+) -> str:
+    """Render an agent's documented progress for injection into a resume nudge.
+
+    This is the deterministic record of "what has been done" that a resumed
+    agent (or a fresh worker inheriting it) should start from: the residual
+    plan, what is already marked done, and the checkpoint milestones recorded
+    along the way. It keeps the agent from having to re-derive its own progress
+    from raw prior turns after a failure.
+    """
+    lines = ["[Your documented progress, recorded before the interruption]"]
+    if objective:
+        lines.append(f"Objective: {objective}")
+    if deliverable:
+        lines.append(f"Deliverable: {deliverable}")
+    if done:
+        lines.append("Plan steps already done: " + "; ".join(done))
+    if pending:
+        lines.append("Plan steps remaining: " + "; ".join(pending))
+    if acceptance:
+        lines.append("Acceptance: " + "; ".join(acceptance))
+    notes = list(checkpoint_notes or [])
+    if notes:
+        lines.append("Milestones recorded so far:")
+        lines += [f"  - {n}" for n in notes[-12:]]
+    return "\n".join(lines)
+
+
 class Agent:
     def __init__(
         self,
@@ -407,11 +442,20 @@ class Agent:
         self.persist_checkpoint()
         return f"Plan recorded: {len(steps or [])} pending step(s); progress is re-stated each turn."
 
-    def checkpoint(self, note: str) -> str:
-        """Persist current state with a milestone note, enabling crash-resume."""
+    def checkpoint(self, note: str, *, done: list[str] | None = None) -> str:
+        """Persist current state with a milestone note, enabling crash-resume.
+
+        ``done`` (optional) lists plan steps that were just completed; they are
+        advanced in the focus ledger so the persisted plan reflects real
+        progress (rather than re-stating every step as pending on resume).
+        """
+        if done:
+            for item in done:
+                self.mark_focus_done(str(item))
         self._checkpoint_notes.append(note)
         self.persist_checkpoint()
-        return f"Checkpoint saved (state on disk) — note: {note[:80]}"
+        prefix = f" ({len(done)} step(s) marked done)" if done else ""
+        return f"Checkpoint recorded (state on disk){prefix} — note: {note[:80]}"
 
     # -- LLM / environment -------------------------------------------------
 
@@ -1677,12 +1721,21 @@ class Agent:
             )
             base = (
                 f"A previous attempt of this task failed with: {reason}. "
-                f"Resume your current work — your prior context (plan, steps, "
-                f"partial results) is intact. Correct the failure; do not repeat "
-                f"the same mistake — then write your deliverable(s) to disk and "
-                f"finish with report()."
+                f"Resume your current work from your documented progress below — "
+                f"your prior context (plan, steps, partial results) is intact. "
+                f"Continue from where you left off; correct the failure; do not "
+                f"repeat the same mistake — then write your deliverable(s) to "
+                f"disk and finish with report()."
             )
-            return f"{base}\n\nParent instruction: {note_text}" if note_text else base
+            progress = progress_summary_block(
+                objective=child._focus.objective,
+                deliverable=child._focus.deliverable,
+                acceptance=list(child._focus.acceptance),
+                pending=list(child._focus.pending),
+                done=list(child._focus.done),
+                checkpoint_notes=list(child._checkpoint_notes),
+            )
+            return f"{base}\n\n{progress}\n\nParent instruction: {note_text}" if note_text else f"{base}\n\n{progress}"
 
         healed = False
         if strategy == "resume" and diagnosis == "rot":
