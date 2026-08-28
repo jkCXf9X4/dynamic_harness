@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -391,6 +393,82 @@ async def test_bash_timeout(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
     result = await runtime.tool_registry.execute("bash", "tc1", agent=agent, command="sleep 5", timeout=100)
     assert "timed out" in result.content
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_bash_timeout_kills_grandchild(runtime: Runtime, tmp_path: Path) -> None:
+    """A shell-mode command times out AFTER the whole process group, so the
+    actual worker (a grandchild of the `sh -c` wrapper) is killed too — not
+    orphaned. Regression for the 'bash command finished but agent force-failed
+    on timeout' churn loop (orphans + their lock files poisoning retries)."""
+    agent = runtime.delegate(Task(description="test"))
+    pidfile = tmp_path / "child.pid"
+    command = f"sleep 300 & echo $! > {pidfile}; wait"
+    result = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent, command=command, timeout=200
+    )
+    assert "timed out" in result.content
+    pid = int(pidfile.read_text().strip())
+    assert not _pid_alive(pid), "grandchild survived the timeout kill"
+
+
+@pytest.mark.asyncio
+async def test_bash_cancel_kills_tree(runtime: Runtime, tmp_path: Path) -> None:
+    """Cancelling an in-flight bash tool (kill/resume/reset cancels the run
+    task) must take the whole process group down — the spawned worker must not
+    be orphaned after the CancelledError is re-raised."""
+    agent = runtime.delegate(Task(description="test"))
+    pidfile = tmp_path / "child.pid"
+    command = f"sleep 300 & echo $! > {pidfile}; wait"
+    task = asyncio.create_task(
+        runtime.tool_registry.execute(
+            "bash", "tc1", agent=agent, command=command
+        )
+    )
+    while not pidfile.exists():
+        await asyncio.sleep(0.05)
+    pid = int(pidfile.read_text().strip())
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not _pid_alive(pid), "grandchild survived cancellation"
+
+
+@pytest.mark.asyncio
+async def test_bash_default_timeout_is_generous(runtime: Runtime) -> None:
+    """Defaults to 120s: a short command with no explicit timeout must run to
+    completion instead of hitting the (now much larger) default."""
+    agent = runtime.delegate(Task(description="test"))
+    result = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent, command="sleep 0.2 && echo ok"
+    )
+    assert "timed out" not in result.content
+    assert "ok" in result.content
+
+
+@pytest.mark.asyncio
+async def test_bash_custom_timeout_overrides_default(runtime: Runtime) -> None:
+    """The caller's `timeout` (ms) strictly overrides the 120s default: a command
+    that finishes comfortably must succeed with a generous custom timeout, and
+    the same command fails when the custom cap is tighter than its runtime."""
+    agent = runtime.delegate(Task(description="test"))
+    generous = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent, command="sleep 1 && echo slow-ok", timeout=10000
+    )
+    assert "timed out" not in generous.content
+    assert "slow-ok" in generous.content
+    tight = await runtime.tool_registry.execute(
+        "bash", "tc1", agent=agent, command="sleep 1 && echo slow-ok", timeout=200
+    )
+    assert "timed out" in tight.content
 
 
 @pytest.mark.asyncio
