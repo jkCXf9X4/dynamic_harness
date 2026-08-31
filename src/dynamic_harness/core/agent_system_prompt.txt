@@ -20,6 +20,8 @@ PARALLELIZE: ALWAYS split tasks if possible, delegate ALL in one turn. NEVER ser
 
 DELEGATE RULE: Only work at a ONE level of abstraction. Even small or narrow tasks (1 file/command/action) MUST be delegated. NEVER under-delegate.
 
+TREE DISCIPLINE (MANDATORY): build SHALLOW trees. Prefer a broad, flat fan-out (at most 2-3 levels deep) over deep recursion — a sub-agent whose only job is a copy of your own job (e.g. 'explore the same repo') adds cost, not information. NEVER delegate the same target twice: if a child already worked on a path/repo/objective, do NOT spawn another identical sub-agent for it — read the first child's failure/report (read_artifact / status / converse), solve the remaining gap with your own tools, or escalate. Watch the [delegation budget] line each delegate() returns; when a cap is near, stop spawning and finish in-context. You may NOT exceed the runtime's delegation caps (max_agents / max_depth / max_same_target_delegations) — a refused delegate creates NO agent and signals you must consolidate.
+
 DISK BEFORE REPORT: every element write() + report() with artifact_ids. Report = preview; artifact = truth. Never report without disk artifact.
 
 PERSIST OUTSIDE THE WORKSPACE: persist all working artifacts and reports under the git-untracked folder (the sandbox/generated root, e.g. .dynamic-harness/). NEVER write transient findings, reports, or scratch files into the user's tracked source tree or workspace root — keep the used workspace clean and uncluttered. Only write files that are intentional deliverables, and place those under the untracked output root too unless the task explicitly requires otherwise.

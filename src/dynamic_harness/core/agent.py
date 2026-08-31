@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-import re
 import time
 from collections import deque
 from difflib import SequenceMatcher
@@ -21,6 +20,7 @@ from openai import (
 
 from .context import AgentContext
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
+from .spawn_limits import DelegationLimit, delegate_target_signature
 from .telemetry import Telemetry
 from ..llm.provider import LLMConfig
 from .tools.registry import ToolResult
@@ -225,6 +225,16 @@ class Agent:
         # force-fails once cumulative prompt+completion usage exceeds it, and the
         # cap is surfaced to the agent in its static budget guidance.
         self.max_agent_tokens: int | None = None
+
+        # Spawn-cap accounting, populated by Runtime.delegate():
+        # - `_depth`        : this agent's tree depth (root = 0).
+        # - `_spawn_ledger` : per-lineage share re-delegation counter (the same
+        #   object is inherited by every descendant, so the same-target cap is
+        #   lineage-scoped and survives self-heal restarts).
+        # - `_spawn_warning_left` : budget for near-cap [notice] injections.
+        self._depth: int = 0
+        self._spawn_ledger: Any = None
+        self._spawn_warning_left: int = 0
 
         self.context = AgentContext(
             active_turn_window=active_turn_window,
@@ -853,14 +863,15 @@ class Agent:
         """Normalized key for a delegate call, keyed on the referenced path(s).
 
         Catches the failure mode where an orchestrator re-reads *the same file*
-        by spinning a fresh sub-agent each time with superficially different
-        wording (e.g. 'read X verbatim' → 'read X from offset N' → ...).
+        (or re-explores *the same directory*) by spinning a fresh sub-agent each
+        time with superficially different wording (e.g. 'read X verbatim' →
+        'read X from offset N' → ...). Delegates to the shared
+        ``delegate_target_signature`` (also used by the runtime's same-target
+        spawn cap) so both in-context loop detection and the lineage-wide cap
+        agree on the signature.
         """
         description = str(arguments.get("description", ""))
-        paths = sorted(set(
-            p for p in re.findall(r"[\w./\-]+\.(?:md|txt|py|json|yaml|yml|toml|log)", description)
-        ))
-        return "|".join(paths) if paths else description.strip()
+        return delegate_target_signature(description)
 
     @staticmethod
     def _normalize_tool_signature(name: str, arguments: dict[str, Any]) -> str:
@@ -1183,6 +1194,66 @@ class Agent:
         ))
         self.context.append({"role": "user", "content": note})
 
+    def _maybe_warn_spawn_limits(self) -> None:
+        """Inject ONE non-fatal notice when a delegation cap is nearly exhausted.
+
+        Mirrors ``_maybe_warn_iterations_low`` / ``_maybe_warn_near_identical``:
+        tail-append-only, fires at most ``_spawn_warning_left`` times total, and
+        never fails the run. The notice lists which cap is near its limit and
+        tells the agent to consolidate (finish in-context / verify existing
+        children / escalate) before the hard refusal kicks in.
+        """
+        if self._spawn_warning_left <= 0:
+            return
+        runtime = self._runtime
+        if runtime is None:
+            return
+        warnings: list[str] = []
+        usage = runtime.spawn_usage(self)
+        max_agents = usage.get("max_agents")
+        if max_agents:
+            used = usage["agents"]
+            if used and used >= max_agents * 0.8:
+                warnings.append(f"total agents {used}/{max_agents}")
+        max_depth = usage.get("max_depth")
+        if max_depth:
+            if self._depth >= max_depth * 0.8:
+                warnings.append(f"tree depth {self._depth}/{max_depth}")
+        max_same = usage.get("max_same_target")
+        if max_same:
+            for t in (usage.get("top_same_targets") or []):
+                if t["count"] >= max_same * 0.8:
+                    warnings.append(
+                        f"target '{t['target'][:50]}' "
+                        f"delegated {t['count']}/{max_same} times"
+                    )
+                    break
+        if not warnings:
+            return
+        self._spawn_warning_left -= 1
+
+        note = (
+            "You are approaching the delegation caps: "
+            + ", ".join(warnings)
+            + ". 80% or more of a cap is used. Do NOT keep spawning sub-agents: "
+            "stop expanding the tree, verify the children you already have, "
+            "finish what is naturally closable in-context, return the remainder "
+            "to your parent, and report / escalate / fail. A further refusal "
+            "will NOT create an agent — it will only come back as an error."
+        )
+
+        self._event_bus.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.SAFETY_WARNING,
+            data={
+                "warning_type": "spawn_limits_near_cap",
+                "usage": usage,
+                "warnings": warnings,
+                "attempts_remaining": self._spawn_warning_left,
+            },
+        ))
+        self.context.append({"role": "user", "content": note})
+
     def submit_input(self, message: str) -> None:
         """Queue a mid-run user message for this agent.
 
@@ -1266,6 +1337,7 @@ class Agent:
             # next turn sees it without breaking the cached prompt prefix.
             self._maybe_nudge_delegation()
             self._maybe_warn_iterations_low()
+            self._maybe_warn_spawn_limits()
             self.persist_checkpoint()
 
     async def _gather_deferred_and_finalize(
@@ -1581,6 +1653,38 @@ class Agent:
             "partial_data": self._context_tail(),
         }
 
+    def _delegate_budget_line(self) -> str:
+        """Compact delegation-cap status appended to every delegate() result.
+
+        Lets the model self-regulate BEFORE a refusal: it sees how many agents
+        have been spawned (vs ``safety.max_agents``), its tree depth (vs
+        ``safety.max_depth``), and the most re-delegated target along its lineage
+        (vs ``safety.max_same_target_delegations``). Cf. the non-fatal
+        ``_maybe_warn_spawn_limits`` notice that fires at ~80% of a cap.
+        """
+        try:
+            usage = self._runtime.spawn_usage(self)
+        except Exception:
+            return ""
+        parts = []
+        max_agents = usage.get("max_agents")
+        if max_agents:
+            parts.append(f"agents {usage['agents']}/{max_agents}")
+        max_depth = usage.get("max_depth")
+        if max_depth:
+            parts.append(f"depth {usage['depth']}/{max_depth}")
+        max_same = usage.get("max_same_target")
+        if max_same and usage.get("top_same_targets"):
+            top = usage["top_same_targets"][0]
+            parts.append(
+                f"top repeated target '{top['target'][:40]}' "
+                f"{top['count']}/{max_same}"
+            )
+        return (
+            f"[delegation budget] {'; '.join(parts) or 'uncapped'} — stop "
+            "spawning and finish in-context / escalate as you near any cap."
+        )
+
     async def run_delegate_tool(
         self,
         description: str,
@@ -1607,7 +1711,37 @@ class Agent:
                 "error": f"unknown agent_type '{agent_type}'. "
                         f"Registered custom classes: {known or '(none)'}",
             }, indent=2)
-        child = self.delegate(description, agent_type=agent_type, role=role, system_prompt=system_prompt)
+        try:
+            child = self.delegate(
+                description, agent_type=agent_type, role=role, system_prompt=system_prompt
+            )
+        except DelegationLimit as exc:
+            # A spawn cap refused the delegation: no agent was created. Surface
+            # the refusal + remaining budget to the model so it finishes
+            # in-context / verifies what it has / escalates, instead of retrying
+            # the same refused spawn forever.
+            self._event_bus.emit_activity(ActivityEvent(
+                agent_id=self.id,
+                event_type=ActivityEventType.SAFETY_WARNING,
+                data={
+                    "warning_type": "delegation_refused",
+                    "reason": exc.reason,
+                    "usage": self._runtime.spawn_usage(self),
+                },
+            ))
+            return json.dumps({
+                "child_id": None,
+                "status": "refused",
+                "error": exc.reason,
+                "suggestion": (
+                    "No sub-agent was created. Either solve this unit of work "
+                    "in-context with your own tools, read/verify children you "
+                    "already delegated, return the remaining work to your parent, "
+                    "or escalate — but do NOT call delegate() with the same "
+                    "target again."
+                ),
+                "budget": self._delegate_budget_line(),
+            }, indent=2)
         self.emit_activity(ActivityEvent(
             agent_id=self.id,
             event_type=ActivityEventType.DELEGATION_START,
@@ -1622,16 +1756,25 @@ class Agent:
         self._runtime.set_agent_run_task(child.id, task)
         if self.stream_children:
             self._stream_pending[tool_call_id] = (tool_call_id, child, task)
-            return json.dumps({"child_id": child.id, "status": "running"}, indent=2)
+            return json.dumps({
+                "child_id": child.id,
+                "status": "running",
+                "budget": self._delegate_budget_line(),
+            }, indent=2)
         if self._deferred_delegates is not None:
             self._deferred_delegates.append((tool_call_id, child, task))
-            return json.dumps({"child_id": child.id, "status": "pending"}, indent=2)
+            return json.dumps({
+                "child_id": child.id,
+                "status": "pending",
+                "budget": self._delegate_budget_line(),
+            }, indent=2)
         await task
         if not self._runtime._has_deliverable(child):
             child = await self._runtime._recover(child)
-        result = self._format_delegate_result(child)
+        result = json.loads(self._format_delegate_result(child))
+        result["budget"] = self._delegate_budget_line()
         child.collect_garbage()
-        return result
+        return json.dumps(result, indent=2)
 
     def report(self, payload: ReportPayload) -> None:
         if self.stream_children:
@@ -1798,18 +1941,25 @@ class Agent:
                     },
                 ))
                 fresh = self._runtime._fresh_restart(target, note=note_text or None)
-                fresh_task = asyncio.create_task(fresh.run())
-                self._runtime.track_agent_task(fresh_task)
-                self._runtime.set_agent_run_task(fresh.id, fresh_task)
-                try:
-                    await fresh_task
-                except Exception as exc:
-                    failures.append(f"fresh worker errored: {exc}")
-                healed = (
-                    fresh.last_report is not None
-                    and self._runtime._has_deliverable(fresh)
-                )
-                effective = fresh
+                if fresh is None:
+                    failures.append(
+                        "fresh worker refused: a delegation cap "
+                        "(max_agents / max_depth / max_same_target_delegations) "
+                        "was reached — no new agent was spawned"
+                    )
+                else:
+                    fresh_task = asyncio.create_task(fresh.run())
+                    self._runtime.track_agent_task(fresh_task)
+                    self._runtime.set_agent_run_task(fresh.id, fresh_task)
+                    try:
+                        await fresh_task
+                    except Exception as exc:
+                        failures.append(f"fresh worker errored: {exc}")
+                    healed = (
+                        fresh.last_report is not None
+                        and self._runtime._has_deliverable(fresh)
+                    )
+                    effective = fresh
             else:
                 failures.append(
                     "fresh budget exhausted "

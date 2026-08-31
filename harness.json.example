@@ -12,7 +12,11 @@
     "max_iterations": 500,
     "repeated_call_limit": 4,
     "timeout_seconds": 7200,
-    "disable_root_timeout": true
+    "disable_root_timeout": true,
+    "max_agents": 300,
+    "max_depth": 15,
+    "max_same_target_delegations": 8,
+    "spawn_limit_warning_attempts": 2
   },
   "agent": {
     "environment_notes": [

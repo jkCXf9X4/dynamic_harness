@@ -124,6 +124,16 @@ task, but:
 This reconciles with disposable-worker economics: freshness fixes rot, disk
 preserves partial progress. Budget: one retry; a second failure escalates.
 
+A fresh worker spawn goes through the same `Runtime.delegate()` choke point as
+every other agent, so it is bounded by the **delegation caps**
+(`safety.max_agents` / `safety.max_depth` / `safety.max_same_target_delegations`).
+When a cap refuses the spawn — for example the lineage has already re-delegated
+the same target up to `max_same_target_delegations`, or the run has hit
+`max_agents` — `_fresh_restart` emits a `fresh_refused` self-heal event and
+leaves the failed agent in place (bounded out) rather than creating an agent
+that should never exist. The parent sees the failed child via `status`/`resume`
+and decides whether to fold its partial work in manually or escalate.
+
 ### Layer 4 — Escalate
 
 Structural or repeated failure → escalate to the parent / caller. Never grind.

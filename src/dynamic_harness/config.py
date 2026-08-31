@@ -118,6 +118,39 @@ class SafetyConfig(BaseModel):
                     "as its live token budget. The default per-agent guidance (when no "
                     "cap is configured) recommends staying under ~50,000 total tokens for best performance.",
     )
+    max_agents: int = Field(
+        default=200, ge=1,
+        description="Hard cap on the number of agents one runtime may spawn per run "
+                    "(root included), before the delegate tool refuses further "
+                    "delegations. Guards against recursive / runaway delegation trees "
+                    "(e.g. an orchestrator that keeps re-delegating 'explore the same "
+                    "repo' one level deeper). A refused delegation never creates an "
+                    "agent: the model sees the refusal and must finish in-context, "
+                    "report, or escalate.",
+    )
+    max_depth: int = Field(
+        default=15, ge=1,
+        description="Hard cap on tree depth (root = 0, its children 1, ...). "
+                    "Delegating past this depth is refused. Keeps runaway recursive "
+                    "trees bounded even when the total agent count is not the problem.",
+    )
+    max_same_target_delegations: int = Field(
+        default=7, ge=1,
+        description="Per-lineage cap on delegations aimed at the SAME target "
+                    "(normalized file/directory path(s) in the description). The "
+                    "counter is shared across an entire family (root → all "
+                    "descendants), so re-spawning the same 'explore X / read X' "
+                    "sub-agent over and over — including across self-heal fresh "
+                    "restarts — trips this cap and is refused at the runtime choke "
+                    "point.",
+    )
+    spawn_limit_warning_attempts: int = Field(
+        default=2, ge=0,
+        description="How many times a non-fatal 'you are near the delegation caps' "
+                    "notice may be injected before a cap is hit. The notice fires "
+                    "once per cap when usage reaches 80% of that cap. 0 disables "
+                    "the feature entirely.",
+    )
 
 
 class SelfHealConfig(BaseModel):

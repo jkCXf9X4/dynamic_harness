@@ -150,3 +150,26 @@ Existing reports and artifacts may be available under .dynamic-harness/ that cou
 > execution for live status. See docs/requirements.md (FR-3.5).
 
 I would always have the option to insert text, if its busy the the message should be queued, if the top agent is waiting then the new input should be applied. this should also enable inserting commands such as /tree or similar to get the running status during execution 
+
+
+--- 
+
+When an agent gets close to its iteration limit, ~50 left - lets inject a hard message that the iterations are running out and that the agent should finish off its tasks and return remaining items and relevant information to the parent to decide what is reasonable to finish off in other tasks
+
+---
+
+similar command failure that leads to agent termination, is a warning message injected to the agent before the failure occurs to enable potential recovery?
+
+also the 
+
+---
+
+Im having problems with bash commands not completing and killing the agents by timing out
+
+
+---
+
+can we utilie external agents for single question context?
+would this be a gain? where should it best be used?
+we can ask external agents if they think that delegation is needed without the polluting context
+

@@ -14,6 +14,11 @@ from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
 from .references import discover_references, render_reference_index
+from .spawn_limits import (
+    DelegationLimit,
+    SpawnLedger,
+    delegate_target_signature,
+)
 from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
 from .task import ActivityEvent, ActivityEventType, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
@@ -128,6 +133,16 @@ class Runtime:
         self._self_heal_max_resumes = config.self_heal.max_resumes if config else 1
         self._self_heal_max_fresh = config.self_heal.max_fresh_retries if config else 1
         self._heal_counts: dict[str, dict[str, int]] = {}
+        # Delegation / spawn caps (A: total agents, B: tree depth, C: same-target
+        # re-delegation). Enforced at the single choke point Runtime.delegate().
+        self._max_agents: int | None = (config.safety.max_agents if config else 200) or None
+        self._max_depth: int | None = (config.safety.max_depth if config else 25) or None
+        self._max_same_target: int | None = (
+            config.safety.max_same_target_delegations if config else 15
+        ) or None
+        self._spawn_warning_attempts: int = (
+            config.safety.spawn_limit_warning_attempts if config else 2
+        )
         refs_index = _build_reference_index(config)
         notes = list(config.agent.environment_notes if config else [])
         if refs_index:
@@ -458,7 +473,13 @@ class Runtime:
         """Spawn a fresh worker over the same task, carrying the failure reason.
 
         ``note`` (optional) appends an extra corrective instruction from the
-        caller (a parent's ``resume`` tool), folded in after the reason."""
+        caller (a parent's ``resume`` tool), folded in after the reason.
+
+        Returns the fresh worker, or ``None`` when a delegation cap
+        (``safety.max_agents`` / ``max_depth`` / ``max_same_target_delegations``)
+        refuses the spawn — the failed agent is then left in place (bounded out)
+        rather than spawning an agent that should never exist.
+        """
         task = agent.task
         if agent.last_failure:
             reason = agent.last_failure.error or "the prior attempt failed"
@@ -490,7 +511,16 @@ class Runtime:
             metadata=dict(task.metadata),
             parent_id=task.parent_id,
         )
-        fresh = self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)
+        try:
+            fresh = self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)
+        except DelegationLimit as exc:
+            self._emit_heal(agent, "fresh_refused", self._diagnose(agent), 0)
+            self.event_bus.emit_activity(ActivityEvent(
+                agent_id=agent.id,
+                event_type=ActivityEventType.SAFETY_WARNING,
+                data={"warning_type": "delegation_refused", "reason": exc.reason},
+            ))
+            return None
         outs = getattr(agent, "_expected_outputs", None)
         fresh._expected_outputs = list(outs) if outs else None
         return fresh
@@ -538,6 +568,10 @@ class Runtime:
             counts["fresh"] += 1
             self._emit_heal(agent, "fresh", diagnosis, counts["fresh"])
             fresh = self._fresh_restart(agent)
+            if fresh is None:
+                # A delegation cap refused the spawn — bounded out. Leave the
+                # failed agent in place for the parent to inspect/resume.
+                return agent
             try:
                 await fresh.run()
             except Exception:
@@ -568,6 +602,43 @@ class Runtime:
             None if (parent is None and self._disable_root_timeout)
             else self._safety_timeout_seconds
         )
+        # -- spawn caps ---------------------------------------------------
+        # Enforced BEFORE the agent is constructed. A refused delegation must
+        # never add to `_agents`/`_task_graph`; callers (the delegate tool and
+        # self-heal) turn the exception into guidance to the model/parent.
+        depth = (parent._depth + 1) if parent is not None else 0
+        ledger = (
+            parent._spawn_ledger
+            if parent is not None and parent._spawn_ledger is not None
+            else SpawnLedger()
+        )
+        if self._max_agents is not None and len(self._agents) >= self._max_agents:
+            raise DelegationLimit(
+                f"agent limit reached: {self._max_agents} agents have been spawned "
+                f"this run. Do NOT delegate more work — finish whatever is "
+                f"naturally closable in-context, return remaining items to your "
+                f"parent, and report/escalate/fail."
+            )
+        if self._max_depth is not None and depth > self._max_depth:
+            raise DelegationLimit(
+                f"tree depth limit reached: this delegation would be at depth "
+                f"{depth} (max {self._max_depth}). The task hierarchy is too deep — "
+                f"do NOT recurse further; solve the remaining work in-context, "
+                f"return it to your parent, or escalate."
+            )
+        if self._max_same_target is not None:
+            sig = delegate_target_signature(task.description)
+            if ledger.count(sig) >= self._max_same_target:
+                raise DelegationLimit(
+                    f"target delegation limit reached: '{sig}' has already been "
+                    f"delegated {ledger.count(sig)} times along this lineage "
+                    f"(max {self._max_same_target}). Repeatedly re-delegating the "
+                    f"same target returns no new information and looks like a loop. "
+                    f"Verify the existing child's failure/report, solve it "
+                    f"in-context, or escalate — do NOT spawn another identical "
+                    f"sub-agent."
+                )
+            ledger.record(sig)
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
             agent = cls(
@@ -607,6 +678,11 @@ class Runtime:
         agent._call_timeout_seconds = self._call_timeout_seconds
         agent.set_environment_info(self._environment_info)
         agent.agent_type = agent_type
+        # Spawn-cap accounting: depth is per-agent; the ledger (and the warning
+        # budget for its caps) is shared down the whole lineage.
+        agent._depth = depth
+        agent._spawn_ledger = ledger
+        agent._spawn_warning_left = int(self._spawn_warning_attempts)
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:
@@ -716,6 +792,29 @@ class Runtime:
 
     def agent_count(self) -> int:
         return len(self._agents)
+
+    def spawn_usage(self, agent: Agent | None = None) -> dict[str, Any]:
+        """Live delegation-cap accounting for the soft-warning / budget line.
+
+        Returns global usage (total spawned vs ``max_agents``) plus, when an
+        agent is given, that agent's depth vs ``max_depth`` and its lineage's
+        same-target counts vs ``max_same_target_delegations``. Used by the
+        delegate tool's budget line and the near-cap notices.
+        """
+        usage: dict[str, Any] = {
+            "agents": len(self._agents),
+            "max_agents": self._max_agents,
+        }
+        if agent is not None:
+            usage["depth"] = agent._depth
+            usage["max_depth"] = self._max_depth
+            ledger: SpawnLedger = agent._spawn_ledger or SpawnLedger()
+            usage["max_same_target"] = self._max_same_target
+            usage["top_same_targets"] = [
+                {"target": sig, "count": cnt}
+                for sig, cnt in ledger.top_targets()
+            ]
+        return usage
 
     def collect_garbage(
         self, agent_id: str | None = None, *, preserve_active_root: bool = True

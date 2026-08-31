@@ -312,6 +312,12 @@ All safety mechanisms are in `Agent._run_loop()`:
 5. **Context observation:** Kept static/cache-friendly — agents read their own live turn count, message count, and token estimates on demand via the `usage` tool instead of a changing per-turn message.
 6. **Compress tool:** LLM can compress its own context when past ~50 messages.
 7. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
+8. **Delegation / spawn caps** (`Runtime.delegate()` copies, so every spawn — roots, children, self-heal fresh restarts — passes through the same gate):
+   - `safety.max_agents` (default 200): total agents per runtime run. Reached → every further `delegate` is **refused** (never creates an agent).
+   - `safety.max_depth` (default 25): tree depth; root = 0. Delegating past it is refused.
+   - `safety.max_same_target_delegations` (default 15): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (`delegate_target_signature` in `core/spawn_limits.py`), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it.
+   - Refusals raise `DelegationLimit`; the `delegate` tool surfaces them to the model as a `status: refused` tool result (with a `[delegation budget]` line) plus a `safety_warning` activity. Every delegate result carries that budget line (agents spawned/depth/repeated target) so the model self-regulates.
+   - Non-fatal `[notice]` injected when any cap is ≥80% used (`safety.spawn_limit_warning_attempts`, default 2).
 
 ## Process (CLI / programmatic)
 
