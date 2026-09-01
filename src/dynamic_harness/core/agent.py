@@ -92,6 +92,12 @@ class Agent:
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
         repeated_recovery_attempts: int = 1,
+        # Read-only monitoring tools excluded from repeated-call loop detection
+        # (status / usage). These are cheap live observations whose outputs
+        # change as state changes — a parent polling its running children is
+        # waiting, not looping. A turn composed ONLY of these tools is not
+        # counted toward loop detection at all.
+        repeated_call_exempt_tools: list[str] | None = None,
         safety_timeout_seconds: float | None = None,
         active_turn_window: int = 50,
         stream_children: bool = False,
@@ -136,6 +142,11 @@ class Agent:
         # Remaining chances to nudge a looping agent out of its rut before
         # repeated-call detection force-fails it (0 = fail on first detection).
         self._repeated_recovery_left = repeated_recovery_attempts
+        self._repeated_call_exempt_tools: tuple[str, ...] = tuple(
+            repeated_call_exempt_tools
+            if repeated_call_exempt_tools is not None
+            else ("status", "usage")
+        )
         self._safety_timeout_seconds = safety_timeout_seconds
         # Hard total-request deadline per LLM call (llm.call_timeout_seconds),
         # enforced here via asyncio.wait_for. Distinct from the run-level
@@ -990,11 +1001,24 @@ class Agent:
              small sliding window -- catches alternation between two near-
              identical command variants (e.g. grep A vs grep A+B).
           3. Repeated delegation aimed at the same target path.
+
+        Tools in ``_repeated_call_exempt_tools`` (pure monitoring: status,
+        usage) are filtered out of every signature before detection. Their
+        outputs change as live state changes, so repeating them while waiting
+        on children is legitimate. A turn composed ONLY of exempt tools is not
+        work and is not counted toward loop detection at all.
         """
+        exempt = self._repeated_call_exempt_tools
         batch_sig = tuple(
             (tc.name, json.dumps(tc.arguments, sort_keys=True))
             for tc in response.tool_calls
+            if tc.name not in exempt
         )
+        # Pure-monitoring turn (e.g. a parent polling its children's status):
+        # nothing to detect, and it must not poison the deques for the next
+        # real-work turn.
+        if not batch_sig:
+            return False
         self._recent_batches.append(batch_sig)
 
         if (
@@ -1002,7 +1026,7 @@ class Agent:
             and all(sig == batch_sig for sig in self._recent_batches)
         ):
             return self._loop_detected("Repeated identical tool calls",
-                                       response.tool_calls[0].name,
+                                       next(t[0] for t in batch_sig),
                                        self.repeated_call_limit)
 
         # Sliding-window frequency check over individual normalized calls.
@@ -1011,6 +1035,8 @@ class Agent:
         # with a sibling variant.
         limit = self.repeated_call_limit
         for tc in response.tool_calls:
+            if tc.name in exempt:
+                continue
             sig = self._normalize_tool_signature(tc.name, tc.arguments)
             self._recent_tool_signatures.append(sig)
         if len(self._recent_tool_signatures) >= limit:

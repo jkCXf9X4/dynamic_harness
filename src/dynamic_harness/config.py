@@ -43,6 +43,18 @@ class SafetyConfig(BaseModel):
                     "force-fails it. 0 preserves the old behavior of failing "
                     "immediately on first detection.",
     )
+    repeated_call_exempt_tools: list[str] = Field(
+        default_factory=lambda: ["status", "usage"],
+        description="Tool names that repeated-call loop detection treats as pure "
+                    "monitoring and ignores entirely. These are cheap read-only "
+                    "observations whose outputs change as live state changes (a "
+                    "child's status/heal-count, the agent's own token spend); a "
+                    "parent polling them while it waits on slow or self-healing "
+                    "children is the intended pattern, not a stuck loop. A turn "
+                    "made up solely of these tools is not counted toward loop "
+                    "detection (genuinely stuck agents are still bounded by "
+                    "max_iterations / max_agent_tokens / safety.timeout_seconds).",
+    )
     near_identical_threshold: int = Field(
         default=3, ge=1,
         description="Soft warning threshold: how many near-identical tool calls "

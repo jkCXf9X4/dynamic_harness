@@ -92,6 +92,11 @@ class Runtime:
         self._repeated_recovery_attempts = (
             config.safety.repeated_recovery_attempts if config else 1
         )
+        self._repeated_call_exempt_tools = (
+            list(config.safety.repeated_call_exempt_tools)
+            if config
+            else ["status", "usage"]
+        )
         self._near_identical_threshold = (
             config.safety.near_identical_threshold if config else 3
         )
@@ -646,6 +651,7 @@ class Runtime:
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
                 repeated_recovery_attempts=self._repeated_recovery_attempts,
+                repeated_call_exempt_tools=self._repeated_call_exempt_tools,
                 safety_timeout_seconds=timeout,
                 active_turn_window=self._active_turn_window,
                 stream_children=self._stream_children,
@@ -663,6 +669,7 @@ class Runtime:
                 safety_max_iterations=self._safety_max_iterations,
                 repeated_call_limit=self._repeated_call_limit,
                 repeated_recovery_attempts=self._repeated_recovery_attempts,
+                repeated_call_exempt_tools=self._repeated_call_exempt_tools,
                 safety_timeout_seconds=timeout,
                 active_turn_window=self._active_turn_window,
                 stream_children=self._stream_children,

@@ -186,6 +186,10 @@ if self._iteration > self._safety_max_iterations:  # default: 500
 # 2. Repeated identical tool calls
 # If 5 identical batches of tool calls in a row:
 self.fail("Repeated identical tool calls 5 times in a row...")
+
+# Pure monitoring tools (status / usage) are exempt: a parent polling its
+# running children's status while they self-heal is waiting, not looping.
+# Turns composed solely of those tools are not counted toward loop detection.
 ```
 
 ### 4. Post-Termination

@@ -55,7 +55,7 @@ def _make_agent(
     **kwargs,
 ) -> Agent:
     agent = Agent(
-        "test-agent", task, runtime,
+        task.id, task, runtime,
         safety_max_iterations=safety_max_iterations,
         repeated_call_limit=repeated_call_limit,
         repeated_recovery_attempts=repeated_recovery_attempts,
@@ -197,6 +197,123 @@ async def test_agent_recovers_after_loop_nudge(runtime: Runtime) -> None:
 
     assert root.task.status.value == "completed"
     assert root._repeated_calls_detected is True
+
+
+@pytest.mark.asyncio
+async def test_status_polling_children_is_not_a_loop(runtime: Runtime) -> None:
+    """End-to-end mirror of the reported bug: the top orchestrator polls the
+    status of two still-running children (which are stuck retrying a provider
+    rate-limit) over and over, then finalizes. Read-only status polls are pure
+    monitoring — exempt from repeated-call loop detection — so the run must
+    complete instead of being force-failed."""
+    class StatusPollingLLM(LLMProvider):
+        def __init__(self) -> None:
+            self.polls = 0
+
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            self.polls += 1
+            if self.polls > 6:
+                return ToolCallResponse(
+                    content="children still retrying; finalizing remaining deliverables",
+                    model="mock",
+                )
+            return ToolCallResponse(
+                content=None, model="mock",
+                tool_calls=[
+                    ToolCallData(id=f"s{self.polls}a", name="status",
+                                 arguments={"agent_id": "childa1"}),
+                    ToolCallData(id=f"s{self.polls}b", name="status",
+                                 arguments={"agent_id": "childb2"}),
+                ],
+            )
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    # The LLM must be set before agents are constructed (Agent caches _llm).
+    runtime.set_llm(StatusPollingLLM())
+
+    root = _make_agent(
+        runtime, Task(description="orchestrate", id="rootabc"),
+        safety_max_iterations=100, repeated_call_limit=4,
+        repeated_recovery_attempts=0,
+    )
+    child_a = _make_agent(runtime, Task(description="child a", id="childa1"))
+    child_b = _make_agent(runtime, Task(description="child b", id="childb2"))
+    runtime._task_graph[root.id] = [child_a.id, child_b.id]
+    child_a.parent = root
+    child_b.parent = root
+    root.children = [child_a, child_b]
+
+    await root.run()
+
+    assert root.task.status.value == "completed"
+    assert root._repeated_calls_detected is False
+
+
+def test_status_polling_turns_do_not_build_loop_signatures(runtime: Runtime) -> None:
+    """Unit-level: a turn made up solely of exempt monitoring tools (status) is
+    not counted toward any loop signature, even when every batch is byte-identical."""
+    root = _make_agent(runtime, Task(description="orchestrate"),
+                       repeated_call_limit=3, repeated_recovery_attempts=0)
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    def resp(i: int) -> ToolCallResponse:
+        return ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[
+                ToolCallData(id=f"s{i}a", name="status",
+                             arguments={"agent_id": "2766d2ea0c14"}),
+                ToolCallData(id=f"s{i}b", name="status",
+                             arguments={"agent_id": "845ab7ca885e"}),
+            ],
+        )
+
+    for i in range(1, 9):
+        assert root._check_repeated_calls(resp(i)) is False
+    assert root.outcome.failure is None
+    assert root._repeated_calls_detected is False
+
+
+def test_real_work_loop_with_status_interleaved_still_detected(runtime: Runtime) -> None:
+    """Exempting monitoring tools must not weaken detection for REAL work: an
+    identical bash batch with a status poll slipped in is still a loop."""
+    root = _make_agent(runtime, Task(description="loop"),
+                       repeated_call_limit=3, repeated_recovery_attempts=0)
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    def resp(i: int) -> ToolCallResponse:
+        return ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[
+                ToolCallData(id=f"s{i}", name="status",
+                             arguments={"agent_id": "abc"}),
+                ToolCallData(id=f"b{i}", name="bash",
+                             arguments={"command": "ls -la"}),
+            ],
+        )
+
+    det = [root._check_repeated_calls(resp(i)) for i in range(1, 5)]
+    # Batch signature (status stripped) is the identical bash call each turn;
+    # with limit=3 the third identical batch trips detection.
+    assert det[0] is False and det[1] is False
+    assert det[2] is True
+
+
+def test_repeated_call_exempt_tools_wired_from_config(tmp_path) -> None:
+    cfg = HarnessConfig(safety=SafetyConfig(repeated_call_exempt_tools=["status"]))
+    rt = Runtime(
+        artifact_root=tmp_path / "artifacts",
+        repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    assert rt._repeated_call_exempt_tools == ["status"]
+    root = rt.delegate(Task(description="t"))
+    assert root._repeated_call_exempt_tools == ("status",)
 
 
 @pytest.mark.asyncio
