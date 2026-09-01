@@ -17,7 +17,7 @@
     "disable_root_timeout": true,
     "max_agents": 300,
     "max_depth": 15,
-    "max_same_target_delegations": 8,
+    "max_same_target_delegations": 0,
     "spawn_limit_warning_attempts": 2
   },
   "agent": {

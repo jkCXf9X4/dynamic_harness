@@ -329,9 +329,32 @@ async def await_tool(agent: Agent, description: str, tool_call_id: str) -> str:
 def test_safety_config_defaults() -> None:
     s = SafetyConfig()
     assert s.max_agents == 200
-    assert s.max_depth == 25
-    assert s.max_same_target_delegations == 15
+    assert s.max_depth == 15
+    assert s.max_same_target_delegations == 7
     assert s.spawn_limit_warning_attempts == 2
+
+
+def test_same_target_cap_disabled_at_zero(tmp) -> None:
+    runtime = make_runtime(tmp, max_same_target_delegations=0)
+    assert runtime._max_same_target is None
+
+    root = runtime.delegate(Task(description="parent"))
+    for i in range(10):
+        runtime.delegate(Task(description=f"explore /repo/shared pass {i}"), parent=root)
+    assert runtime.agent_count() == 11
+
+
+@pytest.mark.asyncio
+async def test_delegate_tool_allows_same_target_when_zero(tmp) -> None:
+    runtime = make_runtime(tmp, max_same_target_delegations=0)
+    runtime.register_agent_class("_OKChild", _OKChild)
+    root = runtime.delegate(Task(description="orchestrate"))
+    for i in range(10):
+        result = json.loads(
+            await await_tool(root, f"explore /repo/x pass {i}", tool_call_id=f"c{i}")
+        )
+        assert result["status"] != "refused"
+    assert runtime.agent_count() == 11
 
 
 def test_spawn_ledger_counts_by_signature() -> None:

@@ -147,14 +147,14 @@ class SafetyConfig(BaseModel):
                     "trees bounded even when the total agent count is not the problem.",
     )
     max_same_target_delegations: int = Field(
-        default=7, ge=1,
+        default=7, ge=0,
         description="Per-lineage cap on delegations aimed at the SAME target "
                     "(normalized file/directory path(s) in the description). The "
                     "counter is shared across an entire family (root → all "
                     "descendants), so re-spawning the same 'explore X / read X' "
                     "sub-agent over and over — including across self-heal fresh "
                     "restarts — trips this cap and is refused at the runtime choke "
-                    "point.",
+                    "point. None or 0 disables the cap.",
     )
     spawn_limit_warning_attempts: int = Field(
         default=2, ge=0,
