@@ -80,6 +80,10 @@ The config file is discovered automatically from `./harness.json` (CWD),
 `~/.config/dynamic-harness/harness.json` (XDG user-global), or explicitly via
 `--config path/to/harness.json`. If no file is found, defaults are used.
 
+Every setting — including all the safety, self-heal, and agent keys shown below and
+more — is documented in the [Configuration Reference](../api/config.md), with defaults
+and the `0`/`null` "cap disabled" convention.
+
 For OpenAI directly:
 
 ```bash

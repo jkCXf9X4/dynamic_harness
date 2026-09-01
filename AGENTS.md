@@ -122,6 +122,7 @@ docs/
 │   ├── tool_motivations.md   → Why each tool exists + how to choose between them
 │   └── guidelines.md         → Delegation / verification / stopping-conditions nuance
 ├── api/                      → Module-level API reference
+│   ├── config.md             → Every harness.json setting (defaults + 0/null "cap off" convention)
 ├── guides/                   → How-to guides for common workflows
 │   (performance-diagnostics.md → scaling profiler + methodology for slowdowns)
 ├── gap-analysis.md           → Evaluation: concept/use-case promises vs implementation (G1–G13)
@@ -315,7 +316,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 8. **Delegation / spawn caps** (`Runtime.delegate()` copies, so every spawn — roots, children, self-heal fresh restarts — passes through the same gate):
    - `safety.max_agents` (default 200): total agents per runtime run. Reached → every further `delegate` is **refused** (never creates an agent).
    - `safety.max_depth` (default 25): tree depth; root = 0. Delegating past it is refused.
-   - `safety.max_same_target_delegations` (default 15): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (`delegate_target_signature` in `core/spawn_limits.py`), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it.
+   - `safety.max_same_target_delegations` (default 7): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (`delegate_target_signature` in `core/spawn_limits.py`), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it. `0`/`null` disables the cap.
    - Refusals raise `DelegationLimit`; the `delegate` tool surfaces them to the model as a `status: refused` tool result (with a `[delegation budget]` line) plus a `safety_warning` activity. Every delegate result carries that budget line (agents spawned/depth/repeated target) so the model self-regulates.
    - Non-fatal `[notice]` injected when any cap is ≥80% used (`safety.spawn_limit_warning_attempts`, default 2).
 
