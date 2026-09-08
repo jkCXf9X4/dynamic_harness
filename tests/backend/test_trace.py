@@ -58,7 +58,7 @@ class TestTraceStore:
 
     def test_record_tool_call_and_result(self, trace: TraceStore) -> None:
         trace.record_tool_call("agent-1", "tc1", "read", {"path": "/foo"})
-        trace.record_tool_result("agent-1", "tc1", "read", "file contents here")
+        trace.record_tool_result("agent-1", "tc1", "read", "file contents here", result_id="abc123dead00")
 
         trace_file = trace.root / "agent-1" / "trace.jsonl"
         lines = trace_file.read_text().splitlines()
@@ -74,6 +74,7 @@ class TestTraceStore:
         assert result_entry["tool_call_id"] == "tc1"
         assert result_entry["content_preview"] == "file contents here"
         assert result_entry["content_length"] == 18
+        assert result_entry["result_id"] == "abc123dead00"
 
     def test_record_event(self, trace: TraceStore) -> None:
         trace.record_event("agent-1", "iteration", turn=5)

@@ -55,6 +55,7 @@ def _make_registry() -> ToolRegistry:
     reg = ToolRegistry()
     from dynamic_harness.core.tools.filesystem import grep as _tool_grep, read as _tool_read
     from dynamic_harness.core.tools.process import bash as _tool_bash
+    from dynamic_harness.core.tools.result_read import result_read as _tool_result_read
     reg.register(
         ToolDef(name="read", description="Read a file", input_schema={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
         _tool_read,
@@ -66,6 +67,10 @@ def _make_registry() -> ToolRegistry:
     reg.register(
         ToolDef(name="bash", description="Run command", input_schema={"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer"}}, "required": ["command"]}),
         _tool_bash,
+    )
+    reg.register(
+        ToolDef(name="result_read", description="Read cached result", input_schema={"type": "object", "properties": {"result_id": {"type": "string"}, "token_limit": {"type": "integer"}, "token_offset": {"type": "integer"}}, "required": ["result_id"]}),
+        _tool_result_read,
     )
     return reg
 
@@ -159,7 +164,110 @@ async def test_token_offset_on_bash(runtime: Runtime) -> None:
     assert first != second
 
 
-# ── OpenAPI schemas includes token_limit / token_offset ──────────────
+# ── result_read: read cached snapshots without re-running ────────────
+
+@pytest.mark.asyncio
+async def test_result_handle_pages_without_rerunning(runtime: Runtime) -> None:
+    """The producing bash command increments a counter file. Paging its
+    truncated snapshot via result_read must NOT re-run the command — the
+    counter proves it (each fresh bash call would bump it again)."""
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    probe = runtime.generated_root / "run_count.txt"
+    probe.write_text("0")
+
+    first = await reg.execute(
+        "bash", "tc1", agent=agent,
+        command=f"echo RUN >> {probe}; seq 1 50",
+        token_limit=2,
+    )
+    assert probe.read_text().count("RUN") == 1   # ran exactly once
+    assert first.result_id
+    assert "result_read(" in first.content
+    assert "token_offset" in first.content
+
+    # Page a later region of the SAME snapshot (line ~40 of `seq 1 50`).
+    page = await reg.execute(
+        "result_read", "tc2", agent=agent,
+        result_id=first.result_id, token_offset=38, token_limit=4,
+    )
+    assert page.content
+    assert probe.read_text().count("RUN") == 1   # result_read must NOT re-run bash
+    assert page.content.startswith("4") or "4" in page.content.split("\n")[0]
+
+    # Re-call bash WITHOUT result_id => fresh execution, counter increments.
+    await reg.execute(
+        "bash", "tc3", agent=agent,
+        command=f"echo RUN >> {probe}; seq 1 50",
+        token_limit=2,
+    )
+    assert probe.read_text().count("RUN") == 2
+
+
+@pytest.mark.asyncio
+async def test_result_handle_read_deleted_file_without_recxecution(runtime: Runtime) -> None:
+    """result_read must serve a cached snapshot even when the underlying file
+    was deleted — proof it never goes back to the tool/disk."""
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    f = runtime.generated_root / "doomed.txt"
+    f.write_text("A" * 400 + "B" * 400)
+    first = await reg.execute("read", "tc1", agent=agent, path=str(f), token_limit=10)
+    rid = first.result_id
+    assert rid
+    f.unlink()  # a fresh read would now fail
+    page = await reg.execute("result_read", "tc2", agent=agent, result_id=rid, token_offset=100)
+    assert page.content.startswith("B")  # 100*4 = 400 chars in -> B region
+
+
+@pytest.mark.asyncio
+async def test_result_read_unknown_handle_errors(runtime: Runtime) -> None:
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    result = await reg.execute("result_read", "tc1", agent=agent, result_id="nope-nope-nope")
+    assert "unknown result_id" in result.content
+
+
+@pytest.mark.asyncio
+async def test_mutating_tools_never_cached(runtime: Runtime) -> None:
+    from dynamic_harness.core.tools.filesystem import write as _tool_write
+
+    reg = _make_registry()
+    reg.register(
+        ToolDef(name="write", description="Write a file",
+                input_schema={"type": "object", "properties": {
+                    "path": {"type": "string"}, "content": {"type": "string"},
+                }, "required": ["path", "content"]}),
+        _tool_write,
+    )
+    agent = _make_agent(runtime, "test")
+    f = runtime.generated_root / "out.txt"
+    result = await reg.execute("write", "tc1", agent=agent, path=str(f), content="hi")
+    assert result.result_id is None
+    assert len(agent.result_store) == 0
+
+
+def test_result_store_bounded_and_clear(runtime: Runtime) -> None:
+    from dynamic_harness.core.result_store import ResultStore
+
+    store = ResultStore(max_entries=3)
+    handles = [store.store(f"content-{i}") for i in range(5)]
+    assert store.get(handles[0]) is None            # oldest evicted
+    assert store.get(handles[-1]) == "content-4"    # newest kept
+    assert handles[-1] in store                     # populated
+    store.clear()
+    assert len(store) == 0
+    assert store.get(handles[-1]) is None
+
+
+def test_collect_garbage_clears_result_store(runtime: Runtime) -> None:
+    """A terminal agent's result cache is reclaimed with its context."""
+    agent = _make_agent(runtime, "gc")
+    agent.result_store.store("x")
+    assert len(agent.result_store) == 1
+    agent.task.status = TaskStatus.completed
+    agent.collect_garbage()
+    assert len(agent.result_store) == 0
 
 def test_openai_schemas_include_token_params(runtime: Runtime) -> None:
     schemas = runtime.tool_registry.openai_schemas()

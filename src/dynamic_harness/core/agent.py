@@ -21,6 +21,7 @@ from openai import (
 
 from .context import AgentContext
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
+from .result_store import ResultStore
 from .spawn_limits import DelegationLimit, delegate_target_signature
 from .telemetry import Telemetry
 from ..llm.provider import LLMConfig
@@ -152,7 +153,7 @@ class Agent:
         self._repeated_call_exempt_tools: tuple[str, ...] = tuple(
             repeated_call_exempt_tools
             if repeated_call_exempt_tools is not None
-            else ("status", "usage")
+            else ("status", "usage", "result_read")
         )
         self._safety_timeout_seconds = safety_timeout_seconds
         # Hard total-request deadline per LLM call (llm.call_timeout_seconds),
@@ -286,6 +287,12 @@ class Agent:
         self._llm = runtime.provider
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
+        # Bounded, in-memory cache of full tool-result snapshots behind opaque
+        # handles. The read-only `result_read` tool pages them WITHOUT
+        # re-running the producing tool (slow bash/webfetch/grep especially).
+        # Memory-only and cleared when the context is reclaimed / run resets,
+        # so a resumed agent never serves a stale snapshot.
+        self.result_store = ResultStore()
         # Everything the run loop treats as a *side effect* — token usage,
         # JSONL tracing, activity events, checkpoint persistence — is owned by
         # this facade, so the loop stays a pure orchestrator and stores are
@@ -393,6 +400,7 @@ class Agent:
         self._recent_delegate_targets.clear()
         self._recent_near_identical.clear()
         self._near_identical_warned.clear()
+        self.result_store.clear()
         return True
 
     # -- context knobs -----------------------------------------------------
@@ -551,6 +559,7 @@ class Agent:
         self._recent_delegate_targets.clear()
         self._recent_near_identical.clear()
         self._near_identical_warned.clear()
+        self.result_store.clear()
         self._has_delegated = False
         self._delegate_nudge_left = self._delegate_nudge_attempts
         self._iteration_warning_left = self._iteration_warning_attempts
@@ -942,7 +951,7 @@ class Agent:
                     content=f"Error executing {tc.name}: {exc}",
                 )
             content = result.content or ""
-            self._telemetry.tool_finished(tc, content)
+            self._telemetry.tool_finished(tc, content, result_id=getattr(result, "result_id", None))
             results.append({
                 "role": "tool",
                 "tool_call_id": result.tool_call_id,

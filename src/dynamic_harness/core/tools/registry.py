@@ -29,6 +29,7 @@ ORCHESTRATOR_ALLOWED_TOOLS: frozenset[str] = frozenset({
     "report", "escalate", "fail",
     "compress", "prune", "restore",
     "plan", "checkpoint",
+    "result_read",
 })
 
 
@@ -44,10 +45,26 @@ def tools_for_role(role: str | None) -> frozenset[str] | None:
     return ROLE_TOOL_OVERRIDES.get(role)
 
 
+# Tools whose output is NEVER cached behind a result handle. These mutate
+# state, move execution, or drive control flow (or are views over other
+# results like result_read itself) — caching them would let a later
+# `result_read` resurrect a side effect or present a meaningless snapshot.
+NON_CACHEABLE_TOOLS: frozenset[str] = frozenset({
+    "write", "edit", "delegate", "report", "escalate", "fail", "kill", "ask",
+    "archive", "prune", "restore", "compress", "converse", "resume",
+    "result_read",
+})
+
+
 class ToolResult:
-    def __init__(self, tool_call_id: str, content: str) -> None:
+    def __init__(self, tool_call_id: str, content: str, result_id: str | None = None) -> None:
         self.tool_call_id = tool_call_id
         self.content = content
+        # Handle into the agent's ResultStore for the full (untruncated) output
+        # of this call, or None for tools that are never cached. Read-only:
+        # the `result_read` tool pages it; the model calls the work tool again
+        # to get a fresh result.
+        self.result_id = result_id
 
 
 class ToolRegistry:
@@ -87,6 +104,27 @@ class ToolRegistry:
         from ..tool_context import ToolContext
 
         ctx = agent if isinstance(agent, ToolContext) else ToolContext(agent)
+
+        if name == "result_read":
+            # `result_read` IS the paging mechanism: its token_offset/token_limit
+            # are its OWN parameters (they slice an existing snapshot), not the
+            # generic truncation knobs. Forward them untouched and return the
+            # tool's output verbatim — no snapshot, no re-slicing.
+            try:
+                content = await fn(
+                    ctx=ctx, token_limit=token_limit, token_offset=token_offset,
+                    **kwargs,
+                )
+            except Exception as e:
+                return ToolResult(
+                    tool_call_id=tool_call_id, content=f"Error executing {name}: {e}"
+                )
+            if content is None:
+                content = ""
+            elif not isinstance(content, str):
+                content = str(content)
+            return ToolResult(tool_call_id=tool_call_id, content=content)
+
         try:
             content = await fn(ctx=ctx, **kwargs)
         except Exception as e:
@@ -99,23 +137,44 @@ class ToolRegistry:
         elif not isinstance(content, str):
             content = str(content)
 
+        # Every cacheable tool's FULL output is snapshotted behind an opaque
+        # handle before any truncation, so the model can page later parts with
+        # the read-only `result_read` tool instead of re-running slow work.
+        cacheable = name not in NON_CACHEABLE_TOOLS
+        result_id: str | None = None
+        if cacheable:
+            result_id = ctx.result_store.store(content)
+
         char_limit = max(1, token_limit * 4)
         char_offset = max(0, token_offset * 4)
         total_chars = len(content)
         if char_offset >= total_chars:
-            return ToolResult(tool_call_id=tool_call_id, content="(offset beyond content length)")
+            hint = (
+                f" (result_id={result_id}; page with result_read "
+                "using a smaller token_offset)" if result_id else ""
+            )
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                content=f"(offset beyond content length){hint}",
+                result_id=result_id,
+            )
         content = content[char_offset:]
         if len(content) > char_limit:
             content = content[:char_limit]
-            if name == "bash":
-                # Bash output is truncated like a read: the model does NOT need
-                # to (and MUST not) re-wrap the command in sed/awk/head to see
-                # more — re-run the SAME command with a larger token_limit.
+            if result_id:
+                content += (
+                    f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
+                    f"Page without re-running: result_read(result_id=\"{result_id}\", "
+                    f"token_offset={token_offset + token_limit}). "
+                    f"Call {name} again for a fresh result. (more)"
+                )
+            elif name == "bash":
+                # Bash output (bash is non-cacheable only in the pathological
+                # case above; normally it IS cached) — keep a safe fallback.
                 content += (
                     f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
                     "To see more, re-run THIS command with a larger "
-                    f"token_limit (e.g. {max(token_limit * 2, 200)}) — do not wrap "
-                    "it in sed/awk/head, the truncation already pages it."
+                    f"token_limit (e.g. {max(token_limit * 2, 200)})."
                 )
             else:
                 content += (
@@ -123,7 +182,7 @@ class ToolRegistry:
                     f"Use token_limit={max(token_limit * 2, 200)} "
                     f"or token_offset={token_offset + token_limit} to see more)"
                 )
-        return ToolResult(tool_call_id=tool_call_id, content=content)
+        return ToolResult(tool_call_id=tool_call_id, content=content, result_id=result_id)
 
     def openai_schemas(self, role: str | None = None) -> list[dict]:
         allowed = tools_for_role(role)
@@ -133,14 +192,17 @@ class ToolRegistry:
                 continue
             schema = dict(td.input_schema)
             schema["properties"] = dict(schema.get("properties", {}))
-            schema["properties"]["token_limit"] = {
-                "type": "integer",
-                "description": "Max tokens to return (1 token ≈ 4 chars). Default 100.",
-            }
-            schema["properties"]["token_offset"] = {
-                "type": "integer",
-                "description": "Skip this many tokens from the start. Default 0.",
-            }
+            if td.name != "result_read":
+                # result_read declares its own token_offset/token_limit (they are
+                # its paging knobs, not the generic truncation knobs).
+                schema["properties"]["token_limit"] = {
+                    "type": "integer",
+                    "description": "Max tokens to return (1 token ≈ 4 chars). Default 100.",
+                }
+                schema["properties"]["token_offset"] = {
+                    "type": "integer",
+                    "description": "Skip this many tokens from the start. Default 0.",
+                }
             result.append({
                 "type": "function",
                 "function": {

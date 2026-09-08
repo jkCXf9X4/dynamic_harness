@@ -88,6 +88,18 @@ class ToolContext:
     def artifact_store(self) -> Any:
         return self._agent.artifact_store
 
+    @property
+    def result_store(self) -> Any:
+        """This agent's bounded cache of full tool-result snapshots.
+
+        Cacheable tool calls are stored here behind an opaque handle so the
+        read-only ``result_read`` tool can page them without re-running the
+        work (slow bash/webfetch/grep results especially). Memory-only and
+        per-agent; cleared when the agent's context is reclaimed or the run
+        resets, so a resumed agent never serves stale snapshots.
+        """
+        return self._agent.result_store
+
     def record_archived_artifact(self, artifact_id: str) -> None:
         """Track an artifact this agent archived mid-run (via the `archive` tool).
         These ids are linked into the agent's final report commit so temp/working

@@ -123,10 +123,10 @@ class Telemetry:
         if ts is not None:
             ts.record_tool_call(self._agent_id, tc.id, tc.name, tc.arguments)
 
-    def tool_finished(self, tc: ToolCallData, content: str) -> None:
+    def tool_finished(self, tc: ToolCallData, content: str, result_id: str | None = None) -> None:
         ts = self._trace_store
         if ts is not None:
-            ts.record_tool_result(self._agent_id, tc.id, tc.name, content)
+            ts.record_tool_result(self._agent_id, tc.id, tc.name, content, result_id=result_id)
         self._event_bus.emit_activity(ActivityEvent(
             agent_id=self._agent_id,
             event_type=ActivityEventType.TOOL_CALL_END,

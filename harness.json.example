@@ -11,8 +11,8 @@
   "safety": {
     "max_iterations": 400,
     "repeated_call_limit": 5,
-    "repeated_recovery_attempts": 1,
-    "repeated_call_exempt_tools": ["status", "usage"],
+    "repeated_recovery_attempts": 2,
+    "repeated_call_exempt_tools": ["status", "usage", "result_read"],
     "timeout_seconds": 7200,
     "disable_root_timeout": true,
     "max_agents": 300,

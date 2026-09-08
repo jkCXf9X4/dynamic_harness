@@ -69,7 +69,7 @@ src/dynamic_harness/
 │   ├── trace.py             → TraceStore (JSONL debug trace)
 │   ├── telemetry.py         → Telemetry (per-agent facade isolating the run loop from usage/trace/activity/checkpoint I/O)
 │   ├── checkpoint.py        → AgentCheckpoint + CheckpointStore (plan/progress persisted to JSON for resumability)
-│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 23 tools split by concern
+│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 25 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()
 │       ├── filesystem.py    → read, write, glob, grep, edit (+ sandbox helpers)
@@ -257,7 +257,7 @@ ReportPayload(
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 24 Built-in Tools
+## 25 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -287,6 +287,7 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 22 | `checkpoint` | `note: str` | No |
 | 23 | `usage` | *(none)* | No |
 | 24 | `archive` | `content?: str, path?: str, label?: str, summary?: str` | No |
+| 25 | `result_read` | `result_id: str, token_limit?: int, token_offset?: int` | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its
@@ -307,13 +308,15 @@ the immutable checkpoint, not only in agent memory.
 All safety mechanisms are in `Agent._run_loop()`:
 
 1. **Max iterations:** Default 500. Exceeding → force-fail with message.
-2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops). Pure monitoring tools (`safety.repeated_call_exempt_tools`, default `status`, `usage`) are excluded entirely — these are cheap read-only observations whose outputs change as live state changes, so a parent polling its running/self-healing children is waiting, not looping; a turn composed solely of them is not counted at all (genuinely stuck agents are still bounded by max_iterations / max_agent_tokens / timeout). **Near-identical warning + escalation:** when `<N` string-similar-but-not-identical `bash` commands recur inside a sliding window (`safety.near_identical_threshold`, default 3 in `near_identical_window` 6), a `[notice]` user message is injected telling the agent to use the `read` tool / raise `token_limit` / delegate / move on. Bash signatures are pagination-normalized (`sed -n 'A,Bp'` / `awk NR>=A&&NR<=B` / `head -N` collapse to a family) and *same-file overlapping ranges* are the primary repeat signal, so re-fetching the same lines through a different wrapper is caught while strictly-disjoint forward paging and different files stay silent. The budget (`safety.near_identical_warning_attempts`, default 2) is **per command family**, not global; a family that keeps re-reading the same material past its budget escalates into hard repeated-call detection (nudge via `safety.repeated_recovery_attempts`, default 2, then force-fail) instead of going silent. `token_offset`/`token_limit` are excluded from the signature so *read-style* paged reads are never flagged, and whitespace-only assistant responses are never counted as repeated text.
-3. **Wall-clock timeout:** Optional `safety_timeout_seconds` → force-fail when exceeded.
-4. **Token budget:** Optional `safety.max_agent_tokens` cap → force-fail when cumulative usage exceeds it.
-5. **Context observation:** Kept static/cache-friendly — agents read their own live turn count, message count, and token estimates on demand via the `usage` tool instead of a changing per-turn message.
-6. **Compress tool:** LLM can compress its own context when past ~50 messages.
-7. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
-8. **Delegation / spawn caps** (`Runtime.delegate()` copies, so every spawn — roots, children, self-heal fresh restarts — passes through the same gate):
+2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops). Pure monitoring tools (`safety.repeated_call_exempt_tools`, default `status`, `usage`, `result_read`) are excluded entirely — these are cheap read-only observations whose outputs change as live state changes, so a parent polling its running/self-healing children is waiting, not looping; a turn composed solely of them is not counted at all (genuinely stuck agents are still bounded by max_iterations / max_agent_tokens / timeout). **Near-identical warning + escalation:** when `<N` string-similar-but-not-identical `bash` commands recur inside a sliding window (`safety.near_identical_threshold`, default 3 in `near_identical_window` 6), a `[notice]` user message is injected telling the agent to use the `read` tool / raise `token_limit` / delegate / move on. Bash signatures are pagination-normalized (`sed -n 'A,Bp'` / `awk NR>=A&&NR<=B` / `head -N` collapse to a family) and *same-file overlapping ranges* are the primary repeat signal, so re-fetching the same lines through a different wrapper is caught while strictly-disjoint forward paging and different files stay silent. The budget (`safety.near_identical_warning_attempts`, default 2) is **per command family**, not global; a family that keeps re-reading the same material past its budget escalates into hard repeated-call detection (nudge via `safety.repeated_recovery_attempts`, default 2, then force-fail) instead of going silent. `token_offset`/`token_limit` are excluded from the signature so *read-style* paged reads are never flagged, and whitespace-only assistant responses are never counted as repeated text.
+
+3. **Result caching (read-only):** every cacheable tool call (`read`, `glob`, `grep`, `bash`, `webfetch`, `read_artifact`, `status`, `usage`, `plan`, `checkpoint` — anything not in the mutator set `write`/`edit`/`delegate`/`report`/`escalate`/`fail`/`kill`/`ask`/`archive`/`prune`/`restore`/`compress`/`converse`/`resume`) stores its FULL output in a per-agent, bounded, in-memory `ResultStore` behind an opaque handle. When a result is truncated, the footer advertises the handle and the read-only `result_read` tool pages the snapshot by `result_id` — **never re-executing** the producing tool (so paging slow bash/webfetch is free). Handles are always read-only: getting a fresh result means calling the work tool again (work tools accept no `result_id` input). The store is memory-only and cleared on agent GC/reset, so a resumed agent never sees stale snapshots (an unknown handle errors with "re-run the producing tool").
+4. **Wall-clock timeout:** Optional `safety_timeout_seconds` → force-fail when exceeded.
+5. **Token budget:** Optional `safety.max_agent_tokens` cap → force-fail when cumulative usage exceeds it.
+6. **Context observation:** Kept static/cache-friendly — agents read their own live turn count, message count, and token estimates on demand via the `usage` tool instead of a changing per-turn message.
+7. **Compress tool:** LLM can compress its own context when past ~50 messages.
+8. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
+9. **Delegation / spawn caps** (`Runtime.delegate()` copies, so every spawn — roots, children, self-heal fresh restarts — passes through the same gate):
    - `safety.max_agents` (default 200): total agents per runtime run. Reached → every further `delegate` is **refused** (never creates an agent).
    - `safety.max_depth` (default 25): tree depth; root = 0. Delegating past it is refused.
    - `safety.max_same_target_delegations` (default 7): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (`delegate_target_signature` in `core/spawn_limits.py`), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it. `0`/`null` disables the cap.

@@ -95,7 +95,7 @@ class Runtime:
         self._repeated_call_exempt_tools = (
             list(config.safety.repeated_call_exempt_tools)
             if config
-            else ["status", "usage"]
+            else ["status", "usage", "result_read"]
         )
         self._near_identical_threshold = (
             config.safety.near_identical_threshold if config else 3

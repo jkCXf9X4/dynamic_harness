@@ -173,3 +173,8 @@ can we utilie external agents for single question context?
 would this be a gain? where should it best be used?
 we can ask external agents if they think that delegation is needed without the polluting context
 
+
+
+---
+
+move _parallel, _payload, and _sources to a resource folder 

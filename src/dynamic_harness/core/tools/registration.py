@@ -7,6 +7,7 @@ from . import filesystem as _filesystem
 from . import network as _network
 from . import planning as _planning
 from . import process as _process
+from . import result_read as _result_read
 from .registry import ToolRegistry
 
 
@@ -35,3 +36,4 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_agents.TOOL_READ_ARTIFACT_DEF, _agents.read_artifact)
     registry.register(_agents.TOOL_USAGE_DEF, _agents.usage)
     registry.register(_artifacts.TOOL_ARCHIVE_DEF, _artifacts.archive)
+    registry.register(_result_read.TOOL_RESULT_READ_DEF, _result_read.result_read)

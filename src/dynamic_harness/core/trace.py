@@ -74,12 +74,13 @@ class TraceStore:
             "arguments": arguments,
         })
 
-    def record_tool_result(self, agent_id: str, tool_call_id: str, name: str, content: str) -> None:
+    def record_tool_result(self, agent_id: str, tool_call_id: str, name: str, content: str, result_id: str | None = None) -> None:
         self._append(agent_id, {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "tool_result",
             "tool_call_id": tool_call_id,
             "name": name,
+            "result_id": result_id,
             "content_length": len(content),
             "content_preview": content[:500],
         })
