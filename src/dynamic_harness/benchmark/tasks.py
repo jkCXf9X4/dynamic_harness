@@ -233,10 +233,11 @@ class FileSizesTask(BenchmarkTask):
         super().__init__(
             id="manyfiles",
             description=(
-                "There is a directory named _payload containing many text "
-                "files. Compute the byte size of EVERY file in _payload, "
-                "processing them ONE FILE AT A TIME (call the bash tool once "
-                "per file, e.g. `wc -c _payload/<file>`). As soon as you have "
+                "There is a directory named resources/_payload containing many "
+                "text files. Compute the byte size of EVERY file in "
+                "resources/_payload, processing them ONE FILE AT A TIME (call "
+                "the bash tool once per file, e.g. "
+                "`wc -c resources/_payload/<file>`). As soon as you have "
                 "a size, append a line of the form `<filename>:<size>` to "
                 ".optimize_benchmarks/sizes.txt (create it if needed). Do not "
                 "move on to the next file until the previous size is written. "
@@ -249,9 +250,9 @@ class FileSizesTask(BenchmarkTask):
         )
 
     def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
-        payload = scan_root / "_payload"
+        payload = scan_root / "resources" / "_payload"
         if not payload.is_dir():
-            return False, "_payload directory missing from workspace"
+            return False, "_payload directory missing from workspace (resources/_payload)"
 
         truth: dict[str, int] = {}
         for p in sorted(payload.iterdir()):
@@ -287,8 +288,8 @@ class FileSizesTask(BenchmarkTask):
 class ParallelSubtasksTask(BenchmarkTask):
     """Delegation probe: N independent computations, one per subdirectory.
 
-    Each subdirectory under ``_parallel`` holds an ``input.txt`` with a list of
-    integers. The agent is told to delegate one child per subdirectory so the
+    Each subdirectory under ``resources/_parallel`` holds an ``input.txt`` with a
+    list of integers. The agent is told to delegate one child per subdirectory so the
     computations run in parallel; each child writes its own ``result.txt``. The
     verifier computes ground truth (sum of squares per input) and checks every
     result file. Correctness does not *require* delegation (an agent could do it
@@ -300,24 +301,26 @@ class ParallelSubtasksTask(BenchmarkTask):
         super().__init__(
             id="parallel",
             description=(
-                "There is a directory named _parallel containing 8 numbered "
-                "subdirectories (task1..task8), each holding an input.txt with "
-                "a list of integers (one per line). Compute the sum of squares "
-                "of the integers in each input.txt. "
+                "There is a directory named resources/_parallel containing 8 "
+                "numbered subdirectories (task1..task8), each holding an "
+                "input.txt with a list of integers (one per line). Compute the "
+                "sum of squares of the integers in each input.txt. "
                 "DELEGATE one child agent per subdirectory so the 8 "
                 "computations run in parallel: each child reads its own "
                 "input.txt, computes the sum of squares, writes it as a single "
-                "integer to _parallel/<name>/result.txt, and reports back. "
-                "When every child has finished, report with the result files "
-                "as files_written. .optimize_benchmarks/ exists."
+                "integer to resources/_parallel/<name>/result.txt, and reports "
+                "back. When every child has finished, report with the result "
+                "files as files_written. .optimize_benchmarks/ exists."
             ),
-            artifact_paths=[f"_parallel/task{i}/result.txt" for i in range(1, 9)],
+            artifact_paths=[
+                f"resources/_parallel/task{i}/result.txt" for i in range(1, 9)
+            ],
         )
 
     def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
-        base = scan_root / "_parallel"
+        base = scan_root / "resources" / "_parallel"
         if not base.is_dir():
-            return False, "_parallel directory missing from workspace"
+            return False, "_parallel directory missing from workspace (resources/_parallel)"
 
         dirs = sorted(p for p in base.iterdir() if p.is_dir())
         if not dirs:
@@ -354,7 +357,7 @@ class ParallelSubtasksTask(BenchmarkTask):
 class SynthesisTask(BenchmarkTask):
     """Synthesis probe: children gather fragments, parent fuses into one report.
 
-    Each file under ``_sources`` carries a key token on its first line. The
+    Each file under ``resources/_sources`` carries a key token on its first line. The
     agent is told to delegate one child per source file to read and extract the
     token, then write a single combined report (``synthesis.txt``) that covers
     every source. The verifier checks the combined artifact for full coverage —
@@ -366,22 +369,22 @@ class SynthesisTask(BenchmarkTask):
         super().__init__(
             id="synthesis",
             description=(
-                "There is a directory named _sources containing 6 text files "
-                "(source1.txt..source6.txt). Each file's first line is a key "
-                "token. DELEGATE one child agent per source file: each child "
-                "reads its own file, extracts the first-line token, and reports "
-                "it back. When every child has reported, write a single combined "
-                "report to .optimize_benchmarks/synthesis.txt listing every "
-                "token (one per line) and report with that artifact. "
-                ".optimize_benchmarks/ exists."
+                "There is a directory named resources/_sources containing 6 "
+                "text files (source1.txt..source6.txt). Each file's first line "
+                "is a key token. DELEGATE one child agent per source file: "
+                "each child reads its own file, extracts the first-line token, "
+                "and reports it back. When every child has reported, write a "
+                "single combined report to .optimize_benchmarks/synthesis.txt "
+                "listing every token (one per line) and report with that "
+                "artifact. .optimize_benchmarks/ exists."
             ),
             artifact_paths=[".optimize_benchmarks/synthesis.txt"],
         )
 
     def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
-        base = scan_root / "_sources"
+        base = scan_root / "resources" / "_sources"
         if not base.is_dir():
-            return False, "_sources directory missing from workspace"
+            return False, "_sources directory missing from workspace (resources/_sources)"
 
         files = sorted(base.glob("*.txt"))
         if not files:

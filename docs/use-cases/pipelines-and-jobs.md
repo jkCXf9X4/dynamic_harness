@@ -27,9 +27,9 @@ decide success here:
 
 ## Scenario A — Batch sizing / inventory (the `manyfiles` pattern)
 
-> "There is a `_payload/` directory with many files. Compute and record the byte
+> "There is a `resources/_payload/` directory with many files. Compute and record the byte
 > size of EVERY file, one at a time.
-> List all files in `_payload/`; for each, run `wc -c <file>`, and append
+> List all files in `resources/_payload/`; for each, run `wc -c <file>`, and append
 > `<name>:<size>` to `.optimize_benchmarks/sizes.txt`. Process one file per
 > turn, write each result as soon as you have it, and `prune()` turns for files
 > already written to disk. When all are done, report with the artifact."
@@ -98,7 +98,7 @@ stopped container):
   any workload that *writes as it goes*.
 - **Strain**: an open-ended crawl ("size everything, then every subfolder,
   then...") is a spec problem — the task must define the terminal condition
-  exactly (this is also why `FileSizesTask` names the whole `_payload/` tree).
+  exactly (this is also why `FileSizesTask` names the whole `resources/_payload/` tree).
 - **Watch**: `bash` has no pipes/redirects, so "`ls | wc -l`" must be
   decomposed into plain single commands; sort/aggregate in Python or `sort`/`uniq`
   as separate calls.

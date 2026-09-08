@@ -121,7 +121,7 @@ def _parallel_ws() -> tuple[Path, Path]:
         "task2": [4, 6, 6, 24, 11],
         "task3": [16, 38, 35],
     }.items():
-        d = root / "_parallel" / name
+        d = root / "resources" / "_parallel" / name
         d.mkdir(parents=True, exist_ok=True)
         (d / "input.txt").write_text("\n".join(str(n) for n in nums) + "\n")
     return root, out
@@ -134,7 +134,7 @@ def test_parallel_correct(tmp_path: Path) -> None:
         "task2": [4, 6, 6, 24, 11],
         "task3": [16, 38, 35],
     }.items():
-        (root / "_parallel" / name / "result.txt").write_text(
+        (root / "resources" / "_parallel" / name / "result.txt").write_text(
             str(sum(n * n for n in nums)) + "\n"
         )
     ok, note = ParallelSubtasksTask().verify(out, root)
@@ -144,7 +144,7 @@ def test_parallel_correct(tmp_path: Path) -> None:
 
 def test_parallel_missing_result_fails(tmp_path: Path) -> None:
     root, out = _parallel_ws()
-    (root / "_parallel" / "task1" / "result.txt").write_text("1764\n")
+    (root / "resources" / "_parallel" / "task1" / "result.txt").write_text("1764\n")
     ok, note = ParallelSubtasksTask().verify(out, root)
     assert ok is False
     assert "missing result files" in note
@@ -157,7 +157,7 @@ def test_parallel_wrong_value_fails(tmp_path: Path) -> None:
         "task2": [4, 6, 6, 24, 11],
         "task3": [16, 38, 35],
     }.items():
-        (root / "_parallel" / name / "result.txt").write_text("0\n")
+        (root / "resources" / "_parallel" / name / "result.txt").write_text("0\n")
     ok, note = ParallelSubtasksTask().verify(out, root)
     assert ok is False
     assert "wrong results" in note
@@ -165,7 +165,7 @@ def test_parallel_wrong_value_fails(tmp_path: Path) -> None:
 
 def test_synthesis_correct(tmp_path: Path) -> None:
     root, out = _ws()
-    src = root / "_sources"
+    src = root / "resources" / "_sources"
     src.mkdir(parents=True, exist_ok=True)
     for i in range(1, 4):
         (src / f"source{i}.txt").write_text(f"token_alpha{i}\nignored rest\n")
@@ -177,7 +177,7 @@ def test_synthesis_correct(tmp_path: Path) -> None:
 
 def test_synthesis_missing_coverage_fails(tmp_path: Path) -> None:
     root, out = _ws()
-    src = root / "_sources"
+    src = root / "resources" / "_sources"
     src.mkdir(parents=True, exist_ok=True)
     for i in range(1, 4):
         (src / f"source{i}.txt").write_text(f"token_alpha{i}\n")
@@ -189,7 +189,7 @@ def test_synthesis_missing_coverage_fails(tmp_path: Path) -> None:
 
 def test_synthesis_missing_artifact_fails(tmp_path: Path) -> None:
     root, out = _ws()
-    src = root / "_sources"
+    src = root / "resources" / "_sources"
     src.mkdir(parents=True, exist_ok=True)
     (src / "source1.txt").write_text("token_alpha1\n")
     ok, note = SynthesisTask().verify(out, root)

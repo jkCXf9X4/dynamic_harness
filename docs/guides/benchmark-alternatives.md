@@ -171,9 +171,9 @@ deterministic, failable, in-config, no Docker):
 | `discovery` | 3 largest `.py` files | file tooling |
 | `codegen` | Fibonacci + assertions, run via `python3` | code-gen + verification |
 | `analysis` | TODO/FIXME scan correctness | search + reporting |
-| `manyfiles` | byte-sizes of `_payload/*` one-at-a-time | long multi-step context, `prune`/`restore` |
-| `parallel` | 8 sum-of-squares one per `_parallel/*/input.txt` | **delegation**: children in parallel |
-| `synthesis` | one `synthesis.txt` covering every token in `_sources/*` | **delegation + fusion**: parent decompose, children gather, parent fuses |
+| `manyfiles` | byte-sizes of `resources/_payload/*` one-at-a-time | long multi-step context, `prune`/`restore` |
+| `parallel` | 8 sum-of-squares one per `resources/_parallel/*/input.txt` | **delegation**: children in parallel |
+| `synthesis` | one `synthesis.txt` covering every token in `resources/_sources/*` | **delegation + fusion**: parent decompose, children gather, parent fuses |
 
 The last two rows are deliberately **failable-but-not-forcing**: correctness
 does not require delegation; the metrics (`agent_count`, `max_depth`, `turns`,
