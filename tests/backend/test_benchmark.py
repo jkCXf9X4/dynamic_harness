@@ -10,6 +10,8 @@ from dynamic_harness.benchmark.scoring import aggregate, rank
 from dynamic_harness.benchmark.tasks import (
     FibonacciTask,
     LargestFilesTask,
+    ParallelSubtasksTask,
+    SynthesisTask,
     TodosTask,
 )
 
@@ -108,6 +110,91 @@ def test_todos_missing_hit_fails(tmp_path: Path) -> None:
     (out / "todos.txt").write_text("")  # agent missed it
     ok, _ = TodosTask().verify(out, root)
     assert ok is False
+
+
+# ── Delegation-flavored verifiers ─────────────────────────────────────────
+
+def _parallel_ws() -> tuple[Path, Path]:
+    root, out = _ws()
+    for name, nums in {
+        "task1": [9, 37, 5, 17],
+        "task2": [4, 6, 6, 24, 11],
+        "task3": [16, 38, 35],
+    }.items():
+        d = root / "_parallel" / name
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "input.txt").write_text("\n".join(str(n) for n in nums) + "\n")
+    return root, out
+
+
+def test_parallel_correct(tmp_path: Path) -> None:
+    root, out = _parallel_ws()
+    for name, nums in {
+        "task1": [9, 37, 5, 17],
+        "task2": [4, 6, 6, 24, 11],
+        "task3": [16, 38, 35],
+    }.items():
+        (root / "_parallel" / name / "result.txt").write_text(
+            str(sum(n * n for n in nums)) + "\n"
+        )
+    ok, note = ParallelSubtasksTask().verify(out, root)
+    assert ok is True
+    assert "3 parallel results" in note
+
+
+def test_parallel_missing_result_fails(tmp_path: Path) -> None:
+    root, out = _parallel_ws()
+    (root / "_parallel" / "task1" / "result.txt").write_text("1764\n")
+    ok, note = ParallelSubtasksTask().verify(out, root)
+    assert ok is False
+    assert "missing result files" in note
+
+
+def test_parallel_wrong_value_fails(tmp_path: Path) -> None:
+    root, out = _parallel_ws()
+    for name, nums in {
+        "task1": [9, 37, 5, 17],
+        "task2": [4, 6, 6, 24, 11],
+        "task3": [16, 38, 35],
+    }.items():
+        (root / "_parallel" / name / "result.txt").write_text("0\n")
+    ok, note = ParallelSubtasksTask().verify(out, root)
+    assert ok is False
+    assert "wrong results" in note
+
+
+def test_synthesis_correct(tmp_path: Path) -> None:
+    root, out = _ws()
+    src = root / "_sources"
+    src.mkdir(parents=True, exist_ok=True)
+    for i in range(1, 4):
+        (src / f"source{i}.txt").write_text(f"token_alpha{i}\nignored rest\n")
+    (out / "synthesis.txt").write_text("token_alpha1\ntoken_alpha2\ntoken_alpha3\n")
+    ok, note = SynthesisTask().verify(out, root)
+    assert ok is True
+    assert "covers all 3" in note
+
+
+def test_synthesis_missing_coverage_fails(tmp_path: Path) -> None:
+    root, out = _ws()
+    src = root / "_sources"
+    src.mkdir(parents=True, exist_ok=True)
+    for i in range(1, 4):
+        (src / f"source{i}.txt").write_text(f"token_alpha{i}\n")
+    (out / "synthesis.txt").write_text("token_alpha1\ntoken_alpha2\n")  # missed one
+    ok, note = SynthesisTask().verify(out, root)
+    assert ok is False
+    assert "missing" in note
+
+
+def test_synthesis_missing_artifact_fails(tmp_path: Path) -> None:
+    root, out = _ws()
+    src = root / "_sources"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "source1.txt").write_text("token_alpha1\n")
+    ok, note = SynthesisTask().verify(out, root)
+    assert ok is False
+    assert "synthesis.txt missing" in note
 
 
 # ── Metrics ──────────────────────────────────────────────────────────────

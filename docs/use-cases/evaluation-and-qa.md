@@ -11,6 +11,7 @@ related:
   - concepts/agent-lifecycle.md
   - api/repository.md
   - ../guides/prompt-optimization.md
+  - ../guides/benchmark-alternatives.md
 ---
 
 # Evaluation & QA

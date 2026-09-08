@@ -114,13 +114,13 @@ Example:
 |-----|---------|-------------|
 | `max_iterations` | `500` | Hard cap on agent loop iterations. Exceeding it force-fails the agent. |
 | `repeated_call_limit` | `5` | Hard cap on *identical* consecutive tool-call batches before the agent force-fails (prevents LLM loops). |
-| `repeated_recovery_attempts` | `1` | How many times a looping agent is nudged ("you are repeating yourself, change strategy") before repeated-call detection force-fails it. `0` fails immediately on first detection. |
+| `repeated_recovery_attempts` | `2` | How many times a looping agent is nudged ("you are repeating yourself, change strategy") before repeated-call detection force-fails it. `0` fails immediately on first detection. |
 | `repeated_call_exempt_tools` | `["status", "usage"]` | Tool names treated as pure monitoring and ignored by repeated-call detection. A turn made up solely of these is not counted toward loop detection (genuinely stuck agents are still bounded by `max_iterations` / `max_agent_tokens` / `timeout_seconds`). |
-| `near_identical_threshold` | `3` | Soft-warning threshold: how many near-identical tool calls must appear in the sliding window before a non-fatal notice is injected. Must be `>= 1`. Pure warning — never fails the run. |
+| `near_identical_threshold` | `3` | Soft-warning threshold: how many near-identical tool calls must appear in the sliding window before a notice is injected. Must be `>= 1`. A notice is non-fatal on its own. |
 | `near_identical_window` | `6` | Sliding-window size over which near-identical calls are counted; older calls are forgotten. Must be `>= 2`. |
 | `near_identical_similarity` | `0.6` | Minimum `difflib.SequenceMatcher` ratio (`0.0`–`1.0`) between two normalized calls to count as near-identical. Pagination knobs (`token_offset`/`token_limit`) are excluded from the signature so paged reads never look duplicated. Must be in `(0.0, 1.0]`. |
-| `near_identical_tools` | `["bash"]` | Tool names monitored for near-identical repetition. Scoped to `bash` by default (the observed churn loop). |
-| `near_identical_warning_attempts` | `2` | How many times the near-identical notice may be re-injected over the whole run. `0` disables the feature entirely. |
+| `near_identical_tools` | `["bash"]` | Tool names monitored for near-identical repetition. Scoped to `bash` by default (the observed churn loop). Bash signatures are pagination-normalized (`sed -n 'A,Bp'` / `awk NR>=A&&NR<=B` / `head -N` collapse to a family), and same-file overlapping ranges are the primary repeat signal — re-fetching the same lines through a different wrapper is caught, while strictly-disjoint forward paging and different files stay silent. |
+| `near_identical_warning_attempts` | `2` | How many times the near-identical notice may be injected *per distinct command family* across the run. Once a family exhausts its budget it escalates into hard repeated-call detection (nudge via `repeated_recovery_attempts`, then fail) instead of going silent — a persisting churn loop can never hide behind a spent global counter. `0` disables the feature entirely. |
 | `iteration_warning_margin` | `50` | Iterations before `max_iterations` at which a hard wrap-up notice is injected (stop starting work, hand remaining items + context to parent). Must be `>= 1`. |
 | `iteration_warning_attempts` | `1` | How many times the low-iteration wrap-up notice may be injected. `0` disables the feature entirely. |
 
@@ -154,7 +154,7 @@ Example:
   "safety": {
     "max_iterations": 400,
     "repeated_call_limit": 5,
-    "repeated_recovery_attempts": 1,
+    "repeated_recovery_attempts": 2,
     "repeated_call_exempt_tools": ["status", "usage"],
     "near_identical_threshold": 3,
     "near_identical_window": 6,

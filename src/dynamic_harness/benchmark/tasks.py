@@ -284,11 +284,144 @@ class FileSizesTask(BenchmarkTask):
         return True, f"all {len(truth)} file sizes in _payload match"
 
 
+class ParallelSubtasksTask(BenchmarkTask):
+    """Delegation probe: N independent computations, one per subdirectory.
+
+    Each subdirectory under ``_parallel`` holds an ``input.txt`` with a list of
+    integers. The agent is told to delegate one child per subdirectory so the
+    computations run in parallel; each child writes its own ``result.txt``. The
+    verifier computes ground truth (sum of squares per input) and checks every
+    result file. Correctness does not *require* delegation (an agent could do it
+    all inline), but the delegation/turns/depth metrics reveal whether the
+    parallel shape was actually used.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            id="parallel",
+            description=(
+                "There is a directory named _parallel containing 8 numbered "
+                "subdirectories (task1..task8), each holding an input.txt with "
+                "a list of integers (one per line). Compute the sum of squares "
+                "of the integers in each input.txt. "
+                "DELEGATE one child agent per subdirectory so the 8 "
+                "computations run in parallel: each child reads its own "
+                "input.txt, computes the sum of squares, writes it as a single "
+                "integer to _parallel/<name>/result.txt, and reports back. "
+                "When every child has finished, report with the result files "
+                "as files_written. .optimize_benchmarks/ exists."
+            ),
+            artifact_paths=[f"_parallel/task{i}/result.txt" for i in range(1, 9)],
+        )
+
+    def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
+        base = scan_root / "_parallel"
+        if not base.is_dir():
+            return False, "_parallel directory missing from workspace"
+
+        dirs = sorted(p for p in base.iterdir() if p.is_dir())
+        if not dirs:
+            return False, "no task directories under _parallel"
+
+        truth: dict[str, int] = {}
+        for d in dirs:
+            inp = d / "input.txt"
+            if not inp.exists():
+                return False, f"missing {d.name}/input.txt"
+            nums = [int(x) for x in inp.read_text().split() if x.strip()]
+            truth[d.name] = sum(n * n for n in nums)
+
+        missing = [n for n in truth if not (base / n / "result.txt").exists()]
+        if missing:
+            return False, f"missing result files: {sorted(missing)}"
+
+        wrong: list[str] = []
+        for name, want in truth.items():
+            line = (base / name / "result.txt").read_text().strip()
+            try:
+                got = int(line.split()[0])
+            except (ValueError, IndexError):
+                wrong.append(f"{name}=unparseable")
+                continue
+            if got != want:
+                wrong.append(f"{name}=got {got} want {want}")
+        if wrong:
+            return False, f"wrong results: {sorted(wrong)}"
+
+        return True, f"all {len(truth)} parallel results match"
+
+
+class SynthesisTask(BenchmarkTask):
+    """Synthesis probe: children gather fragments, parent fuses into one report.
+
+    Each file under ``_sources`` carries a key token on its first line. The
+    agent is told to delegate one child per source file to read and extract the
+    token, then write a single combined report (``synthesis.txt``) that covers
+    every source. The verifier checks the combined artifact for full coverage —
+    this is the "parent decomposes, children gather, parent fuses" shape where
+    a monolithic agent would instead have to read all sources serially.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            id="synthesis",
+            description=(
+                "There is a directory named _sources containing 6 text files "
+                "(source1.txt..source6.txt). Each file's first line is a key "
+                "token. DELEGATE one child agent per source file: each child "
+                "reads its own file, extracts the first-line token, and reports "
+                "it back. When every child has reported, write a single combined "
+                "report to .optimize_benchmarks/synthesis.txt listing every "
+                "token (one per line) and report with that artifact. "
+                ".optimize_benchmarks/ exists."
+            ),
+            artifact_paths=[".optimize_benchmarks/synthesis.txt"],
+        )
+
+    def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
+        base = scan_root / "_sources"
+        if not base.is_dir():
+            return False, "_sources directory missing from workspace"
+
+        files = sorted(base.glob("*.txt"))
+        if not files:
+            return True, "no source files; empty synthesis is correct"
+
+        truth: set[str] = set()
+        for p in files:
+            first = p.read_text().splitlines()
+            if first and first[0].strip():
+                truth.add(first[0].strip())
+        if not truth:
+            return True, "no source tokens; empty synthesis is correct"
+
+        out = output_dir / "synthesis.txt"
+        if not out.exists():
+            return False, "synthesis.txt missing"
+
+        produced = {
+            line.strip()
+            for line in out.read_text().splitlines()
+            if line.strip()
+        }
+        missing = truth - produced
+        extra = produced - truth
+        if missing or extra:
+            return False, (
+                f"coverage mismatch: missing={sorted(missing)} "
+                f"extra={sorted(extra)}"
+            )
+
+        return True, f"synthesis covers all {len(truth)} source tokens"
+
+
 ALL_TASKS: list[BenchmarkTask] = [
     LargestFilesTask(),
     FibonacciTask(),
     TodosTask(),
     FileSizesTask(),
+    ParallelSubtasksTask(),
+    SynthesisTask(),
 ]
 def find_task(task_id: str) -> BenchmarkTask:
     for t in ALL_TASKS:

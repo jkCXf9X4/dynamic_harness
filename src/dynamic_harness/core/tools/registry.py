@@ -106,10 +106,23 @@ class ToolRegistry:
             return ToolResult(tool_call_id=tool_call_id, content="(offset beyond content length)")
         content = content[char_offset:]
         if len(content) > char_limit:
-            content = content[:char_limit] + (
-                f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
-                f"Use token_offset={token_offset + token_limit} to see more)"
-            )
+            content = content[:char_limit]
+            if name == "bash":
+                # Bash output is truncated like a read: the model does NOT need
+                # to (and MUST not) re-wrap the command in sed/awk/head to see
+                # more — re-run the SAME command with a larger token_limit.
+                content += (
+                    f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
+                    "To see more, re-run THIS command with a larger "
+                    f"token_limit (e.g. {max(token_limit * 2, 200)}) — do not wrap "
+                    "it in sed/awk/head, the truncation already pages it."
+                )
+            else:
+                content += (
+                    f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
+                    f"Use token_limit={max(token_limit * 2, 200)} "
+                    f"or token_offset={token_offset + token_limit} to see more)"
+                )
         return ToolResult(tool_call_id=tool_call_id, content=content)
 
     def openai_schemas(self, role: str | None = None) -> list[dict]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import re
 import time
 from collections import deque
 from difflib import SequenceMatcher
@@ -43,6 +44,12 @@ if TYPE_CHECKING:
 
 
 ROT_ITERATION_THRESHOLD = 40
+
+# File-like token used by the bash near-identical read-region parser.
+_PATH_TOKEN = re.compile(
+    r"([\w./~@-]+\.(?:cpp|hpp|c|h|md|json|txt|py|toml|csv|log|ya?ml|ini|rc|in)|"
+    r"(?:\./)?[\w./~@-]+\.dynamic-harness/[\w./~@-]+)"
+)
 
 
 def progress_summary_block(
@@ -91,7 +98,7 @@ class Agent:
         system_prompt: str | None = None,
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
-        repeated_recovery_attempts: int = 1,
+        repeated_recovery_attempts: int = 2,
         # Read-only monitoring tools excluded from repeated-call loop detection
         # (status / usage). These are cheap live observations whose outputs
         # change as state changes — a parent polling its running children is
@@ -226,14 +233,22 @@ class Agent:
         self._near_identical_tools: tuple[str, ...] = (
             tuple(near_identical_tools) if near_identical_tools is not None else ("bash",)
         )
-        self._near_identical_warning_left: int = max(int(near_identical_warning_attempts), 0)
+        self._near_identical_warning_attempts: int = max(
+            int(near_identical_warning_attempts), 0
+        )
+        # Warning budget is *per command family*, not a global counter: a family
+        # that stopped recurring can re-appear later and still be warned, and a
+        # family that keeps re-reading the same material after its budget is
+        # exhausted escalates into hard repeated-call detection instead of going
+        # silent (see _maybe_warn_near_identical).
+        self._near_identical_warned: dict[str, int] = {}
         # Low-iteration warning: fires a hard wrap-up notice once when remaining
         # turns drop to `iteration_warning_margin` or fewer before the hard limit.
         self._iteration_warning_margin: int = max(int(iteration_warning_margin), 1)
         self._iteration_warning_attempts: int = max(int(iteration_warning_attempts), 0)
         self._iteration_warning_left: int = self._iteration_warning_attempts
-        # (core sig, full sig, tool name) triples, sliding window.
-        self._recent_near_identical: deque[tuple[str, str, str]] = deque(
+        # (family, regions, core sig, full sig, tool name) tuples, sliding window.
+        self._recent_near_identical: deque[tuple[str, Any, str, str, str]] = deque(
             maxlen=self._near_identical_window
         )
         # On-disk outputs this agent must produce (set by Runtime.run). Self-heal
@@ -377,6 +392,7 @@ class Agent:
         self._recent_messages.clear()
         self._recent_delegate_targets.clear()
         self._recent_near_identical.clear()
+        self._near_identical_warned.clear()
         return True
 
     # -- context knobs -----------------------------------------------------
@@ -533,6 +549,8 @@ class Agent:
         self._recent_tool_signatures.clear()
         self._recent_messages.clear()
         self._recent_delegate_targets.clear()
+        self._recent_near_identical.clear()
+        self._near_identical_warned.clear()
         self._has_delegated = False
         self._delegate_nudge_left = self._delegate_nudge_attempts
         self._iteration_warning_left = self._iteration_warning_attempts
@@ -1002,75 +1020,210 @@ class Agent:
     def _similarity(self, a: str, b: str) -> float:
         return SequenceMatcher(None, a, b).ratio()
 
-    def _maybe_warn_near_identical(self, tool_calls: list[Any]) -> None:
-        """Inject a *non-fatal* notice when the agent repeatedly issues
-        near-identical monitored-tool calls (e.g. re-running a path listing
-        with different head/tail/sed modifiers).
+    # -- bash pagination normalization ------------------------------------
+    # `token_offset`/`token_limit` kwargs only cover *read-style* pagination.
+    # Bash re-reads churn by re-wrapping the SAME content in sed/awk/head/tail
+    # variants, which defeats a purely kwargs-based signature. These helpers
+    # collapse the line-range/pagination tokens so that re-fetching the same
+    # lines through a different wrapper groups under one family, while
+    # strictly-disjoint forward paging is still recognized as progress.
 
-        This is deliberately softer than ``_check_repeated_calls``: it never
-        fails the run (``near_identical_warning_attempts`` only bounds how many
-        warnings refresh). Two special cases are treated as *benign*, never
-        warned about: calls whose core (pagination-free) signature is identical
-        — i.e. legitimate paged reads where only token_offset/token_limit
-        advance — and calls against genuinely different paths.
+    @staticmethod
+    def _bash_family(command: str) -> str:
+        """Pagination-insensitive family key for a bash command.
+
+        Line ranges (`sed -n '59,140p'` / `awk 'NR>=59 && NR<=140'`), head/tail
+        counts and token knobs collapse to placeholders, whitespace folds and
+        quotes drop. Two commands that differ only in *how much* of the same
+        material they show share a family; commands touching different paths
+        do not.
         """
-        if self._near_identical_warning_left <= 0 or not self._near_identical_tools:
-            return
+        text = command
+        text = re.sub(r"sed\s+-n\s*'?\d+\s*,\s*\d+p'?", "sed -n RANGE", text)
+        text = re.sub(r"awk\s+'NR\s*>=\s*\d+\s*&&\s*NR\s*<=\s*\d+", "awk NR-RANGE", text)
+        text = re.sub(r"\bhead\s+(?:-[a-zA-Z]+\s+)?-?\d+\b", "head -N", text)
+        text = re.sub(r"\btail\s+(?:-[a-zA-Z]+\s+)?-?\d+\b", "tail -N", text)
+        text = re.sub(r"\btoken_offset\s*=\s*\d+\b", "token_offset=N", text)
+        text = re.sub(r"\btoken_limit\s*=\s*\d+\b", "token_limit=N", text)
+        text = text.replace("'", "").replace('"', "")
+        return "_".join(text.split()).strip().lower()
+
+    @staticmethod
+    def _bash_read_regions(command: str) -> list[tuple[str, int, int]]:
+        """Extract (file, lo, hi) reads from a bash command.
+
+        Lets near-identical detection tell genuine forward paging (disjoint,
+        advancing ranges) apart from re-reading the same lines through a
+        different sedan wrapper. Only read-ish verbs with an explicit file
+        produce regions; commands with no parseable file stay empty and fall
+        back to the generic similarity path.
+        """
+        BIG = 1 << 31
+        regions: list[tuple[str, int, int]] = []
+
+        def last_path(seg: str) -> str | None:
+            toks = _PATH_TOKEN.findall(seg)
+            return toks[-1] if toks else None
+
+        for seg in re.split(r"\||;", command):
+            m = re.search(r"sed\s+-n\s*'?(\d+)\s*,\s*(\d+)p'?[^|]*", seg)
+            if m:
+                lo, hi = int(m.group(1)), int(m.group(2))
+                p = _PATH_TOKEN.search(seg[m.end():].strip()) or last_path(seg)
+                if p:
+                    regions.append((str(p) if not isinstance(p, tuple) else p[0], lo, hi))
+                continue
+            m = re.search(r"awk\s+'NR\s*>=\s*(\d+)\s*&&\s*NR\s*<=\s*(\d+)", seg)
+            if m:
+                lo, hi = int(m.group(1)), int(m.group(2))
+                p = last_path(seg)
+                if p:
+                    regions.append((str(p) if not isinstance(p, tuple) else p[0], lo, hi))
+                continue
+            m = re.search(r"\b(head|tail)\s+(?:-[a-zA-Z0-9]+\s+)?-?(\d+)\b[^|]*", seg)
+            if m:
+                n = int(m.group(2))
+                p = _PATH_TOKEN.search(seg[m.end():].strip()) or last_path(seg)
+                if p:
+                    path = str(p) if not isinstance(p, tuple) else p[0]
+                    if m.group(1) == "tail":
+                        regions.append((path, max(0, BIG - n), BIG))
+                    else:
+                        regions.append((path, 0, n))
+                continue
+            # Read-ish verbs with an explicit file: the whole file is the region.
+            if re.search(r"\b(?:cat|grep|wc|git\s+show|git\s+diff|find|xxd|od|nl)\b", seg):
+                p = last_path(seg)
+                if p:
+                    regions.append((str(p) if not isinstance(p, tuple) else p[0], 0, BIG))
+        # Dedupe exact (path, lo, hi) triples.
+        return list(dict.fromkeys(regions))
+
+    @staticmethod
+    def _regions_overlap(a: list[tuple[str, int, int]], b: list[tuple[str, int, int]]) -> bool:
+        """True when the same file is read at overlapping ranges in both sets.
+
+        Open-interval overlap: strictly-disjoint adjacent ranges (e.g. 1-50
+        then 51-100) are treated as forward progress, not a re-read.
+        """
+        for pa, loa, hia in a:
+            for pb, lob, hib in b:
+                if pa != pb:
+                    continue
+                if loa < hib and lob < hia:
+                    return True
+        return False
+
+    def _maybe_warn_near_identical(self, tool_calls: list[Any]) -> bool:
+        """Warn about *near*-identical monitored-tool calls (e.g. re-reading the
+        same file through different sed/awk/head wrappers).
+
+        Returns True when a near-identical pattern *escalated* into hard loop
+        detection (the run loop then stops); False otherwise.
+
+        The warning budget (``near_identical_warning_attempts``) is held per
+        distinct command *family*, not as a global counter: a family that
+        stopped recurring can re-appear later and still be warned, and a family
+        that keeps re-reading the same material after its budget is exhausted
+        escalates into ``_loop_detected`` (nudge first, fail when the recovery
+        budget runs out) instead of going permanently silent. This is what
+        stops the trace failure mode where a spent budget let a sed/awk re-read
+        loop run for dozens of extra turns.
+
+        For ``bash`` the signature is pagination-normalized:
+        ``sed -n 'A,Bp'`` / ``awk NR>=A&&NR<=B`` / ``head -N`` collapse into a
+        family key, and *same-file overlapping ranges* are the primary repeat
+        signal. Re-fetching the same lines through a different wrapper is
+        caught even though the command text differs; strictly-disjoint
+        advancing ranges (real forward paging) and different files are treated
+        as legitimate progress. Commands with no parseable file (e.g. ``git
+        status`` variants) fall back to the generic text-similarity rule.
+        """
+        if self._near_identical_warning_attempts <= 0 or not self._near_identical_tools:
+            return False
         if not tool_calls:
-            return
+            return False
         near = self._near_identical_tools
-        scored: list[tuple[str, str]] = []  # (core sig, full sig)
+        entries: list[tuple[str, list[tuple[str, int, int]] | None, str, str, str]] = []
         for tc in tool_calls:
-            if tc.name in near:
-                core = self._paginationless_signature(tc.name, tc.arguments)
-                full = self._paginationless_signature(
-                    tc.name, tc.arguments, exclude=set()
-                )
-                self._recent_near_identical.append((core, full, tc.name))
-                scored.append((core, full))
-        if not scored:
-            return
-        if len(self._recent_near_identical) < self._near_identical_threshold:
-            return
-        for core_new, full_new in scored:
-            rec = list(self._recent_near_identical)
-            count = sum(
-                1 for core_old, full_old, _ in rec
-                if core_new != core_old
-                and self._similarity(full_new, full_old) >= self._near_identical_similarity
-            )
+            if tc.name not in near:
+                continue
+            args = tc.arguments or {}
+            core = self._paginationless_signature(tc.name, args)
+            full = self._paginationless_signature(tc.name, args, exclude=set())
+            if tc.name == "bash":
+                command = str(args.get("command", ""))
+                family = self._bash_family(command)
+                regions = self._bash_read_regions(command) or None
+            else:
+                family = core
+                regions = None
+            self._recent_near_identical.append((family, regions, core, full, tc.name))
+            entries.append((family, regions, core, full, tc.name))
+
+        rec = list(self._recent_near_identical)
+        if len(rec) < self._near_identical_threshold:
+            return False
+
+        for family, regions, core, full, name in entries:
+            count = 0
+            for fam_old, reg_old, core_old, full_old, _ in rec:
+                if regions is not None and reg_old is not None:
+                    # Both sides have file/range info: the repeat signal is a
+                    # shared path read at an overlapping range — caught even
+                    # when the wrapper text differs structurally. Disjoint
+                    # advancing paging and different paths stay silent.
+                    if self._regions_overlap(regions, reg_old):
+                        count += 1
+                elif core != core_old and (
+                    self._similarity(full, full_old) >= self._near_identical_similarity
+                ):
+                    # No region info on at least one side: fall back to the
+                    # generic rule. Identical core (e.g. only token pagination
+                    # advancing) remains benign.
+                    count += 1
             if count < self._near_identical_threshold:
                 continue
-            toolname = next(
-                tn for c, f, tn in rec if c == core_new and f == full_new
-            )
-            self._near_identical_warning_left -= 1
-            self._event_bus.emit_activity(ActivityEvent(
-                agent_id=self.id,
-                event_type=ActivityEventType.SAFETY_WARNING,
-                data={
-                    "warning_type": "near_identical_calls",
-                    "tool_name": toolname,
-                    "similar_count": count,
-                    "window": len(rec),
-                    "attempts_remaining": self._near_identical_warning_left,
-                },
-            ))
-            self.context.append({
-                "role": "user",
-                "content": (
-                    "[notice] You have issued "
-                    f"{count} near-identical '{toolname}' tool calls in the last "
-                    f"{len(rec)} turns (e.g. re-listing the same files with "
-                    "slightly different head/tail/sort/sed modifiers). Each "
-                    "returns the same material and tells you to use "
-                    "token_offset/token_limit to page further. Stop re-running "
-                    "these: paginate with token_offset, delegate the distinct "
-                    "pieces, or move on to the next step and report / escalate / "
-                    "fail. This is a warning only — it will not fail the run."
-                ),
-            })
-            return
+            used = self._near_identical_warned.get(family, 0)
+            if used < self._near_identical_warning_attempts:
+                self._near_identical_warned[family] = used + 1
+                self._event_bus.emit_activity(ActivityEvent(
+                    agent_id=self.id,
+                    event_type=ActivityEventType.SAFETY_WARNING,
+                    data={
+                        "warning_type": "near_identical_calls",
+                        "tool_name": name,
+                        "similar_count": count,
+                        "window": len(rec),
+                        "family": family,
+                        "attempts_remaining": (
+                            self._near_identical_warning_attempts - used - 1
+                        ),
+                    },
+                ))
+                self.context.append({
+                    "role": "user",
+                    "content": (
+                        "[notice] You have issued "
+                        f"{count} near-identical '{name}' tool calls in the last "
+                        f"{len(rec)} turns (e.g. re-reading the same file/lines "
+                        "through slightly different sed/awk/head/sort variants). "
+                        "Each returns the same material. Stop re-running these: "
+                        "for files use the read tool with token_offset/token_limit "
+                        "or delegate the distinct pieces, and for shell output "
+                        "re-run the SAME command with a larger token_limit. "
+                        "Move on to the next step and report / escalate / fail. "
+                        "This is a warning only — it will not fail the run on "
+                        "this turn."
+                    ),
+                })
+                return False
+            # A family that persists past its budget escalates into the hard
+            # detection ladder (nudge, then fail) instead of going silent.
+            return self._loop_detected(
+                "near-identical "
+                f"'{name}' calls re-reading the same material", name, count)
+        return False
 
     def _check_repeated_calls(self, response: Any) -> bool:
         """Return True when repeated calls were detected (loop stops).
@@ -1130,8 +1283,11 @@ class Agent:
                         response.tool_calls[-1].name, limit)
 
         # Identical assistant text repeated many times is also a stuck signal,
-        # regardless of how the tool arguments vary around it.
-        if response.content:
+        # regardless of how the tool arguments vary around it. Whitespace-only
+        # content (e.g. "\n\n" emitted before a tool call) is NOT a real
+        # response: recording empty strings poisons the deque and would
+        # force-fail a healthy model that emits a newline placeholder.
+        if response.content and response.content.strip():
             self._recent_messages.append(response.content.strip())
         if len(self._recent_messages) >= limit * 2:
             recent_msgs = list(self._recent_messages)
@@ -1157,9 +1313,8 @@ class Agent:
         # Softly warn about *near*-identical (similar-not-bytes-equal) calls
         # only when no hard loop detection fired this turn, so the agent gets
         # actionable paginate/delegate guidance without a duplicate fail-nudge.
-        self._maybe_warn_near_identical(response.tool_calls)
-
-        return False
+        # Returns True when a persisting family escalated into hard detection.
+        return self._maybe_warn_near_identical(response.tool_calls)
 
     def _loop_detected(self, message: str, tool_name: str, count: int) -> bool:
         """React to a detected loop: nudge first, fail only when the recovery

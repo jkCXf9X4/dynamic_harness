@@ -472,11 +472,11 @@ def test_runtime_wires_timeout_from_config(tmp_path) -> None:
         config=cfg,
     )
     assert rt._safety_timeout_seconds == 60.5
-    assert rt._repeated_recovery_attempts == 1  # default
+    assert rt._repeated_recovery_attempts == 2  # default
     task = Task(description="t")
     agent = rt.delegate(task)
     assert agent._safety_timeout_seconds == 60.5
-    assert agent._repeated_recovery_left == 1
+    assert agent._repeated_recovery_left == 2
 
 
 def test_root_exempt_from_timeout_but_children_inherit(tmp_path) -> None:
@@ -686,10 +686,12 @@ def test_delegate_nudge_suppressed_after_first_delegate(runtime: Runtime) -> Non
     assert len(root.context.messages) == 0
 
 
-def test_near_identical_bash_churn_warns_but_never_fails(runtime: Runtime) -> None:
-    """The trace failure mode: the model re-runs a path listing with slightly
-    different head/tail/sed modifiers. The near-identical notice must inject
-    a bounded warning into the context and NEVER fail the run."""
+def test_near_identical_bash_churn_warns_then_escalates(runtime: Runtime) -> None:
+    """The trace failure mode: the model re-runs the same material with
+    slightly different head/tail/sed modifiers. The near-identical notice must
+    inject a bounded per-family warning first, then ESCALATE into hard loop
+    detection once that family keeps persisting past its budget — a spent
+    global counter must never let the churn run silent forever."""
     root = _make_agent(
         runtime, Task(description="audit churn"),
         repeated_call_limit=20, repeated_recovery_attempts=1,
@@ -705,30 +707,89 @@ def test_near_identical_bash_churn_warns_but_never_fails(runtime: Runtime) -> No
         f'cd /repo/src && find . -type f -name "*.py" | sort | head -{n}'
         for n in range(1, 31)
     ]
+    ok = False
     for i, cmd in enumerate(cmds, start=1):
         ok = root._check_repeated_calls(ToolCallResponse(
             content=None, model="mock",
             tool_calls=[ToolCallData(id=f"c{i}", name="bash", arguments={"command": cmd})],
         ))
-        # The soft warning must never stop the loop (return True would fail it).
-        assert ok is False, f"near-identical warning unexpectedly stopped the loop at call {i}"
+        if ok:
+            break
 
-    assert root.outcome.failure is None
-    assert root._repeated_calls_detected is False
+    # The persisting family must eventually stop the loop (hard detection), not
+    # warn twice and then go silent.
+    assert ok is True, "persisting near-identical family must escalate to hard detection"
+    assert root.outcome.failure is not None
+    assert "near-identical" in root.outcome.failure.lower() or "repeated" in root.outcome.failure.lower()
 
     notices = [
         m for m in root.context.messages
         if m["role"] == "user" and m["content"].startswith("[notice]")
     ]
-    assert notices, "expected at least one near-identical notice"
+    assert notices, "expected at least one near-identical notice before escalation"
     assert len(notices) <= 2  # bounded by near_identical_warning_attempts
 
     near_events = [
         e for e in events if e.data.get("warning_type") == "near_identical_calls"
     ]
-    assert near_events, "expected a near_identical_calls safety event"
+    assert near_events, "expected near_identical_calls safety events"
     assert near_events[0].data["tool_name"] == "bash"
     assert near_events[-1].data["attempts_remaining"] == 0  # budget fully consumed
+
+
+def test_near_identical_bash_same_file_overlap_warns(runtime: Runtime) -> None:
+    """Re-reading the SAME lines of a file through a different wrapper (sed vs
+    awk, slightly different ranges) must be caught even though the command text
+    differs — this is the exact sed/awk re-read loop from the trace."""
+    root = _make_agent(
+        runtime, Task(description="re-read loop"),
+        repeated_call_limit=20, repeated_recovery_attempts=1,
+        near_identical_threshold=3, near_identical_window=6,
+        near_identical_similarity=0.6, near_identical_warning_attempts=2,
+    )
+    root.fail = lambda error, trace=None: root.outcome.__setattr__("failure", error)
+
+    cmds = [
+        "cd /repo && sed -n '400,470p' lib/a.cpp",
+        "cd /repo && awk 'NR>=410 && NR<=470 {print NR\": \"$0}' lib/a.cpp",
+        "cd /repo && sed -n '400,500p' lib/a.cpp",
+    ]
+    ok = False
+    for i, cmd in enumerate(cmds, start=1):
+        ok = root._check_repeated_calls(ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(id=f"b{i}", name="bash", arguments={"command": cmd})],
+        ))
+        assert ok is False, f"warning must not hard-fail on first detection, call {i}"
+
+    notices = [
+        m for m in root.context.messages
+        if m["role"] == "user" and m["content"].startswith("[notice]")
+    ]
+    assert notices, "overlapping same-file re-reads must be warned even across wrapper changes"
+
+
+def test_near_identical_bash_forward_paging_silent(runtime: Runtime) -> None:
+    """Strictly-disjoint advancing ranges of the same file (real forward paging
+    through bash) are legitimate progress and must never warn."""
+    root = _make_agent(
+        runtime, Task(description="page a big file"),
+        repeated_call_limit=20, near_identical_threshold=3,
+        near_identical_window=6, near_identical_similarity=0.6,
+        near_identical_warning_attempts=2,
+    )
+    root.fail = lambda error, trace=None: None
+    cmds = [
+        f"cd /repo && sed -n '{lo},{hi}p' lib/huge.cpp"
+        for lo, hi in [(1, 50), (51, 100), (101, 150), (151, 200), (201, 250), (251, 300)]
+    ]
+    for i, cmd in enumerate(cmds, start=1):
+        ok = root._check_repeated_calls(ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(id=f"p{i}", name="bash", arguments={"command": cmd})],
+        ))
+        assert ok is False
+    assert not [m for m in root.context.messages if m["content"].startswith("[notice]")]
 
 
 def test_near_identical_ignores_pure_pagination(runtime: Runtime) -> None:
@@ -798,5 +859,6 @@ def test_runtime_wires_near_identical_from_config(tmp_path) -> None:
     assert root._near_identical_window == 9
     assert root._near_identical_similarity == 0.5
     assert root._near_identical_tools == ("bash", "grep")
-    assert root._near_identical_warning_left == 7
+    assert root._near_identical_warning_attempts == 7
+    assert root._near_identical_warned == {}
 

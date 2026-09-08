@@ -33,7 +33,7 @@ class BenchmarkRunError(Exception):
 def stage_workspace(
     root: Path,
     *,
-    copy_dirs: tuple[str, ...] = ("src", "tests", "_payload"),
+    copy_dirs: tuple[str, ...] = ("src", "tests", "_payload", "_parallel", "_sources"),
     copy_files: tuple[str, ...] = ("pyproject.toml",),
 ) -> Path:
     """Create a controlled snapshot workspace from ``root`` for a benchmark run.

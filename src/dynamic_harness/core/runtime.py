@@ -90,7 +90,7 @@ class Runtime:
         self._safety_max_iterations = config.safety.max_iterations if config else 500
         self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
         self._repeated_recovery_attempts = (
-            config.safety.repeated_recovery_attempts if config else 1
+            config.safety.repeated_recovery_attempts if config else 2
         )
         self._repeated_call_exempt_tools = (
             list(config.safety.repeated_call_exempt_tools)

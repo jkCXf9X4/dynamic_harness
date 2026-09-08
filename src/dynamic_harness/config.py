@@ -92,7 +92,7 @@ class SafetyConfig(BaseModel):
     max_iterations: int = 500
     repeated_call_limit: int = 5
     repeated_recovery_attempts: int = Field(
-        default=1, ge=0,
+        default=2, ge=0,
         description="How many times a looping agent is nudged (a plain 'you are "
                     "repeating yourself, change strategy' user message is appended "
                     "and it gets another turn) before repeated-call detection "
@@ -143,8 +143,14 @@ class SafetyConfig(BaseModel):
     )
     near_identical_warning_attempts: int = Field(
         default=2, ge=0,
-        description="How many times the near-identical notice may be (re-)injected "
-                    "over the whole run. 0 disables the feature entirely.",
+        description="How many times the near-identical notice may be injected per "
+                    "distinct command family over the whole run (bash families are "
+                    "pagination-insensitive: sed/awk/head variants that re-read "
+                    "the same material group together). Once a family exhausts its "
+                    "budget it stops being warned and instead escalates into hard "
+                    "repeated-call detection (nudge then fail), so a persisting "
+                    "churn loop can never hide behind a spent global counter. "
+                    "0 disables the feature entirely.",
     )
     iteration_warning_margin: int = Field(
         default=50, ge=1,
