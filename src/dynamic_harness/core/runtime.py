@@ -129,6 +129,27 @@ class Runtime:
         self._call_timeout_seconds = (
             config.llm.call_timeout_seconds if config else 120.0
         )
+        # LLM call retry policy (llm.* — see config.py). Rate limits get more
+        # patience and a longer backoff than generic transient errors, and can
+        # drop the session-pinned provider so OpenRouter routes around an
+        # overloaded upstream pool.
+        self._retry_max_attempts = config.llm.retry_max_attempts if config else 4
+        self._rate_limit_max_attempts = config.llm.rate_limit_max_attempts if config else 6
+        self._retry_base_delay_seconds = (
+            config.llm.retry_base_delay_seconds if config else 1.0
+        )
+        self._retry_max_delay_seconds = (
+            config.llm.retry_max_delay_seconds if config else 30.0
+        )
+        self._retry_jitter_seconds = (
+            config.llm.retry_jitter_seconds if config else 0.5
+        )
+        self._rate_limit_backoff_multiplier = (
+            config.llm.rate_limit_backoff_multiplier if config else 3.0
+        )
+        self._fallback_on_rate_limit = (
+            config.llm.fallback_on_rate_limit if config else True
+        )
         self._max_agent_tokens = (
             config.safety.max_agent_tokens if config else None
         ) or None
@@ -683,6 +704,16 @@ class Runtime:
             )
         agent.max_agent_tokens = self._max_agent_tokens
         agent._call_timeout_seconds = self._call_timeout_seconds
+        # LLM retry policy — overrides the Agent constructor defaults with the
+        # resolved harness.json values (also covers resume()/fresh restarts,
+        # which rebuild agents via this same delegate()).
+        agent.retry_max_attempts = self._retry_max_attempts
+        agent.rate_limit_max_attempts = self._rate_limit_max_attempts
+        agent.retry_base_delay_seconds = self._retry_base_delay_seconds
+        agent.retry_max_delay_seconds = self._retry_max_delay_seconds
+        agent.retry_jitter_seconds = self._retry_jitter_seconds
+        agent.rate_limit_backoff_multiplier = self._rate_limit_backoff_multiplier
+        agent.fallback_on_rate_limit = self._fallback_on_rate_limit
         agent.set_environment_info(self._environment_info)
         agent.agent_type = agent_type
         # Spawn-cap accounting: depth is per-agent; the ledger (and the warning

@@ -30,6 +30,62 @@ class LLMProviderConfig(BaseModel):
                     "transient failures and keeps a separate full-run budget "
                     "(`safety.timeout_seconds`) spanning its whole context.",
     )
+    retry_max_attempts: int = Field(
+        default=4, ge=1,
+        description="How many times a single LLM call may be retried after a "
+                    "generic transient failure (timeout, connection drop, 5xx) "
+                    "before it is given up. Each retry sleeps an exponentially "
+                    "increasing backoff (retry_base_delay_seconds, capped by "
+                    "retry_max_delay_seconds). Rate-limited calls get their own, "
+                    "larger budget (rate_limit_max_attempts).",
+    )
+    rate_limit_max_attempts: int = Field(
+        default=6, ge=1,
+        description="How many times a single LLM call may be retried after a rate "
+                    "limit (HTTP 429 / engine_overloaded). Shared upstream pool "
+                    "overloads can outlast the generic transient-error budget, so "
+                    "rate limits get more attempts and a longer backoff "
+                    "(rate_limit_backoff_multiplier).",
+    )
+    retry_base_delay_seconds: float = Field(
+        default=1.0, gt=0.0,
+        description="Base sleep before the first retry, in seconds. The delay "
+                    "grows exponentially (base * 2^attempt), is capped at "
+                    "retry_max_delay_seconds, and is extended by a provider "
+                    "Retry-After header when one is sent. At most "
+                    "retry_jitter_seconds of random jitter is added so concurrent "
+                    "agents do not retry in lockstep.",
+    )
+    retry_max_delay_seconds: float = Field(
+        default=30.0, gt=0.0,
+        description="Upper bound on any single retry sleep, in seconds. Prevents a "
+                    "long retry chain from stalling a bounded-agent run for many "
+                    "minutes (the whole-run budget safety.timeout_seconds still "
+                    "caps the total).",
+    )
+    retry_jitter_seconds: float = Field(
+        default=0.5, ge=0.0,
+        description="Maximum random jitter added to each retry sleep, in seconds. "
+                    "Staggers concurrent agents so they do not all thump the "
+                    "provider at the same instant after a failure.",
+    )
+    rate_limit_backoff_multiplier: float = Field(
+        default=3.0, gt=0.0,
+        description="Scales the exponential backoff for rate-limited calls. With "
+                    "the defaults the sleeps run ~3s, 6s, 12s, 24s, then the 30s "
+                    "cap, buying a shared upstream pool tens of seconds to shed "
+                    "its overload before the call is given up.",
+    )
+    fallback_on_rate_limit: bool = Field(
+        default=True,
+        description="When a call fails with a rate limit, retry WITHOUT the "
+                    "session-pinned provider (the session_id that normally keeps "
+                    "every turn of a conversation on one provider for a warm "
+                    "prompt cache), so OpenRouter can route the retry to a "
+                    "different provider. Only the retried calls drop the pin; the "
+                    "next turn resumes normal session pinning. Has no effect when "
+                    "provider_force pins a single provider already.",
+    )
 
 
 class SafetyConfig(BaseModel):

@@ -153,6 +153,18 @@ class Agent:
         # `_safety_timeout_seconds` budget; set by Runtime from config. When None
         # the call is bounded only by the provider's httpx/SDK timeout.
         self._call_timeout_seconds: float | None = None
+        # LLM call retry policy (llm.* in harness.json, overridden by
+        # Runtime.delegate()). Rate limits (429 / engine_overloaded) get more
+        # attempts and a longer backoff than generic transient errors, and —
+        # when fallback_on_rate_limit is set — retries drop the session-pinned
+        # provider so OpenRouter can route around the overloaded upstream pool.
+        self.retry_max_attempts: int = 4
+        self.rate_limit_max_attempts: int = 6
+        self.retry_base_delay_seconds: float = 1.0
+        self.retry_max_delay_seconds: float = 30.0
+        self.retry_jitter_seconds: float = 0.5
+        self.rate_limit_backoff_multiplier: float = 3.0
+        self.fallback_on_rate_limit: bool = True
         self._started_at: float | None = None
         self._has_run: bool = False
         self._iteration: int = 0
@@ -560,19 +572,28 @@ class Agent:
             await self._run_guarded()
 
     async def _llm_call_with_retry(
-        self, tools: list[dict], messages: list[dict[str, Any]] | None = None, max_retries: int = 3
+        self, tools: list[dict], messages: list[dict[str, Any]] | None = None
     ) -> Any:
         llm = self.llm
         assert llm is not None
         msgs = messages if messages is not None else self.context.messages
         # Session-pinned config: keep every request of this conversation on the
-        # same provider/cache via the agent's stable session_id.
+        # same provider/cache via the agent's stable session_id. A rate-limited
+        # call may drop this pin on retry (fallback_on_rate_limit) so the
+        # provider can route the retry elsewhere.
         cfg = LLMConfig(model=llm.default_model, session_id=self.session_id)
 
-        base_delay = 1.0
+        # Attempt budgets by failure class. A rate limit is NOT the same as a
+        # generic transient error: shared upstream pool overloads (DeepInfra
+        # `engine_overloaded`) routinely outlast the seconds of backoff a plain
+        # timeout budget allows. Counting per class means one kind of failure
+        # never consumes the other kind's patience.
+        budgets = {False: self.retry_max_attempts, True: self.rate_limit_max_attempts}
+        attempts: dict[bool, int] = {False: 0, True: 0}
+        worst_budget = max(budgets[False], budgets[True])
         last_error: Exception | None = None
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(worst_budget):
             try:
                 coro = llm.generate_with_tools(msgs, tools, config=cfg)
                 if self._call_timeout_seconds is not None:
@@ -586,7 +607,9 @@ class Agent:
                 return await coro
             except Exception as e:
                 last_error = e
-                if not self._is_retryable(e) or attempt >= max_retries:
+                rate_limited = self._is_rate_limit(e)
+                attempts[rate_limited] += 1
+                if not self._is_retryable(e) or attempts[rate_limited] >= budgets[rate_limited]:
                     if (
                         isinstance(e, asyncio.TimeoutError)
                         and self._call_timeout_seconds is not None
@@ -598,12 +621,69 @@ class Agent:
                         # safety.timeout_seconds being exhausted.
                         raise RuntimeError(
                             f"LLM call exceeded the {self._call_timeout_seconds}s "
-                            f"per-call timeout on all {max_retries + 1} attempt(s)"
+                            f"per-call timeout on all {budgets[False]} attempt(s)"
                         ) from e
                     raise
                 self._runtime.record_retry(self.id)
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
-                await asyncio.sleep(delay)
+                # Adaptive backoff: exponential in the retry count for this
+                # failure class, scaled up for rate limits, honoring a provider
+                # Retry-After header, and always capped at the configured ceiling.
+                retry_count = attempts[rate_limited]
+                delay = self.retry_base_delay_seconds * (
+                    self.rate_limit_backoff_multiplier if rate_limited else 1.0
+                ) * (2.0 ** (retry_count - 1))
+                retry_after = self._retry_after_seconds(e)
+                if retry_after is not None:
+                    delay = max(delay, retry_after)
+                delay = min(delay, self.retry_max_delay_seconds)
+                await asyncio.sleep(delay + random.uniform(0, self.retry_jitter_seconds))
+                if rate_limited and self.fallback_on_rate_limit and cfg.session_id:
+                    # Drop the session pin: retry outside the pinned provider so
+                    # OpenRouter can route to one that is not overloaded. Only
+                    # this retry is affected; the next turn re-pins via
+                    # `self.session_id`.
+                    cfg = LLMConfig(model=llm.default_model)
+        if last_error is not None:
+            raise last_error
+
+    @staticmethod
+    def _is_rate_limit(exc: Exception) -> bool:
+        """True for HTTP 429 / explicit rate-limit failures, which get a longer
+        retry budget than generic transient errors (a shared upstream pool can
+        stay overloaded for tens of seconds)."""
+        if isinstance(exc, RateLimitError):
+            return True
+        if isinstance(exc, APIStatusError):
+            status = getattr(exc, "status_code", None)
+            if status == 429:
+                return True
+        error_str = str(exc).lower()
+        return any(
+            keyword in error_str
+            for keyword in (
+                "rate_limit", "rate limit", "429", "too many requests",
+                "engine_overloaded", "upstream_provider_shared_pool",
+            )
+        )
+
+    @staticmethod
+    def _retry_after_seconds(exc: Exception) -> float | None:
+        """Seconds to wait before retrying, from a provider Retry-After header
+        (if one was sent). Returns None when absent. Only the seconds form is
+        parsed; a future HTTP-date falls back to the exponential backoff."""
+        response = getattr(exc, "response", None)
+        if response is None:
+            return None
+        value = getattr(getattr(response, "headers", None), "get", None)
+        if value is None:
+            return None
+        raw = value("retry-after")
+        if not raw:
+            return None
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            return None
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:

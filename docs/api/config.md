@@ -72,6 +72,13 @@ positive value or `null`, so only `null` disables those. Per-cap notes call this
 | `price_input_per_mtok` | `null` | USD per 1M input tokens, if known (used for cost reporting). |
 | `price_output_per_mtok` | `null` | USD per 1M output tokens, if known (used for cost reporting). |
 | `call_timeout_seconds` | `120.0` | Timeout for a single LLM request. Must be `> 0`. A slow/stuck provider call is abandoned after this; the agent may retry transient failures. This is a *per-call* deadline and is separate from `safety.timeout_seconds` (the whole-run wall clock). |
+| `retry_max_attempts` | `4` | How many times a single LLM call may be retried after a generic transient failure (timeout, connection drop, 5xx) before it is given up. Each retry sleeps an exponential backoff (`retry_base_delay_seconds`, capped by `retry_max_delay_seconds`). Rate-limited calls get their own, larger budget (`rate_limit_max_attempts`). |
+| `rate_limit_max_attempts` | `6` | How many times a single LLM call may be retried after a rate limit (HTTP 429 / `engine_overloaded`). Shared upstream pool overloads can outlast the generic transient-error budget, so rate limits get more attempts and a longer backoff (`rate_limit_backoff_multiplier`). |
+| `retry_base_delay_seconds` | `1.0` | Base sleep before the first retry. The delay grows exponentially (`base * 2^attempt`), is capped at `retry_max_delay_seconds`, is extended by a provider `Retry-After` header when one is sent, and gets up to `retry_jitter_seconds` of random jitter. |
+| `retry_max_delay_seconds` | `30.0` | Upper bound on any single retry sleep. Prevents a long retry chain from stalling a bounded agent for minutes (`safety.timeout_seconds` still caps the whole run). |
+| `retry_jitter_seconds` | `0.5` | Maximum random jitter added to each retry sleep, so concurrent agents do not retry in lockstep against a struggling provider. |
+| `rate_limit_backoff_multiplier` | `3.0` | Scales the exponential backoff for rate-limited calls. With the defaults the sleeps run ~3s, 6s, 12s, 24s, then the 30s cap — buying a shared upstream pool tens of seconds to shed its overload. |
+| `fallback_on_rate_limit` | `true` | On a rate-limited call, retry **without** the session-pinned provider (the `session_id` that normally keeps every turn of a conversation on one provider for a warm prompt cache), so OpenRouter can route the retry to a different provider. Only the retried calls drop the pin — the next turn resumes normal session pinning. No effect when `provider_force` already pins one provider. |
 
 Example:
 
@@ -84,10 +91,18 @@ Example:
     "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
     "provider_allow_fallbacks": true,
     "verify_ssl": true,
-    "call_timeout_seconds": 500
+    "call_timeout_seconds": 500,
+    "retry_max_attempts": 4,
+    "rate_limit_max_attempts": 6,
+    "rate_limit_backoff_multiplier": 3.0
   }
 }
 ```
+
+> Note: `provider_force` pins every request to one provider (disabling fallbacks), so
+> `fallback_on_rate_limit` has no effect while it is set — the extra patience in
+> `rate_limit_max_attempts`/`rate_limit_backoff_multiplier` still helps it wait out
+> the overloaded upstream pool.
 
 ---
 
