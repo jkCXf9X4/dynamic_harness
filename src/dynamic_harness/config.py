@@ -100,12 +100,13 @@ class SafetyConfig(BaseModel):
                     "immediately on first detection.",
     )
     repeated_call_exempt_tools: list[str] = Field(
-        default_factory=lambda: ["status", "usage", "result_read"],
+        default_factory=lambda: ["status", "usage", "result_read", "result_bash"],
         description="Tool names that repeated-call loop detection treats as pure "
                     "monitoring and ignores entirely. These are cheap read-only "
                     "observations whose outputs change as live state changes (a "
                     "child's status/heal-count, the agent's own token spend) or "
-                    "are read-only paging of already-cached results (result_read); "
+                    "are read-only paging/filtering of already-cached results "
+                    "(result_read / result_bash); "
                     "a parent polling them while it waits on slow or self-healing "
                     "children is the intended pattern, not a stuck loop. A turn "
                     "made up solely of these tools is not counted toward loop "

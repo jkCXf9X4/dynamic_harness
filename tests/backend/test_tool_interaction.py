@@ -55,6 +55,7 @@ def _make_registry() -> ToolRegistry:
     reg = ToolRegistry()
     from dynamic_harness.core.tools.filesystem import grep as _tool_grep, read as _tool_read
     from dynamic_harness.core.tools.process import bash as _tool_bash
+    from dynamic_harness.core.tools.result_bash import result_bash as _tool_result_bash
     from dynamic_harness.core.tools.result_read import result_read as _tool_result_read
     reg.register(
         ToolDef(name="read", description="Read a file", input_schema={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
@@ -71,6 +72,10 @@ def _make_registry() -> ToolRegistry:
     reg.register(
         ToolDef(name="result_read", description="Read cached result", input_schema={"type": "object", "properties": {"result_id": {"type": "string"}, "token_limit": {"type": "integer"}, "token_offset": {"type": "integer"}}, "required": ["result_id"]}),
         _tool_result_read,
+    )
+    reg.register(
+        ToolDef(name="result_bash", description="Run command over cached result via stdin", input_schema={"type": "object", "properties": {"result_id": {"type": "string"}, "command": {"type": "string"}, "timeout": {"type": "integer"}}, "required": ["result_id", "command"]}),
+        _tool_result_bash,
     )
     return reg
 
@@ -230,6 +235,77 @@ async def test_result_read_unknown_handle_errors(runtime: Runtime) -> None:
     agent = _make_agent(runtime, "test")
     result = await reg.execute("result_read", "tc1", agent=agent, result_id="nope-nope-nope")
     assert "unknown result_id" in result.content
+
+
+# ── result_bash: run commands over cached snapshots without re-running ──
+
+@pytest.mark.asyncio
+async def test_result_bash_filters_snapshot_without_rerunning(runtime: Runtime) -> None:
+    """result_bash pipes a cached snapshot to a command's stdin. The producing
+    bash command increments a counter file; filtering via result_bash must NOT
+    re-run it — the counter proves it."""
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    probe = runtime.generated_root / "run_count2.txt"
+    probe.write_text("0")
+
+    first = await reg.execute(
+        "bash", "tc1", agent=agent,
+        command=f"echo RUN >> {probe}; seq 1 50",
+        token_limit=2,
+    )
+    assert first.result_id
+    assert probe.read_text().count("RUN") == 1  # ran exactly once
+
+    # rg the SNAPSHOT (which lives in the result cache, not on disk) for the
+    # final lines. `tail` reads stdin; the cached snapshot is "1..50".
+    match = await reg.execute(
+        "result_bash", "tc2", agent=agent,
+        result_id=first.result_id, command="tail -4",
+    )
+    assert probe.read_text().count("RUN") == 1  # result_bash must NOT re-run bash
+    assert match.content
+    lines = [l for l in match.content.splitlines() if l.strip().isdigit()]
+    assert lines == ["47", "48", "49", "50"]
+
+    # Search-only pipelines work too (grep over stdin), still no re-run.
+    count = await reg.execute(
+        "result_bash", "tc3", agent=agent,
+        result_id=first.result_id, command="grep -E '^[34][0-9]$' | wc -l",
+    )
+    assert probe.read_text().count("RUN") == 1
+    assert count.content.strip() == "20"  # lines 30..39
+
+
+@pytest.mark.asyncio
+async def test_result_bash_snapshot_wins_over_disk(runtime: Runtime) -> None:
+    """result_bash filters the cached text, never the current file contents —
+    proof it never goes back to the tool/disk."""
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    f = runtime.generated_root / "doomed2.txt"
+    f.write_text("AAA")
+    first = await reg.execute("read", "tc1", agent=agent, path=str(f))
+    rid = first.result_id
+    assert rid
+    f.unlink()  # a fresh read would now fail
+    result = await reg.execute(
+        "result_bash", "tc2", agent=agent,
+        result_id=rid, command="sort",
+    )
+    assert result.content == "AAA"
+
+
+@pytest.mark.asyncio
+async def test_result_bash_unknown_handle_errors(runtime: Runtime) -> None:
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    result = await reg.execute(
+        "result_bash", "tc1", agent=agent,
+        result_id="nope-nope-nope", command="head -1",
+    )
+    assert "unknown result_id" in result.content
+
 
 
 @pytest.mark.asyncio

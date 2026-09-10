@@ -71,7 +71,7 @@ class AgentPolicy:
         self.repeated_call_exempt_tools: tuple[str, ...] = tuple(
             repeated_call_exempt_tools
             if repeated_call_exempt_tools is not None
-            else ("status", "usage", "result_read")
+            else ("status", "usage", "result_read", "result_bash")
         )
         self.safety_timeout_seconds: float | None = safety_timeout_seconds
         self.disable_root_timeout = bool(disable_root_timeout)

@@ -9,9 +9,11 @@ class ResultStore:
 
     Every cacheable tool call has its full (untruncated) output stored here
     behind an opaque handle. A dedicated read-only tool (``result_read``) pages
-    a snapshot by handle — it never re-executes the producing tool, which is
-    what makes the cache safe for slow/expensive work: re-running is only ever
-    invoked by calling the work tool again (no ``result_id`` arg on work tools).
+    a snapshot by handle, and ``result_bash`` pipes it to a shell command's
+    stdin for filtering (``rg``/``jq``/``wc -l`` etc.) — neither ever
+    re-executes the producing tool, which is what makes the cache safe for
+    slow/expensive work: re-running is only ever invoked by calling the work
+    tool again (no ``result_id`` arg on work tools).
 
     The store is deliberately NOT persisted to checkpoints and is cleared
     whenever an agent's in-memory context is reclaimed or its run resets: a

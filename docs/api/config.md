@@ -123,7 +123,7 @@ Example:
 | `max_iterations` | `500` | Hard cap on agent loop iterations. Exceeding it force-fails the agent. |
 | `repeated_call_limit` | `5` | Hard cap on *identical* consecutive tool-call batches before the agent force-fails (prevents LLM loops). |
 | `repeated_recovery_attempts` | `2` | How many times a looping agent is nudged ("you are repeating yourself, change strategy") before repeated-call detection force-fails it. `0` fails immediately on first detection. |
-| `repeated_call_exempt_tools` | `["status", "usage", "result_read"]` | Tool names treated as pure monitoring and ignored by repeated-call detection. `status`/`usage` are cheap live observations; `result_read` is read-only paging of already-cached result snapshots (never re-executes work). A turn made up solely of these is not counted toward loop detection (genuinely stuck agents are still bounded by `max_iterations` / `max_agent_tokens` / `timeout_seconds`). |
+| `repeated_call_exempt_tools` | `["status", "usage", "result_read", "result_bash"]` | Tool names ignored for pure monitoring: status/usage are cheap live observations; `result_read`/`result_bash` are read-only paging/filtering of already-cached result snapshots (never re-execute work). A turn made up solely of these is not counted toward loop detection (genuinely stuck agents are still bounded by `max_iterations` / `max_agent_tokens` / `timeout_seconds`). |
 | `near_identical_threshold` | `3` | Soft-warning threshold: how many near-identical tool calls must appear in the sliding window before a notice is injected. Must be `>= 1`. A notice is non-fatal on its own. |
 | `near_identical_window` | `6` | Sliding-window size over which near-identical calls are counted; older calls are forgotten. Must be `>= 2`. |
 | `near_identical_similarity` | `0.6` | Minimum `difflib.SequenceMatcher` ratio (`0.0`–`1.0`) between two normalized calls to count as near-identical. Pagination knobs (`token_offset`/`token_limit`) are excluded from the signature so paged reads never look duplicated. Must be in `(0.0, 1.0]`. |
@@ -163,7 +163,7 @@ Example:
     "max_iterations": 400,
     "repeated_call_limit": 5,
     "repeated_recovery_attempts": 2,
-    "repeated_call_exempt_tools": ["status", "usage", "result_read"],
+    "repeated_call_exempt_tools": ["status", "usage", "result_read", "result_bash"],
     "near_identical_threshold": 3,
     "near_identical_window": 6,
     "near_identical_similarity": 0.6,

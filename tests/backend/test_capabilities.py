@@ -97,7 +97,7 @@ def test_ask_tool_def_in_registry(runtime: Runtime) -> None:
 
 
 def test_default_tools_all_twenty_four(runtime: Runtime) -> None:
-    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "kill", "status", "resume", "read_artifact", "plan", "checkpoint", "usage", "archive", "result_read"}
+    expected = {"read", "write", "glob", "grep", "bash", "webfetch", "edit", "delegate", "report", "escalate", "fail", "ask", "compress", "prune", "restore", "converse", "kill", "status", "resume", "read_artifact", "plan", "checkpoint", "usage", "archive", "result_read", "result_bash"}
     assert set(runtime.tool_registry.list_tools()) == expected
 
 

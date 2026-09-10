@@ -93,10 +93,11 @@ class ToolContext:
         """This agent's bounded cache of full tool-result snapshots.
 
         Cacheable tool calls are stored here behind an opaque handle so the
-        read-only ``result_read`` tool can page them without re-running the
-        work (slow bash/webfetch/grep results especially). Memory-only and
-        per-agent; cleared when the agent's context is reclaimed or the run
-        resets, so a resumed agent never serves stale snapshots.
+        read-only ``result_read`` tool can page them and ``result_bash`` can
+        filter them via stdin without re-running the work (slow bash/webfetch/
+        grep results especially). Memory-only and per-agent; cleared when the
+        agent's context is reclaimed or the run resets, so a resumed agent
+        never serves stale snapshots.
         """
         return self._agent.result_store
 

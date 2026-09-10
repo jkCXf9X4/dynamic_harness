@@ -48,7 +48,7 @@ balloons to 200–680K — `self-healing.md:42-50`).
 Dynamic Harness enforces safety in `_run_loop()`:
 
 - **Repeated-call detection** — N identical tool-call batches in a row force
-  a fail. Pure monitoring tools (`status`, `usage`, `result_read`) are exempt
+  a fail. Pure monitoring tools (`status`, `usage`, `result_read`, `result_bash`) are exempt
   entirely — a parent polling its self-healing children is waiting, not looping,
   and a turn composed solely of them is not counted at all.
 - **Near-identical call warning** — a fuzzy detector that pagination-normalizes
@@ -64,7 +64,7 @@ Dynamic Harness enforces safety in `_run_loop()`:
 Fuzzy near-duplicate tool-call detection at runtime is not present in the other
 harnesses surveyed.
 
-### 2. Result caching behind opaque handles (`result_read`)
+### 2. Result caching behind opaque handles (`result_read` / `result_bash`)
 
 Every cacheable tool call (`read`, `glob`, `grep`, `bash`, `webfetch`,
 `read_artifact`, `status`, `usage`, …) stores its **full** output in a
@@ -72,6 +72,9 @@ per-agent, bounded, in-memory `ResultStore` behind an opaque handle. When a
 result is truncated, the footer advertises the handle and the read-only
 `result_read` tool pages the snapshot by `result_id` — **never re-executing**
 the producing tool. Paging a slow bash/webfetch result is therefore free.
+`result_bash` goes further: it pipes the snapshot text to any shell command's
+stdin (`rg`, `jq`, `awk`, `wc -l`, `python3 -c '...'`), so the full bash
+vocabulary can probe an expensive saved output without re-running the work.
 
 Two properties follow:
 

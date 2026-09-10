@@ -222,7 +222,7 @@ class LoopGuard:
         self.exempt_tools: tuple[str, ...] = tuple(
             repeated_call_exempt_tools
             if repeated_call_exempt_tools is not None
-            else ("status", "usage", "result_read")
+            else ("status", "usage", "result_read", "result_bash")
         )
         # Remaining chances to nudge a looping agent out of its rut before
         # repeated-call detection force-fails it (0 = fail on first detection).

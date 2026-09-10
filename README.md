@@ -55,9 +55,9 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 ## Safety invariants (enforced in code, not prompt)
 
-- **Repeated-call detection** — identical tool-call batches force a fail; pure monitoring tools (`status`/`usage`/`result_read`) are exempt so parents can poll without tripping it; turns composed solely of them don't count toward loop detection
+- **Repeated-call detection** — identical tool-call batches force a fail; pure monitoring tools (`status`/`usage`/`result_read`/`result_bash`) are exempt so parents can poll without tripping it; turns composed solely of them don't count toward loop detection
 - **Near-identical call warnings** — pagination-normalized `bash` signatures (`sed -n 'A,Bp'` ≈ `head -N` ≈ `awk NR>=A,NR<=B`) detect *same-file overlapping* re-reads per command family, warn the model, then escalate into hard loop-detection (disjoint forward paging and different files stay silent)
-- **Result handles** — `read`/`glob`/`grep`/`bash`/`webfetch`/… outputs are cached behind opaque `result_id` handles; `result_read` pages the full snapshot **without re-executing** the producing tool. Handles are read-only and memory-only (cleared on GC), so paging slow work is free and resumed agents never see stale snapshots
+- **Result handles** — `read`/`glob`/`grep`/`bash`/`webfetch`/… outputs are cached behind opaque `result_id` handles; `result_read` pages the full snapshot and `result_bash` pipes it to any shell filter (`rg`, `jq`, `wc -l`, python) — all **without re-executing** the producing tool. Handles are read-only and memory-only (cleared on GC), so probing slow work is free and resumed agents never see stale snapshots
 - **Spawn caps** — `max_agents`, `max_depth`, and a per-lineage `max_same_target_delegations` keyed on normalized file/directory signatures; every spawn (including self-heal restarts) passes through the same gate, and each `delegate` result carries a `[delegation budget]` line so the model self-regulates
 - **Blunt-vs-rot self-healing** — blunt stop (prose answer, forgot the artifact, single recoverable error) → resume the same agent once; context rot (repeated calls, max iterations, timeout, repeated misses) → spawn a fresh worker pointed at the dead worker's artifacts; structural failure → escalate. All layers share one heal budget so retries can't stack
 

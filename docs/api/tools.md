@@ -7,7 +7,7 @@ classes:
   - ToolResult
   - ToolRegistry
 summary: >
-  Complete reference for all 25 built-in tools, their OpenAPI schemas,
+  Complete reference for all 26 built-in tools, their OpenAPI schemas,
   implementations, and the ToolRegistry API for registering custom tools.
 related:
   - api/runtime.md
@@ -105,7 +105,13 @@ The registered tool count is authoritative from `register_default_tools()` in
 | 17 | `kill` | `agent_id: str, reason?: str, recursive?: bool` | No | Orchestration |
 | 18 | `status` | `agent_id?: str` | No | Orchestration |
 | 19 | `resume` | `agent_id: str, note?: str, strategy?: str` | No | Orchestration |
-| 20 | `read_artifact` | `artifact_id: str` | No | Artifact |
+| 20 | `read_artifact` | `artifact_id: str, file?: str, level?: str` | No | Artifact |
+| 21 | `plan` | `steps: list[str], objective?: str, acceptance?: list[str], deliverable?: str` | No | Planning |
+| 22 | `checkpoint` | `note: str` | No | Planning |
+| 23 | `usage` | *(none)* | No | Context |
+| 24 | `archive` | `content?: str, path?: str, label?: str, summary?: str` | No | Artifact |
+| 25 | `result_read` | `result_id: str, token_limit?: int, token_offset?: int` | No | Result cache |
+| 26 | `result_bash` | `result_id: str, command: str, timeout?: int` | No | Result cache |
 
 Terminal tools (report, escalate, fail) set the agent's task status and stop the tool-calling loop.
 
@@ -505,6 +511,42 @@ Escalations are never resumed.
 ```
 
 **Implementation:** Looks up the artifact in `ArtifactStore`. Returns all non-empty view levels (headline, summary_200, summary_1000, technical, full_report, raw_data).
+
+---
+
+### 25. `result_read` — Page a cached result snapshot without re-running
+
+```json
+{
+  "name": "result_read",
+  "parameters": {
+    "result_id": { "type": "string", "description": "Handle from an earlier tool result's cached-result footer" },
+    "token_limit": { "type": "integer", "description": "Max tokens to return (1 token ≈ 4 chars). Default 100." },
+    "token_offset": { "type": "integer", "description": "Skip this many tokens from the snapshot start. Default 0." }
+  },
+  "required": ["result_id"]
+}
+```
+
+**Implementation:** Every cacheable tool call (`read`, `glob`, `grep`, `bash`, `webfetch`, `status`, `read_artifact`, …) stores its FULL untruncated output in the agent's in-memory `ResultStore` behind an opaque `result_id`. When a call is truncated, footer advertises the handle. `result_read` slices that snapshot by token window — **never re-executing** the producing tool, so paging slow bash/webfetch is free. An unknown handle (evicted or the agent resumed) returns a clear error telling the model to re-run the producing tool. Handles are read-only and memory-only.
+
+---
+
+### 26. `result_bash` — Filter a cached result with any shell command
+
+```json
+{
+  "name": "result_bash",
+  "parameters": {
+    "result_id": { "type": "string", "description": "Handle returned by an earlier tool call's cached-result footer" },
+    "command": { "type": "string", "description": "Shell command; the snapshot text is piped to its stdin (e.g. 'rg -i pattern | head -50', 'wc -l', 'jq .')" },
+    "timeout": { "type": "integer", "description": "Timeout in milliseconds (default 120000)" }
+  },
+  "required": ["result_id", "command"]
+}
+```
+
+**Implementation**: Looks up the cached snapshot by `result_id` (same unknown/evicted error contract as `result_read`), then spawns `sh -c <command>` and pipes the snapshot text to its **stdin**. The full bash vocabulary (`rg`, `grep`, `jq`, `awk`, `wc -l`, `sort`, `tail`, `python3 -c '...'`) can probe an expensive saved output without ever re-running the producing tool; the filter's stdout+stderr is returned (and itself cached/truncated like any cacheable tool). The process group is killed on timeout/cancel. Read-only and worker-only (not in the orchestrator allow-list), mirroring `bash`.
 
 ---
 
