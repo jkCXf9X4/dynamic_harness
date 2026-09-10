@@ -4,6 +4,8 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 **Core insight:** A 3-turn sub-agent with a clean slate outperforms a 20-turn monolithic agent.
 
+**What makes this different:** safety and recovery are *deterministic runtime machinery*, not prompt advice. Loop detection is fuzzy (near-identical `bash` calls are caught and warned per-family), expensive tool results are cached behind read-only handles you can page for free, self-healing distinguishes blunt mistakes from context rot (resume vs. fresh worker with a single shared heal budget), and spawn limits are enforced per-lineage with normalized target signatures. These guarantees keep working even when the model ignores instructions.
+
 ## Documentation
 
 | Section | Description |
@@ -20,7 +22,7 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 | Runtime | [docs/api/runtime.md](docs/api/runtime.md) |
 | Agent | [docs/api/agent.md](docs/api/agent.md) |
 | Task models | [docs/api/task.md](docs/api/task.md) |
-| Tools (all 17) | [docs/api/tools.md](docs/api/tools.md) |
+| Tools (all 25) | [docs/api/tools.md](docs/api/tools.md) |
 | Artifact system | [docs/api/artifacts.md](docs/api/artifacts.md) |
 | Repository | [docs/api/repository.md](docs/api/repository.md) |
 | LLM provider | [docs/api/llm.md](docs/api/llm.md) |
@@ -43,12 +45,21 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 ## Architectural principles
 
+- **Fresh-context economics** — a focused 3-turn sub-agent costs less and outputs better than a 20-turn monolith; delegation overhead (~3K tokens) beats context rot (>15K tokens)
 - **Actor model** — agents know only parent, children, and task; no sibling/global visibility
 - **Artifact-driven communication** — findings to disk; parents consume summaries, not raw context
-- **Progressive disclosure** — headline -> 200-char -> 1000-char -> technical -> full report
+- **Progressive disclosure** — headline -> 200-char -> 1000-char -> technical -> full report, read lazily (default `read_artifact` level is the compact summary)
 - **Disposable workers** — state lives in immutable artifacts, not agent memory
 - **Git-like provenance** — every completed task creates a Commit with parent/child links
 - **Runtime/graph separation** — the Runtime owns the task graph; agents never see it
+
+## Safety invariants (enforced in code, not prompt)
+
+- **Repeated-call detection** — identical tool-call batches force a fail; pure monitoring tools (`status`/`usage`/`result_read`) are exempt so parents can poll without tripping it; turns composed solely of them don't count toward loop detection
+- **Near-identical call warnings** — pagination-normalized `bash` signatures (`sed -n 'A,Bp'` ≈ `head -N` ≈ `awk NR>=A,NR<=B`) detect *same-file overlapping* re-reads per command family, warn the model, then escalate into hard loop-detection (disjoint forward paging and different files stay silent)
+- **Result handles** — `read`/`glob`/`grep`/`bash`/`webfetch`/… outputs are cached behind opaque `result_id` handles; `result_read` pages the full snapshot **without re-executing** the producing tool. Handles are read-only and memory-only (cleared on GC), so paging slow work is free and resumed agents never see stale snapshots
+- **Spawn caps** — `max_agents`, `max_depth`, and a per-lineage `max_same_target_delegations` keyed on normalized file/directory signatures; every spawn (including self-heal restarts) passes through the same gate, and each `delegate` result carries a `[delegation budget]` line so the model self-regulates
+- **Blunt-vs-rot self-healing** — blunt stop (prose answer, forgot the artifact, single recoverable error) → resume the same agent once; context rot (repeated calls, max iterations, timeout, repeated misses) → spawn a fresh worker pointed at the dead worker's artifacts; structural failure → escalate. All layers share one heal budget so retries can't stack
 
 ## How it works
 
@@ -72,7 +83,7 @@ User: "Analyze this repo for security issues"
        └── report(summary, artifact_ids=[...]) -> commit to Repository
 ```
 
-## Available tools (17)
+## Available tools (25)
 
 | Tool | Parameters | Category |
 |------|-----------|----------|
@@ -83,13 +94,21 @@ User: "Analyze this repo for security issues"
 | `bash` | `command, timeout?` | Shell |
 | `webfetch` | `url` | Network |
 | `edit` | `path, old_string, new_string` | Filesystem |
-| `delegate` | `description, role?, system_prompt?` | Orchestration |
-| `read_artifact` | `artifact_id` | Artifact |
+| `delegate` | `description, role?, system_prompt?, agent_type?` | Orchestration |
+| `plan` | `steps, objective?, acceptance?, deliverable?` | Planning |
+| `checkpoint` | `note` | Planning |
+| `read_artifact` | `artifact_id, file?, level?` | Artifact |
+| `archive` | `content?, path?, label?, summary?` | Artifact |
 | `converse` | `agent_id, message` | Communication |
+| `status` | `agent_id?` | Communication |
+| `kill` | `agent_id, reason?, recursive?` | Communication |
+| `resume` | `agent_id, note?, strategy?` | Self-heal |
 | `ask` | `question` | I/O |
+| `usage` | *(none)* | Context |
 | `compress` | *(none)* | Context |
 | `prune` | `prune_ids?` | Context |
 | `restore` | `prune_id` | Context |
+| `result_read` | `result_id, token_limit?, token_offset?` | Context |
 | `report` | `summary, artifact_ids?, technical_summary?, full_report?, confidence?` | Terminal |
 | `escalate` | `issue` | Terminal |
 | `fail` | `error` | Terminal |

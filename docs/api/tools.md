@@ -7,7 +7,7 @@ classes:
   - ToolResult
   - ToolRegistry
 summary: >
-  Complete reference for all 17 built-in tools, their OpenAPI schemas,
+  Complete reference for all 25 built-in tools, their OpenAPI schemas,
   implementations, and the ToolRegistry API for registering custom tools.
 related:
   - api/runtime.md
