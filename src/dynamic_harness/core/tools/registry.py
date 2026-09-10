@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from pydantic import BaseModel
 
+from ..policies.permissions import ToolPermissionPolicy
 from ..policies.result_cache import ResultCachePolicy
 
 if TYPE_CHECKING:
@@ -21,30 +22,16 @@ class ToolDef(BaseModel):
     input_schema: dict[str, Any]
 
 
-# Tools an orchestrator IS allowed: orchestration + verification + its own
-# context management (compress/prune/restore only manage its own memory).
-# Anything else (read/write/glob/grep/edit/bash/webfetch) is worker work that
-# an orchestrator physically cannot invoke — closing the "what counts as work"
-# loophole in code, not just in prompt text.
-ORCHESTRATOR_ALLOWED_TOOLS: frozenset[str] = frozenset({
-    "delegate", "converse", "kill", "status", "resume", "ask", "read_artifact", "usage",
-    "report", "escalate", "fail",
-    "compress", "prune", "restore",
-    "plan", "checkpoint",
-    "result_read",
-})
-
-
-ROLE_TOOL_OVERRIDES: dict[str, frozenset[str]] = {
-    "orchestrator": ORCHESTRATOR_ALLOWED_TOOLS,
-}
+# Back-compat aliases: the role allow-list lives with the ToolPermissionPolicy
+# (host-agnostic); these names are kept for tests and callers that import the
+# constant directly.
+ORCHESTRATOR_ALLOWED_TOOLS: frozenset[str] = ToolPermissionPolicy.ORCHESTRATOR_ALLOWED_TOOLS
+ROLE_TOOL_OVERRIDES: dict[str, frozenset[str]] = ToolPermissionPolicy.ROLE_TOOL_OVERRIDES
 
 
 def tools_for_role(role: str | None) -> frozenset[str] | None:
     """Return the explicit allow-list for a role, or None for no restriction."""
-    if role is None:
-        return None
-    return ROLE_TOOL_OVERRIDES.get(role)
+    return ToolPermissionPolicy.tools_for_role(role)
 
 
 # Tools whose output is NEVER cached behind a result handle. These mutate

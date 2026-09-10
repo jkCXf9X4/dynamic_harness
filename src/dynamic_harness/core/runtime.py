@@ -8,13 +8,17 @@ from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
+from ..config import HarnessConfig
 from ..memory.repository import Commit, Repository
 from .agent import Agent, progress_summary_block
 from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
 from .references import discover_references, render_reference_index
+from .policies.agent import AgentPolicy
+from .policies.disclosure import DisclosurePolicy
 from .policies.heal import HealBudget, HealPolicy
+from .policies.permissions import ToolPermissionPolicy
 from .policies.spawn import SpawnPolicy
 from .spawn_limits import (
     DelegationLimit,
@@ -28,7 +32,6 @@ from .trace import TraceStore
 from .usage import UsageTracker
 
 if TYPE_CHECKING:
-    from ..config import HarnessConfig
     from ..llm.provider import LLMProvider
 
 
@@ -60,6 +63,10 @@ class Runtime:
         *,
         checkpoint_root: Path | None = None,
     ) -> None:
+        # A bare ``Runtime()`` behaves EXACTLY like a default ``HarnessConfig()``:
+        # config is the only default provider, so there is no second hardcoded
+        # fallback dictionary to drift (the old ``if config else <n>`` ladder).
+        config = config or HarnessConfig()
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
         self.trace_store = TraceStore(trace_root) if trace_root else None
@@ -89,93 +96,29 @@ class Runtime:
         self._llm: LLMProvider | None = None
         self._gitignore_filter: Callable[[str], bool] | None = None
         self._gitignore_mtime: float | None = None
-        self._safety_max_iterations = config.safety.max_iterations if config else 500
-        self._repeated_call_limit = config.safety.repeated_call_limit if config else 5
-        self._repeated_recovery_attempts = (
-            config.safety.repeated_recovery_attempts if config else 2
-        )
-        self._repeated_call_exempt_tools = (
-            list(config.safety.repeated_call_exempt_tools)
-            if config
-            else ["status", "usage", "result_read"]
-        )
-        self._near_identical_threshold = (
-            config.safety.near_identical_threshold if config else 3
-        )
-        self._near_identical_window = (
-            config.safety.near_identical_window if config else 6
-        )
-        self._near_identical_similarity = (
-            config.safety.near_identical_similarity if config else 0.6
-        )
-        self._near_identical_tools = (
-            list(config.safety.near_identical_tools) if config else ["bash"]
-        )
-        self._near_identical_warning_attempts = (
-            config.safety.near_identical_warning_attempts if config else 2
-        )
-        self._iteration_warning_margin = (
-            config.safety.iteration_warning_margin if config else 50
-        )
-        self._iteration_warning_attempts = (
-            config.safety.iteration_warning_attempts if config else 1
-        )
-        self._safety_timeout_seconds = config.safety.timeout_seconds if config else 900
-        self._disable_root_timeout = (
-            config.safety.disable_root_timeout if config else True
-        )
-        # Per-call LLM deadline (llm.call_timeout_seconds). Unlike the httpx/SDK
-        # timeout — which is an idle-per-read cap that a streaming provider can
-        # silently stretch for many minutes — this is a hard total-request bound
-        # enforced by the agent via asyncio.wait_for.
-        self._call_timeout_seconds = (
-            config.llm.call_timeout_seconds if config else 120.0
-        )
-        # LLM call retry policy (llm.* — see config.py). Rate limits get more
-        # patience and a longer backoff than generic transient errors, and can
-        # drop the session-pinned provider so OpenRouter routes around an
-        # overloaded upstream pool.
-        self._retry_max_attempts = config.llm.retry_max_attempts if config else 4
-        self._rate_limit_max_attempts = config.llm.rate_limit_max_attempts if config else 6
-        self._retry_base_delay_seconds = (
-            config.llm.retry_base_delay_seconds if config else 1.0
-        )
-        self._retry_max_delay_seconds = (
-            config.llm.retry_max_delay_seconds if config else 30.0
-        )
-        self._retry_jitter_seconds = (
-            config.llm.retry_jitter_seconds if config else 0.5
-        )
-        self._rate_limit_backoff_multiplier = (
-            config.llm.rate_limit_backoff_multiplier if config else 3.0
-        )
-        self._fallback_on_rate_limit = (
-            config.llm.fallback_on_rate_limit if config else True
-        )
-        self._max_agent_tokens = (
-            config.safety.max_agent_tokens if config else None
-        ) or None
-        self._active_turn_window = (config.agent.active_turn_window if config else 50)
-        self._stream_children = (config.agent.stream_children if config else False)
-        self._self_heal_mode = config.self_heal.mode if config else True
+        # Single source of per-agent construction knobs: built from config (with
+        # config as the ONLY default provider — a bare ``Runtime()`` behaves
+        # exactly like a default ``HarnessConfig()``, no second fallback dict).
+        # All knobs below are forwarding properties into this bundle.
+        self.agent_policy = AgentPolicy.from_config(config)
+        self._self_heal_mode = config.self_heal.mode
         # Recovery limits live on the HealPolicy (the shared *per-child* used
         # counters are HealBudget instances keyed by agent id, so parent-driven
         # `resume` and runtime-driven self-heal consume the same budget).
         self.heal_policy = HealPolicy(
-            max_resumes=config.self_heal.max_resumes if config else 1,
-            max_fresh=config.self_heal.max_fresh_retries if config else 1,
+            max_resumes=config.self_heal.max_resumes,
+            max_fresh=config.self_heal.max_fresh_retries,
         )
         self._heal_counts: dict[str, HealBudget] = {}
         # Delegation / spawn caps (A: total agents, B: tree depth, C: same-target
         # re-delegation). Decisions + refusal wording live in SpawnPolicy,
-        # enforced at the single choke point Runtime.delegate().
+        # enforced at the single choke point Runtime.delegate(). Defaults come
+        # from the config.
         self.spawn_policy = SpawnPolicy(
-            max_agents=((config.safety.max_agents if config else 200) or None),
-            max_depth=((config.safety.max_depth if config else 25) or None),
-            max_same_target=(
-                (config.safety.max_same_target_delegations if config else 15) or None
-            ),
-            warning_attempts=(config.safety.spawn_limit_warning_attempts if config else 2),
+            max_agents=config.safety.max_agents or None,
+            max_depth=config.safety.max_depth or None,
+            max_same_target=config.safety.max_same_target_delegations or None,
+            warning_attempts=config.safety.spawn_limit_warning_attempts,
         )
         refs_index = _build_reference_index(config)
         notes = list(config.agent.environment_notes if config else [])
@@ -267,6 +210,204 @@ class Runtime:
     @_self_heal_max_fresh.setter
     def _self_heal_max_fresh(self, value: int) -> None:
         self.heal_policy.max_fresh = max(int(value), 0)
+
+    # -- agent-knob shims (forwarded to the AgentPolicy bundle) ----------
+    # The pre-bundle attr names are kept so tests and callers that tune a single
+    # spawn knob without rebuilding the policy keep working. All setters mutate
+    # the bundle AFTER construction, so a change affects subsequently-spawned
+    # agents (the bundle is dereferenced per-spawn).
+
+    @property
+    def _safety_max_iterations(self) -> int:
+        return self.agent_policy.safety_max_iterations
+
+    @_safety_max_iterations.setter
+    def _safety_max_iterations(self, value: int) -> None:
+        self.agent_policy.safety_max_iterations = int(value)
+
+    @property
+    def _repeated_call_limit(self) -> int:
+        return self.agent_policy.repeated_call_limit
+
+    @_repeated_call_limit.setter
+    def _repeated_call_limit(self, value: int) -> None:
+        self.agent_policy.repeated_call_limit = int(value)
+
+    @property
+    def _repeated_recovery_attempts(self) -> int:
+        return self.agent_policy.repeated_recovery_attempts
+
+    @_repeated_recovery_attempts.setter
+    def _repeated_recovery_attempts(self, value: int) -> None:
+        self.agent_policy.repeated_recovery_attempts = int(value)
+
+    @property
+    def _repeated_call_exempt_tools(self) -> list[str]:
+        return list(self.agent_policy.repeated_call_exempt_tools)
+
+    @_repeated_call_exempt_tools.setter
+    def _repeated_call_exempt_tools(self, value: list[str] | tuple[str, ...]) -> None:
+        self.agent_policy.repeated_call_exempt_tools = tuple(value)
+
+    @property
+    def _safety_timeout_seconds(self) -> float | None:
+        return self.agent_policy.safety_timeout_seconds
+
+    @_safety_timeout_seconds.setter
+    def _safety_timeout_seconds(self, value: float | None) -> None:
+        self.agent_policy.safety_timeout_seconds = value
+
+    @property
+    def _disable_root_timeout(self) -> bool:
+        return self.agent_policy.disable_root_timeout
+
+    @_disable_root_timeout.setter
+    def _disable_root_timeout(self, value: bool) -> None:
+        self.agent_policy.disable_root_timeout = bool(value)
+
+    @property
+    def _near_identical_threshold(self) -> int:
+        return self.agent_policy.near_identical_threshold
+
+    @_near_identical_threshold.setter
+    def _near_identical_threshold(self, value: int) -> None:
+        self.agent_policy.near_identical_threshold = int(value)
+
+    @property
+    def _near_identical_window(self) -> int:
+        return self.agent_policy.near_identical_window
+
+    @_near_identical_window.setter
+    def _near_identical_window(self, value: int) -> None:
+        self.agent_policy.near_identical_window = int(value)
+
+    @property
+    def _near_identical_similarity(self) -> float:
+        return self.agent_policy.near_identical_similarity
+
+    @_near_identical_similarity.setter
+    def _near_identical_similarity(self, value: float) -> None:
+        self.agent_policy.near_identical_similarity = float(value)
+
+    @property
+    def _near_identical_tools(self) -> list[str]:
+        return list(self.agent_policy.near_identical_tools)
+
+    @_near_identical_tools.setter
+    def _near_identical_tools(self, value: list[str] | tuple[str, ...]) -> None:
+        self.agent_policy.near_identical_tools = tuple(value)
+
+    @property
+    def _near_identical_warning_attempts(self) -> int:
+        return self.agent_policy.near_identical_warning_attempts
+
+    @_near_identical_warning_attempts.setter
+    def _near_identical_warning_attempts(self, value: int) -> None:
+        self.agent_policy.near_identical_warning_attempts = int(value)
+
+    @property
+    def _iteration_warning_margin(self) -> int:
+        return self.agent_policy.iteration_warning_margin
+
+    @_iteration_warning_margin.setter
+    def _iteration_warning_margin(self, value: int) -> None:
+        self.agent_policy.iteration_warning_margin = int(value)
+
+    @property
+    def _iteration_warning_attempts(self) -> int:
+        return self.agent_policy.iteration_warning_attempts
+
+    @_iteration_warning_attempts.setter
+    def _iteration_warning_attempts(self, value: int) -> None:
+        self.agent_policy.iteration_warning_attempts = int(value)
+
+    @property
+    def _call_timeout_seconds(self) -> float | None:
+        return self.agent_policy.call_timeout_seconds
+
+    @_call_timeout_seconds.setter
+    def _call_timeout_seconds(self, value: float | None) -> None:
+        self.agent_policy.call_timeout_seconds = value
+
+    @property
+    def _retry_max_attempts(self) -> int:
+        return self.agent_policy.retry_max_attempts
+
+    @_retry_max_attempts.setter
+    def _retry_max_attempts(self, value: int) -> None:
+        self.agent_policy.retry_max_attempts = int(value)
+
+    @property
+    def _rate_limit_max_attempts(self) -> int:
+        return self.agent_policy.rate_limit_max_attempts
+
+    @_rate_limit_max_attempts.setter
+    def _rate_limit_max_attempts(self, value: int) -> None:
+        self.agent_policy.rate_limit_max_attempts = int(value)
+
+    @property
+    def _retry_base_delay_seconds(self) -> float:
+        return self.agent_policy.retry_base_delay_seconds
+
+    @_retry_base_delay_seconds.setter
+    def _retry_base_delay_seconds(self, value: float) -> None:
+        self.agent_policy.retry_base_delay_seconds = float(value)
+
+    @property
+    def _retry_max_delay_seconds(self) -> float:
+        return self.agent_policy.retry_max_delay_seconds
+
+    @_retry_max_delay_seconds.setter
+    def _retry_max_delay_seconds(self, value: float) -> None:
+        self.agent_policy.retry_max_delay_seconds = float(value)
+
+    @property
+    def _retry_jitter_seconds(self) -> float:
+        return self.agent_policy.retry_jitter_seconds
+
+    @_retry_jitter_seconds.setter
+    def _retry_jitter_seconds(self, value: float) -> None:
+        self.agent_policy.retry_jitter_seconds = float(value)
+
+    @property
+    def _rate_limit_backoff_multiplier(self) -> float:
+        return self.agent_policy.rate_limit_backoff_multiplier
+
+    @_rate_limit_backoff_multiplier.setter
+    def _rate_limit_backoff_multiplier(self, value: float) -> None:
+        self.agent_policy.rate_limit_backoff_multiplier = float(value)
+
+    @property
+    def _fallback_on_rate_limit(self) -> bool:
+        return self.agent_policy.fallback_on_rate_limit
+
+    @_fallback_on_rate_limit.setter
+    def _fallback_on_rate_limit(self, value: bool) -> None:
+        self.agent_policy.fallback_on_rate_limit = bool(value)
+
+    @property
+    def _max_agent_tokens(self) -> int | None:
+        return self.agent_policy.max_agent_tokens
+
+    @_max_agent_tokens.setter
+    def _max_agent_tokens(self, value: int | None) -> None:
+        self.agent_policy.max_agent_tokens = int(value) if value else None
+
+    @property
+    def _active_turn_window(self) -> int:
+        return self.agent_policy.active_turn_window
+
+    @_active_turn_window.setter
+    def _active_turn_window(self, value: int) -> None:
+        self.agent_policy.active_turn_window = int(value)
+
+    @property
+    def _stream_children(self) -> bool:
+        return self.agent_policy.stream_children
+
+    @_stream_children.setter
+    def _stream_children(self, value: bool) -> None:
+        self.agent_policy.stream_children = bool(value)
 
     @property
     def provider(self) -> LLMProvider | None:
@@ -655,10 +796,10 @@ class Runtime:
         # rather than patching only the one root built in run() — ensures a fresh
         # worker spawned by `_fresh_restart()` after the first root dies does not
         # silently inherit the cap and time out again.
-        timeout = (
-            None if (parent is None and self._disable_root_timeout)
-            else self._safety_timeout_seconds
-        )
+        if parent is None:
+            timeout = self.agent_policy.root_timeout()
+        else:
+            timeout = self.agent_policy.child_timeout()
         # -- spawn caps ---------------------------------------------------
         # Enforced BEFORE the agent is constructed. A refused delegation must
         # never add to `_agents`/`_task_graph`; callers (the delegate tool and
@@ -690,53 +831,19 @@ class Runtime:
             ledger.record(sig)
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
-            agent = cls(
-                agent_id, task, self, parent,
-                safety_max_iterations=self._safety_max_iterations,
-                repeated_call_limit=self._repeated_call_limit,
-                repeated_recovery_attempts=self._repeated_recovery_attempts,
-                repeated_call_exempt_tools=self._repeated_call_exempt_tools,
-                safety_timeout_seconds=timeout,
-                active_turn_window=self._active_turn_window,
-                stream_children=self._stream_children,
-                near_identical_threshold=self._near_identical_threshold,
-                near_identical_window=self._near_identical_window,
-                near_identical_similarity=self._near_identical_similarity,
-                near_identical_tools=self._near_identical_tools,
-                near_identical_warning_attempts=self._near_identical_warning_attempts,
-                iteration_warning_margin=self._iteration_warning_margin,
-                iteration_warning_attempts=self._iteration_warning_attempts,
-            )
         else:
-            agent = Agent(
-                agent_id, task, self, parent,
-                safety_max_iterations=self._safety_max_iterations,
-                repeated_call_limit=self._repeated_call_limit,
-                repeated_recovery_attempts=self._repeated_recovery_attempts,
-                repeated_call_exempt_tools=self._repeated_call_exempt_tools,
-                safety_timeout_seconds=timeout,
-                active_turn_window=self._active_turn_window,
-                stream_children=self._stream_children,
-                near_identical_threshold=self._near_identical_threshold,
-                near_identical_window=self._near_identical_window,
-                near_identical_similarity=self._near_identical_similarity,
-                near_identical_tools=self._near_identical_tools,
-                near_identical_warning_attempts=self._near_identical_warning_attempts,
-                iteration_warning_margin=self._iteration_warning_margin,
-                iteration_warning_attempts=self._iteration_warning_attempts,
-            )
-        agent.max_agent_tokens = self._max_agent_tokens
-        agent._call_timeout_seconds = self._call_timeout_seconds
-        # LLM retry policy — overrides the Agent constructor defaults with the
-        # resolved harness.json values (also covers resume()/fresh restarts,
-        # which rebuild agents via this same delegate()).
-        agent.retry_max_attempts = self._retry_max_attempts
-        agent.rate_limit_max_attempts = self._rate_limit_max_attempts
-        agent.retry_base_delay_seconds = self._retry_base_delay_seconds
-        agent.retry_max_delay_seconds = self._retry_max_delay_seconds
-        agent.retry_jitter_seconds = self._retry_jitter_seconds
-        agent.rate_limit_backoff_multiplier = self._rate_limit_backoff_multiplier
-        agent.fallback_on_rate_limit = self._fallback_on_rate_limit
+            cls = Agent
+        # All per-agent construction knobs come from the single AgentPolicy
+        # bundle (config-derived); the base- and custom-class branches no longer
+        # duplicate the kwargs list verbatim.
+        agent = cls(
+            agent_id, task, self, parent,
+            **self.agent_policy.agent_ctor_kwargs(timeout=timeout),
+        )
+        # Post-construction values: applied as instance attributes so a caller
+        # (or test) can still override them per-agent without mutating a shared
+        # policy (which would leak one agent's override into its siblings).
+        self.agent_policy.post_construct(agent)
         agent.set_environment_info(self._environment_info)
         agent.agent_type = agent_type
         # Spawn-cap accounting: depth is per-agent; the ledger (and the warning
@@ -757,16 +864,21 @@ class Runtime:
             return
         agent.task.status = TaskStatus.completed
 
-        summary = payload.summary or ""
-        lines = summary.split("\n", 1)
-        headline = lines[0].strip()[:200]
-
-        view = ArtifactView(
-            headline=headline,
-            summary_200=summary[:200],
-            summary_1000=summary[:1000] if len(summary) > 200 else "",
+        # Progressive-disclosure tiers (headline / summary_200 / summary_1000 /
+        # technical / full_report) are reduced here by the DisclosurePolicy —
+        # the same decisions the `archive` tool and `read_artifact` use, so the
+        # threshold tiering cannot drift between them.
+        view_fields = DisclosurePolicy.views_from_report(
+            payload.summary if payload.summary else "",
             technical=payload.technical_summary or "",
             full_report=payload.full_report or "",
+        )
+        view = ArtifactView(
+            headline=view_fields["headline"],
+            summary_200=view_fields["summary_200"],
+            summary_1000=view_fields["summary_1000"],
+            technical=view_fields["technical"],
+            full_report=view_fields["full_report"],
         )
         artifact = Artifact(task_id=agent.task.id, agent_id=agent_id, views=view)
         self.artifact_store.save(artifact)
@@ -978,11 +1090,7 @@ class Runtime:
                     killed |= self.kill_agent(
                         child_id, reason=reason, recursive=True
                     )
-        if agent.task.status in (
-            TaskStatus.completed,
-            TaskStatus.failed,
-            TaskStatus.escalated,
-        ):
+        if not ToolPermissionPolicy.killable(agent.task.status):
             return killed
         agent._killed = True
         if not agent.last_report and not agent.last_failure:

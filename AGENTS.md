@@ -69,6 +69,7 @@ src/dynamic_harness/
 │   ├── trace.py             → TraceStore (JSONL debug trace)
 │   ├── telemetry.py         → Telemetry (per-agent facade isolating the run loop from usage/trace/activity/checkpoint I/O)
 │   ├── checkpoint.py        → AgentCheckpoint + CheckpointStore (plan/progress persisted to JSON for resumability)
+│   ├── policies/             → composable, host-agnostic decision objects (LoopGuard, SpawnPolicy, HealPolicy, AgentPolicy, RetryPolicy, DisclosurePolicy, …) wire into agent/runtime/tools
 │   └── tools/               → ToolDef/ToolResult/ToolRegistry + 25 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()
@@ -220,6 +221,7 @@ ReportPayload(
 
 ### Runtime (`core/runtime.py`)
 - Constructor: `Runtime(artifact_root, repo_root, trace_root=None, generated_root=None, config=None)`
+- Defaults: config is the single defaults provider — a bare `Runtime()` (or `Runtime(artifacts, repos, config=None)`) behaves exactly like a default `HarnessConfig()`. The old `if config else <n>` fallback ladder (with `900`/`True`/`25`/`15` literals) was removed; knobs like `safety.max_agent_tokens` simply stay `None` (uncapped) by default.
 - `delegate(task, parent=None, agent_type=None)` → Agent
 - `deliver_report(agent_id, payload)` — save artifact + commit + fire handlers
 - `deliver_escalation(agent_id, esc)` — mark task escalated
@@ -237,6 +239,14 @@ ReportPayload(
 - `execute(name, tool_call_id, agent, **kwargs)` → ToolResult (hands tools a `ToolContext`)
 - `openai_schemas()` → list[dict] — OpenAI function-calling format
 - `list_tools()` → list[str]
+
+### Policy layer (`core/policies/`)
+Config-sourced decision logic is extracted into host-agnostic policy objects
+(`SpawnPolicy`, `HealPolicy`, `AgentPolicy`, `RetryPolicy`, `LoopGuard`,
+`DisclosurePolicy`, `TimeoutPolicy`, `BashSafetyPolicy`, …). Each policy imports
+neither an agent nor a runtime; **Runtime** / **Agent** / **ToolRegistry** now
+delegate to them. This keeps the decision half reusable as a plugin surface
+(e.g. an MCP server / extension boundary) — see `docs/platform-evaluation.md`.
 
 ### ArtifactView / Artifact / ArtifactStore (`artifact/store.py`)
 - `ArtifactView(headline, summary_200, summary_1000, technical, full_report, raw_data)`
@@ -318,8 +328,8 @@ All safety mechanisms are in `Agent._run_loop()`:
 8. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
 9. **Delegation / spawn caps** (`Runtime.delegate()` copies, so every spawn — roots, children, self-heal fresh restarts — passes through the same gate):
    - `safety.max_agents` (default 200): total agents per runtime run. Reached → every further `delegate` is **refused** (never creates an agent).
-   - `safety.max_depth` (default 25): tree depth; root = 0. Delegating past it is refused.
-   - `safety.max_same_target_delegations` (default 7): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (`delegate_target_signature` in `core/spawn_limits.py`), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it. `0`/`null` disables the cap.
+   - `safety.max_depth` (default 15): tree depth; root = 0. Delegating past it is refused.
+   - `safety.max_same_target_delegations` (default 7): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (canonical `delegate_target_signature` in `core/policies/spawn.py`, re-exported from `core/spawn_limits.py` for back-compat), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it. `0`/`null` disables the cap.
    - Refusals raise `DelegationLimit`; the `delegate` tool surfaces them to the model as a `status: refused` tool result (with a `[delegation budget]` line) plus a `safety_warning` activity. Every delegate result carries that budget line (agents spawned/depth/repeated target) so the model self-regulates.
    - Non-fatal `[notice]` injected when any cap is ≥80% used (`safety.spawn_limit_warning_attempts`, default 2).
 
@@ -349,6 +359,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Custom agent class | Subclass `Agent`, register via `runtime.register_agent_class("name", cls)` |
 | Custom LLM provider | Implement `LLMProvider` ABC |
 | Event handlers | `runtime.on_report(fn)`, `runtime.on_escalation(fn)`, etc. |
+| Custom timimg/policy decision | Construct one of the `core/policies/` objects (e.g. `SpawnPolicy`, `RetryPolicy`) and either pass it into `Runtime`/`ToolRegistry` or subclass the policy |
 | Programmatic usage | Import `Runtime`, use `await runtime.run(description)` → `agent.outcome` |
 
 ## File-Search Quick Reference
@@ -356,6 +367,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Need | Look in |
 |------|---------|
 | Add/modify a tool | `core/tools/` (registry + registration + per-concern module) |
+| Add/modify a policy | `core/policies/` |
 | Change agent behavior | `core/agent.py` (AGENT_SYSTEM_PROMPT or _run_loop) |
 | Change runtime lifecycle | `core/runtime.py` |
 | Change data models | `core/task.py` |

@@ -62,6 +62,26 @@ class ToolResult:
     content: str           # Tool output as text
 ```
 
+### Permissions & Result-Cache Policies
+
+Role tool-gating and output caching are delegated to the host-agnostic policy
+objects in `core/policies/` (see `docs/api/policies.md`):
+
+- `registry.tools_for_role(role)` is now an alias into
+  `ToolPermissionPolicy` (`core/policies/permissions.py`); the module-level
+  `ORCHESTRATOR_ALLOWED_TOOLS` and `ROLE_TOOL_OVERRIDES` constants are aliases
+  of the same policy's class attributes, kept for callers that import them
+  directly. The registry consults this policy for every tool call (role gating)
+  and for agent-state eligibility checks (killable / conversable / resumable).
+- `NON_CACHEABLE_TOOLS` remains an alias of
+  `ResultCachePolicy.DEFAULT_NON_CACHEABLE` (`core/policies/result_cache.py`),
+  which owns the cacheability decision and the truncation/paging footers.
+- `ToolRegistry(cache_policy=ResultCachePolicy(...))` is still accepted and
+  overrides the caching decisions per registry.
+
+The registered tool count is authoritative from `register_default_tools()` in
+`core/tools/registration.py`, not from this document.
+
 ## Tool Table
 
 | # | Tool | Parameters | Terminal? | Category |

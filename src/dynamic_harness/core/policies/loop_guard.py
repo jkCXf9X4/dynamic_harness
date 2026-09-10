@@ -21,9 +21,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
 
-from ..spawn_limits import (
-    delegate_target_signature as _delegate_target_signature,
-)
+from .spawn import delegate_target_signature as _delegate_target_signature
 
 # File-like token used by the bash near-identical read-region parser.
 _FILE_TOKEN = re.compile(

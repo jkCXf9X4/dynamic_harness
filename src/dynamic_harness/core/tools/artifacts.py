@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...artifact.store import Artifact, ArtifactView
+from ..policies.disclosure import DisclosurePolicy
 from .filesystem import resolve_safe_path
 from .registry import ToolDef
 
@@ -81,13 +81,16 @@ async def archive(
 
     headline = label or (stored_name if path else "Untitled artifact")
     summary_text = (summary or headline) or ""
-    view = ArtifactView(
-        headline=headline[:200],
-        summary_200=summary_text[:200],
-        summary_1000=summary_text[:1000] if len(summary_text) > 200 else "",
-        full_report=body if not path and stored_name.endswith((".md", ".txt")) else "",
+    # Tier decisions live in the DisclosurePolicy (identical to deliver_report).
+    view_fields = DisclosurePolicy.build_view_dict(
+        headline=headline,
+        summary_text=summary_text,
+        full_report=(
+            body if not path and stored_name.endswith((".md", ".txt")) else ""
+        ),
         raw_data=body,
     )
+    view = ArtifactView(**view_fields)
     art = Artifact(task_id=ctx.task_id, agent_id=ctx.agent_id, views=view)
     ctx.artifact_store.save(art)
     # Mirror the on-disk location ArtifactStore.write_text uses so ordinary

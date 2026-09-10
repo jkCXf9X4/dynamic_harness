@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from ..artifact.store import Artifact, ArtifactView
+from ..artifact.store import Artifact
+from ..core.policies.disclosure import DisclosurePolicy
 
 
 def summarize_artifact(artifact: Artifact, target_tokens: int = 200) -> str:
-    if target_tokens <= 200:
-        return artifact.views.headline or artifact.views.summary_200
-    elif target_tokens <= 1000:
-        return artifact.views.summary_1000 or artifact.views.summary_200
-    else:
-        return artifact.views.technical or artifact.views.summary_1000
+    return DisclosurePolicy.pick_for_token_budget(artifact, target_tokens)
 
 
 def hierarchical_summary(

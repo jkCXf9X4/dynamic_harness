@@ -13,8 +13,45 @@ messages a harness event hook would surface.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
+
+
+def delegate_target_signature(description: str) -> str:
+    """Normalized key for a delegate call, keyed on the referenced path(s).
+
+    Catches both failure modes observed in production:
+
+    1. Orchestrators re-hire a fresh sub-agent to *read the same file* with
+       superficially different wording ('read X verbatim' → 'read X from offset
+       N' → ...), and
+    2. Same-target *directory* drilling: an 'Explore the repository at
+       /abs/path' agent that keeps delegating an identical 'explore that same
+       root' task one level deeper each time until the tree runs away.
+
+    Returns a ``|``-joined, sorted set of absolute directory/file paths and
+    dotted relative file paths found in the description; falls back to the
+    stripped description itself when no path is present.
+    """
+    if not description:
+        return ""
+    paths: list[str] = []
+    # Absolute paths (files OR bare directory roots, e.g. /home/u/proj/repo).
+    # The boundary lookbehind stops slash-adjacent words inside phrases like
+    # 'failure/report' or 'read/verify' from being misread as absolute paths.
+    for p in re.findall(r"(?<![A-Za-z0-9_./])/[\w./\-]+", description):
+        if len(p) > 3:
+            paths.append(p)
+    # Dotted relative file paths (docs/roadmap/x.md).
+    paths.extend(
+        re.findall(
+            r"(?<![A-Za-z0-9])(?:[\w./\-]+\.(?:md|txt|py|json|yaml|yml|toml|log))",
+            description,
+        )
+    )
+    unique = sorted(set(paths))
+    return "|".join(unique) if unique else description.strip()
 
 
 @dataclass(frozen=True)
@@ -38,7 +75,7 @@ class SpawnPolicy:
         self,
         *,
         max_agents: int | None = 200,
-        max_depth: int | None = 25,
+        max_depth: int | None = 15,
         max_same_target: int | None = 7,
         warning_attempts: int = 2,
     ) -> None:

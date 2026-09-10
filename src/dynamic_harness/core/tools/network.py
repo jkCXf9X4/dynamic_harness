@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import ipaddress as _ipaddress
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse as _urlparse
+from urllib.parse import urljoin
 
 import httpx as _httpx
 
+from ..policies.network import WebFetchPolicy
 from .registry import ToolDef
 
 if TYPE_CHECKING:
@@ -23,52 +23,25 @@ TOOL_WEBFETCH_DEF = ToolDef(
     },
 )
 
-MAX_FETCH_BYTES = 200_000
-MAX_REDIRECTS = 3
-
-
-def _is_restricted_host(hostname: str) -> bool:
-    """Reject URLs whose hostname is a literal loopback/private address."""
-    try:
-        addr = _ipaddress.ip_address(hostname)
-    except ValueError:
-        return False
-    return (
-        addr.is_loopback
-        or addr.is_private
-        or addr.is_link_local
-        or addr.is_multicast
-    )
-
 
 def _validate_url(url: str) -> str | None:
-    """Return an error message if ``url`` is unusable, else None."""
-    try:
-        parsed = _urlparse(url)
-    except Exception:
-        return f"Error: invalid URL '{url}'"
-
-    if parsed.scheme not in ("http", "https"):
-        return f"Error: unsupported URL scheme '{parsed.scheme}'. Only http and https are allowed."
-
-    hostname = parsed.hostname
-    if not hostname:
-        return f"Error: no hostname in URL '{url}'"
-    if _is_restricted_host(hostname):
-        return f"Error: URL resolves to a restricted address ({hostname})."
-    return None
+    """Back-compat: URL validation now lives in the WebFetchPolicy."""
+    return WebFetchPolicy().validate(url)
 
 
 async def webfetch(*, ctx: ToolContext, url: str) -> str:
-    error = _validate_url(url)
+    # SSRF validation + fetch/redirect budgets live in the WebFetchPolicy (the
+    # same decisions an MCP webfetch wrapper would reuse).
+    policy = WebFetchPolicy()
+    error = policy.validate(url)
     if error:
         return error
 
     client = _httpx.AsyncClient(follow_redirects=False, timeout=30)
     try:
         current = url
-        for _ in range(MAX_REDIRECTS + 1):
-            error = _validate_url(current)
+        for _ in range(policy.MAX_REDIRECTS + 1):
+            error = policy.validate(current)
             if error:
                 return error
             try:
@@ -77,7 +50,6 @@ async def webfetch(*, ctx: ToolContext, url: str) -> str:
                         location = resp.headers.get("location")
                         if not location:
                             return f"Error: redirect to {resp.status_code} with no Location header."
-                        from urllib.parse import urljoin
                         current = urljoin(str(resp.url), location)
                         continue
                     resp.raise_for_status()
@@ -86,17 +58,14 @@ async def webfetch(*, ctx: ToolContext, url: str) -> str:
                     async for chunk in resp.aiter_bytes():
                         chunks.append(chunk)
                         total += len(chunk)
-                        if total >= MAX_FETCH_BYTES:
+                        if total >= policy.MAX_FETCH_BYTES:
                             break
-                    data = b"".join(chunks)[:MAX_FETCH_BYTES].decode(errors="replace")
-                    if total >= MAX_FETCH_BYTES:
-                        data += (
-                            f"\n\n[TRUNCATED: response exceeded {MAX_FETCH_BYTES} "
-                            f"bytes; fetched first {MAX_FETCH_BYTES}]"
-                        )
+                    data = b"".join(chunks)[:policy.MAX_FETCH_BYTES].decode(errors="replace")
+                    if total >= policy.MAX_FETCH_BYTES:
+                        data += policy.truncation_note(total)
                     return data
             except _httpx.HTTPError as e:
                 return f"Error fetching {current}: {e}"
-        return f"Error: too many redirects (> {MAX_REDIRECTS})."
+        return policy.too_many_redirects_message()
     finally:
         await client.aclose()

@@ -33,12 +33,10 @@ class ResultCachePolicy:
     def __init__(
         self,
         non_cacheable: frozenset[str] | set[str] | None = None,
-        max_entries: int = 32,
     ) -> None:
         self._non_cacheable: frozenset[str] = frozenset(
             non_cacheable if non_cacheable is not None else self.DEFAULT_NON_CACHEABLE
         )
-        self._max_entries = max_entries
 
     @property
     def non_cacheable(self) -> frozenset[str]:

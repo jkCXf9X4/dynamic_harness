@@ -4,21 +4,13 @@ import json
 from typing import Any
 
 from ..llm.provider import LLMProvider
+from .policies.context import ContextMetricPolicy
 
 
-def estimate_tokens(text: str) -> int:
-    """Ballpark token count for a string, provider-agnostic.
-
-    Returns 0 for empty/None input. Blends two cheap proxies and takes the
-    higher so code (fewer spaces, denser punctuation) and prose (longer words)
-    both land in the right ballpark without pulling in a tokenizer dependency.
-    """
-    if not text:
-        return 0
-    chars = float(len(text))
-    words = float(len(text.split()))
-    est = max(chars / 3.8, words * 1.5)
-    return max(1, int(est))
+def estimate_tokens(text: str | None) -> int:
+    """Ballpark token count for a string, provider-agnostic (see
+    ``ContextMetricPolicy.estimate_tokens`` — the single host-agnostic proxy)."""
+    return ContextMetricPolicy.estimate_tokens(text)
 
 
 class AgentContext:
@@ -236,7 +228,8 @@ class AgentContext:
 
         response = None
         last_error: Exception | None = None
-        for attempt in range(2):
+        attempts = ContextMetricPolicy.COMPRESS_RETRY_ATTEMPTS
+        for attempt in range(attempts):
             try:
                 response = await llm.generate_with_tools(compression_input, tools=[])
                 break
@@ -247,7 +240,7 @@ class AgentContext:
 
         if response is None:
             return {"ok": False,
-                    "message": f"Compression failed after 2 attempts: {last_error}",
+                    "message": ContextMetricPolicy.compress_failure_message(last_error, attempts),
                     "summary": ""}
 
         summary = (response.content or "").strip()

@@ -35,13 +35,46 @@ Runtime(
 )
 ```
 
+`config` may be `None` and defaults to `HarnessConfig()`: a bare `Runtime()`
+(or `Runtime(artifact_root, repo_root)` with `config=None`) behaves exactly like
+a default `HarnessConfig()`. The old `if config else <n>` fallback ladder is
+gone — config is the single defaults provider, and the policy constructors below
+only ever receive config-derived values.
+
+### Policies
+
+Config-derived decisions are no longer wired from config with an `if config
+else` ladder. The per-agent knobs come from a single `AgentPolicy` bundle
+(`self.agent_policy`, see `core/policies/agent.py`). The runtime builds and owns
+these policy objects in `__init__`:
+
+| Policy | Purpose |
+|--------|---------|
+| `AgentPolicy` (`self.agent_policy`) | Single source of per-agent construction knobs (safety, retry, budget, context), built once from config. |
+| `SpawnPolicy` (`self.spawn_policy`) | Delegation caps (agents / depth / same-target) and their refusal/budget wording. |
+| `HealPolicy` (`self.heal_policy`) | Self-heal limits (`max_resumes` / `max_fresh_retries`); the per-child *used* counters are `HealBudget` instances (`self._heal_counts`). |
+| `DisclosurePolicy` | Progressive-disclosure tier building, used by `deliver_report` (and shared with the `archive` / `read_artifact` tools). |
+
+All decisions live in `core/policies/`; see [docs/api/policies.md](policies.md).
+
+The old private attribute names are kept as **back-compat forwarding
+properties** into these bundles: `_max_agents`, `_max_depth`, `_max_same_target`
+(→ `SpawnPolicy`), `_self_heal_max_resumes` / `_self_heal_max_fresh` (→
+`HealPolicy`), and the agent-knob shims (`_safety_timeout_seconds`,
+`_call_timeout_seconds`, `_retry_max_attempts`, `_safety_max_iterations`,
+`_repeated_call_limit`, `_repeated_recovery_attempts`, `_repeated_call_exempt_tools`,
+`_disable_root_timeout`, the near-identical knobs, etc. → `AgentPolicy`). Reading
+them mirrors the policy; writing them mutates the policy so the change applies
+to subsequently-spawned agents (the bundle is dereferenced per-spawn in
+`delegate()`).
+
 ### Properties
 
 ```python
 runtime.artifact_store: ArtifactStore     # In-memory + on-disk artifact storage
 runtime.repository: Repository            # Git-like commit provenance
 runtime.trace_store: TraceStore | None    # JSONL debug traces
-runtime.tool_registry: ToolRegistry       # Registered tools (24 default)
+runtime.tool_registry: ToolRegistry       # Registered tools (25 default)
 runtime.generated_root: Path | None       # Generated output directory
 ```
 
@@ -59,6 +92,8 @@ await agent.run()
 
 - If `parent` is provided, the child is added to the parent's `children` list and linked in `_task_graph`.
 - If `agent_type` matches a registered class (via `register_agent_class()`), that class is used instead of `Agent`.
+- All per-agent construction kwargs now come from `agent_policy.agent_ctor_kwargs(timeout=...)` (the resolved per-spawn budget, root exempt when `disable_root_timeout` is set), and post-construction values are applied from `agent_policy.post_construct(agent)` — the base- and custom-class branches no longer duplicate the kwargs list verbatim.
+- Delegation caps (agents / depth / same-target) are enforced here by the `SpawnPolicy` before the agent is constructed; a refusal raises `DelegationLimit`.
 
 ### `get_agent(agent_id: str) -> Agent | None`
 
@@ -114,7 +149,7 @@ These methods are called by agents (via `agent.report()`, `agent.escalate()`, `a
 ### `deliver_report(agent_id: str, payload: ReportPayload) -> None`
 
 1. Sets task status to `completed`
-2. Creates an `ArtifactView` from the report summary
+2. Reduces the report into the `ArtifactView` disclosure tiers (headline / summary_200 / summary_1000 / technical / full_report) via `DisclosurePolicy.views_from_report()` — the same tier decisions the `archive` and `read_artifact` tools use, so they cannot drift (`core/policies/disclosure.py`)
 3. Saves an `Artifact` to `ArtifactStore`
 4. Creates a `Commit` in the `Repository`
 5. Fires all registered `on_report` handlers

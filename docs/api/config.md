@@ -31,6 +31,14 @@ Discovery order (first match wins):
 If no file is found, sensible defaults are used. All fields are optional — an empty
 `harness.json` (`{}`) is valid and yields the defaults below.
 
+> **Defaults are the single source of truth.** A bare `Runtime()` (no `config`
+> passed) now constructs the same defaults as a default `HarnessConfig()` —
+> there is no second fallback dictionary in the runtime (the old `if config else
+> <n>` ladder is gone). Config-derived decisions are made by the policy objects
+> in `core/policies/`, and their constructors only ever receive config values; a
+> `None` config simply yields the `HarnessConfig()` defaults (e.g. via
+> `AgentPolicy.from_config(None)`).
+
 The config is validated with Pydantic. Invalid JSON raises `ValueError`; invalid field
 values (out-of-range, wrong type) fail model validation with a clear message.
 
@@ -130,7 +138,7 @@ Example:
 |-----|---------|-------------|
 | `timeout_seconds` | `null` | Wall-clock budget for a single agent's *entire* run (whole context), in seconds. After this the loop force-fails with a timeout. `None`/`null` disables the cap; `0` is rejected (must be `> 0` when set). Cost is then bounded only by `max_iterations` / `max_agent_tokens`. Separate from `llm.call_timeout_seconds`. |
 | `disable_root_timeout` | `false` | Exempt only the top (root) agent from `timeout_seconds`. The root runs until it finishes on its own; the person supervising decides when to kill it. Children still inherit the cap, so a stuck child force-fails and stays recoverable via `resume`/self-heal. The per-call httpx timeout still bounds every request. |
-| `max_agent_tokens` | `null` | Hard cap on total tokens (prompt + completion) a single agent may use before it is force-failed. `None`/`0` disables the cap (the field is `ge=0`; `0` is normalized to `None`). When set, surfaced to the agent each turn as a live token budget; the `usage` tool lets an agent read its own counters. Recommended per-agent guidance: stay under ~50,000 total tokens. |
+| `max_agent_tokens` | `null` | Hard cap on total tokens (prompt + completion) a single agent may use before it is force-failed. `None`/`0` disables the cap (the field is `ge=0`; `0` is normalized to `None`). When set, surfaced to the agent each turn as a live token budget; the `usage` tool lets an agent read its own counters. Recommended per-agent guidance: stay under ~50,000 total tokens. The wall-clock handling in `timeout_seconds` is unchanged — it is carried through to the per-agent `TimeoutPolicy` in `core/policies/` (see `docs/api/policies.md`). |
 
 ### Delegation / spawn caps
 

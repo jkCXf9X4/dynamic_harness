@@ -37,10 +37,12 @@ Agent(
     safety_timeout_seconds: float | None = None,  # Optional wall-clock timeout
     active_turn_window: int = 50,      # Recent turns reported in Context Observation
     max_pruned_retained: int = 100,    # Pruned turns kept in memory for restore()
+    delegate_nudge_threshold: int = 8, # Turns without delegating before a nudge fires
+    delegate_nudge_attempts: int = 1,  # How many delegate-rarity nudges may fire
 )
 ```
 
-**Note:** Agents should be created via `runtime.delegate()` or `agent.delegate()` — never instantiated directly outside of tests.
+**Note:** Agents should be created via `runtime.delegate()` or `agent.delegate()` — never instantiated directly outside of tests. For runtime-spawned agents, the knobs are config-plumbed via the single `AgentPolicy` bundle: `delegate_nudge_threshold`/`delegate_nudge_attempts` (previously dormant in the runtime) are now delivered to the agent as constructor kwargs by `AgentPolicy.agent_ctor_kwargs()` — see `docs/api/policies.md`.
 
 ### Properties
 
@@ -52,6 +54,30 @@ agent.children: list[Agent]      # Child agents
 agent.llm: LLMProvider | None    # LLM from runtime (read-only)
 agent.guidelines: str            # AGENT_SYSTEM_PROMPT text
 ```
+
+## Policies the Agent Delegates To
+
+The loop's mechanically-enforced decisions live in the host-agnostic
+`core/policies/` package (the same decision layer an MCP host would reuse)
+rather than inline in `Agent`. The agent owns/uses:
+
+- `LoopGuard` (`core/policies/loop_guard.py`) — repeated-call / near-identical
+  loop detection and the nudge→fail recovery ladder.
+- `RetryPolicy` (`core/policies/retry.py`) — per-failure-class LLM retry /
+  backoff: `_llm_call_with_retry` drives the loop and asks `RetryPolicy` for
+  each classification, delay, and drop-session-pin decision.
+- `TimeoutPolicy` / `TokenBudgetPolicy` (`core/policies/budget.py`) — the
+  whole-run wall clock and the total-token hard cap.
+- `NudgePolicy` (`core/policies/nudge.py`) — the delegate-rarity and
+  low-iteration soft notices.
+- `ToolPermissionPolicy` (`core/policies/permissions.py`) — agent-state
+  eligibility gates (killable / conversable / resumable).
+- `ResumePlanner` (`core/policies/heal.py`) — the parent-driven `resume` ladder's
+  decision half (strategy validation, rot refusal, layer ordering).
+
+For the full inventory see `docs/api/policies.md`. The runtime's single
+`AgentPolicy` bundle feeds these knobs into each spawned agent (
+`docs/api/runtime.md`).
 
 ## Execution
 

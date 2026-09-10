@@ -8,15 +8,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import httpx
-from openai import (
-    APIConnectionError,
-    APIStatusError,
-    APITimeoutError,
-    InternalServerError,
-    RateLimitError,
-)
-
 from .context import AgentContext
 from .policies.loop_guard import (
     LoopAction,
@@ -28,6 +19,11 @@ from .policies.loop_guard import (
     regions_overlap,
     similarity,
 )
+from .policies.retry import RetryPolicy
+from .policies.budget import TimeoutPolicy, TokenBudgetPolicy
+from .policies.heal import ResumePlanner
+from .policies.nudge import NudgePolicy
+from .policies.permissions import ToolPermissionPolicy
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
 from .result_store import ResultStore
 from .spawn_limits import DelegationLimit, delegate_target_signature
@@ -702,15 +698,27 @@ class Agent:
         # call may drop this pin on retry (fallback_on_rate_limit) so the
         # provider can route the retry elsewhere.
         cfg = LLMConfig(model=llm.default_model, session_id=self.session_id)
+        # Retry/backoff decisions live in the host-agnostic RetryPolicy; the
+        # agent's scalar knobs (overridable via config / tests) feed it. The
+        # loop below drives the I/O; the policy decides.
+        policy = RetryPolicy(
+            retry_max_attempts=self.retry_max_attempts,
+            rate_limit_max_attempts=self.rate_limit_max_attempts,
+            retry_base_delay_seconds=self.retry_base_delay_seconds,
+            retry_max_delay_seconds=self.retry_max_delay_seconds,
+            retry_jitter_seconds=self.retry_jitter_seconds,
+            rate_limit_backoff_multiplier=self.rate_limit_backoff_multiplier,
+            fallback_on_rate_limit=self.fallback_on_rate_limit,
+        )
 
         # Attempt budgets by failure class. A rate limit is NOT the same as a
         # generic transient error: shared upstream pool overloads (DeepInfra
         # `engine_overloaded`) routinely outlast the seconds of backoff a plain
         # timeout budget allows. Counting per class means one kind of failure
         # never consumes the other kind's patience.
-        budgets = {False: self.retry_max_attempts, True: self.rate_limit_max_attempts}
+        budgets = policy.budgets
         attempts: dict[bool, int] = {False: 0, True: 0}
-        worst_budget = max(budgets[False], budgets[True])
+        worst_budget = policy.worst_budget
         last_error: Exception | None = None
 
         for attempt in range(worst_budget):
@@ -727,9 +735,9 @@ class Agent:
                 return await coro
             except Exception as e:
                 last_error = e
-                rate_limited = self._is_rate_limit(e)
+                rate_limited = policy.is_rate_limit(e)
                 attempts[rate_limited] += 1
-                if not self._is_retryable(e) or attempts[rate_limited] >= budgets[rate_limited]:
+                if not policy.is_retryable(e) or attempts[rate_limited] >= budgets[rate_limited]:
                     if (
                         isinstance(e, asyncio.TimeoutError)
                         and self._call_timeout_seconds is not None
@@ -740,8 +748,7 @@ class Agent:
                         # (`_call_llm_with_run_budget`) doesn't misreport this as
                         # safety.timeout_seconds being exhausted.
                         raise RuntimeError(
-                            f"LLM call exceeded the {self._call_timeout_seconds}s "
-                            f"per-call timeout on all {budgets[False]} attempt(s)"
+                            policy.per_call_timeout_message(self._call_timeout_seconds)
                         ) from e
                     raise
                 self._runtime.record_retry(self.id)
@@ -749,15 +756,15 @@ class Agent:
                 # failure class, scaled up for rate limits, honoring a provider
                 # Retry-After header, and always capped at the configured ceiling.
                 retry_count = attempts[rate_limited]
-                delay = self.retry_base_delay_seconds * (
-                    self.rate_limit_backoff_multiplier if rate_limited else 1.0
-                ) * (2.0 ** (retry_count - 1))
-                retry_after = self._retry_after_seconds(e)
-                if retry_after is not None:
-                    delay = max(delay, retry_after)
-                delay = min(delay, self.retry_max_delay_seconds)
+                delay = policy.delay_seconds(
+                    rate_limited=rate_limited,
+                    retry_count=retry_count,
+                    retry_after=policy.retry_after_seconds(e),
+                )
                 await asyncio.sleep(delay + random.uniform(0, self.retry_jitter_seconds))
-                if rate_limited and self.fallback_on_rate_limit and cfg.session_id:
+                if policy.should_drop_session_pin(
+                    rate_limited=rate_limited, has_session_id=bool(cfg.session_id)
+                ):
                     # Drop the session pin: retry outside the pinned provider so
                     # OpenRouter can route to one that is not overloaded. Only
                     # this retry is affected; the next turn re-pins via
@@ -768,77 +775,19 @@ class Agent:
 
     @staticmethod
     def _is_rate_limit(exc: Exception) -> bool:
-        """True for HTTP 429 / explicit rate-limit failures, which get a longer
-        retry budget than generic transient errors (a shared upstream pool can
-        stay overloaded for tens of seconds)."""
-        if isinstance(exc, RateLimitError):
-            return True
-        if isinstance(exc, APIStatusError):
-            status = getattr(exc, "status_code", None)
-            if status == 429:
-                return True
-        error_str = str(exc).lower()
-        return any(
-            keyword in error_str
-            for keyword in (
-                "rate_limit", "rate limit", "429", "too many requests",
-                "engine_overloaded", "upstream_provider_shared_pool",
-            )
-        )
+        """True for HTTP 429 / explicit rate-limit failures (see ``RetryPolicy``)."""
+        return RetryPolicy.is_rate_limit(exc)
 
     @staticmethod
     def _retry_after_seconds(exc: Exception) -> float | None:
         """Seconds to wait before retrying, from a provider Retry-After header
-        (if one was sent). Returns None when absent. Only the seconds form is
-        parsed; a future HTTP-date falls back to the exponential backoff."""
-        response = getattr(exc, "response", None)
-        if response is None:
-            return None
-        value = getattr(getattr(response, "headers", None), "get", None)
-        if value is None:
-            return None
-        raw = value("retry-after")
-        if not raw:
-            return None
-        try:
-            return max(0.0, float(raw))
-        except ValueError:
-            return None
+        (see ``RetryPolicy.retry_after_seconds``)."""
+        return RetryPolicy.retry_after_seconds(exc)
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
-        """True for transient failures (timeouts, connection drops, rate limits,
-        server errors) that are safe to retry. Classifies by exception type where
-        possible, falling back to message/keyword matching for unknown providers.
-        """
-        for cls in (
-            APITimeoutError,
-            APIConnectionError,
-            RateLimitError,
-            InternalServerError,
-            httpx.TimeoutException,
-            httpx.TransportError,
-            asyncio.TimeoutError,
-        ):
-            if isinstance(exc, cls):
-                return True
-        # Server-side status errors (5xx) are transient regardless of message.
-        if isinstance(exc, APIStatusError):
-            status = getattr(exc, "status_code", None)
-            if status is not None and 500 <= status < 600:
-                return True
-
-        error_str = str(exc).lower()
-        return any(
-            keyword in error_str
-            for keyword in (
-                "rate_limit", "rate limit", "429", "too many requests",
-                "server_error", "500", "502", "503", "504",
-                "timeout", "timed out", "temporary", "connection", "network",
-                "overloaded", "capacity",
-                "expecting value", "jsondecode", "anticipate_processing_error",
-            )
-        )
+        """True for transient failures (see ``RetryPolicy.is_retryable``)."""
+        return RetryPolicy.is_retryable(exc)
 
     async def _call_llm_with_run_budget(
         self, tools: list[dict], sent: list[dict[str, Any]]
@@ -856,14 +805,14 @@ class Agent:
             self._safety_timeout_seconds is not None
             and self._started_at is not None
         ):
-            remaining = self._safety_timeout_seconds - (
-                time.monotonic() - self._started_at
-            )
+            timeout = TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds)
+            remaining = timeout.remaining_seconds(time.monotonic() - self._started_at)
             if remaining <= 0:
                 self._terminated_by_safety = True
                 self.fail(
-                    f"Agent timed out after {self._safety_timeout_seconds}s "
-                    f"({self._iteration} iterations)"
+                    timeout.timeout_message(
+                        self._safety_timeout_seconds, self._iteration
+                    )
                 )
                 return None
         try:
@@ -875,8 +824,9 @@ class Agent:
         except asyncio.TimeoutError:
             self._terminated_by_safety = True
             self.fail(
-                f"Agent timed out after {self._safety_timeout_seconds}s "
-                f"({self._iteration} iterations, an LLM call exceeded the budget)"
+                TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds).timeout_message(
+                    self._safety_timeout_seconds or 0.0, self._iteration, mid_call=True
+                )
             )
             return None
 
@@ -920,10 +870,11 @@ class Agent:
 
     def _safety_check(self) -> bool:
         """Return True when a safety limit was hit and the loop must stop."""
+        timeout = TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds)
         if (
-            self._safety_timeout_seconds is not None
+            timeout.enabled
             and self._started_at is not None
-            and time.monotonic() - self._started_at > self._safety_timeout_seconds
+            and timeout.exceeded(time.monotonic() - self._started_at)
         ):
             self._terminated_by_safety = True
             self._event_bus.emit_activity(ActivityEvent(
@@ -936,8 +887,9 @@ class Agent:
                 },
             ))
             self.fail(
-                f"Agent timed out after {self._safety_timeout_seconds}s "
-                f"({self._iteration} iterations)"
+                timeout.timeout_message(
+                    self._safety_timeout_seconds, self._iteration
+                )
             )
             return True
         if self._iteration > self._safety_max_iterations:
@@ -957,7 +909,8 @@ class Agent:
             return True
         if self.max_agent_tokens:
             current = self._runtime.get_usage(self.id).get("total_tokens", 0)
-            if current > self.max_agent_tokens:
+            token_policy = TokenBudgetPolicy(max_agent_tokens=self.max_agent_tokens)
+            if token_policy.exceeded(current):
                 self._terminated_by_safety = True
                 self._event_bus.emit_activity(ActivityEvent(
                     agent_id=self.id,
@@ -968,10 +921,7 @@ class Agent:
                         "limit": self.max_agent_tokens,
                     },
                 ))
-                self.fail(
-                    f"Token budget exceeded: {current} > {self.max_agent_tokens} "
-                    f"total tokens. This agent stopped to contain cost."
-                )
+                self.fail(token_policy.exceed_message(current))
                 return True
         return False
 
@@ -990,12 +940,11 @@ class Agent:
         if focus_text:
             blocks.append(focus_text)
         if self.max_agent_tokens:
-            blocks.append(
-                f"[Budget] This agent may use at most {self.max_agent_tokens} total "
-                f"tokens (prompt + completion) before the run is stopped. Track your "
-                f"live spend and messages with the usage tool; to stay lean, "
-                f"delegate or prune stale turns instead of chaining calls in-context."
-            )
+            guidance = TokenBudgetPolicy(
+                max_agent_tokens=self.max_agent_tokens
+            ).budget_guidance()
+            if guidance:
+                blocks.append(guidance)
         if self.environment_info:
             blocks.append(self.environment_info)
         return "\n\n".join(blocks)
@@ -1166,35 +1115,32 @@ class Agent:
         without any ``delegate`` call. Fires at most ``_delegate_nudge_attempts``
         times and appends a fixed-text user message at the end of the context —
         never mutating a prior message — so the prompt prefix (and the provider's
-        cache contiguity) is preserved after the nudge lands.
+        cache contiguity) is preserved after the nudge lands. The condition +
+        wording live in the host-agnostic ``NudgePolicy``.
         """
-        if self._has_delegated:
-            return
-        if self._delegate_nudge_left <= 0:
-            return
-        if self._iteration < self._delegate_nudge_threshold:
+        policy = NudgePolicy(
+            delegate_nudge_threshold=self._delegate_nudge_threshold,
+            delegate_nudge_attempts=self._delegate_nudge_attempts,
+        )
+        decision = policy.delegate_nudge(
+            iteration=self._iteration,
+            attempts_left=self._delegate_nudge_left,
+            has_delegated=self._has_delegated,
+        )
+        if not decision.fire:
             return
         self._delegate_nudge_left -= 1
-
-        note = (
-            "You are N turns into this run and have not delegated any work. "
-            "If your task decomposes into independent units, delegate them to "
-            "fresh sub-agents in one turn and verify each by artifact summary. "
-            "If the task is genuinely atomic and effectively done, prune stale "
-            "committed turns to keep context flat, then report / escalate / fail "
-            "instead of chaining further calls in-context."
-        ).replace("N turns", f"{self._iteration} turns")
 
         self._event_bus.emit_activity(ActivityEvent(
             agent_id=self.id,
             event_type=ActivityEventType.SAFETY_WARNING,
             data={
-                "warning_type": "delegate_reminder",
-                "turn": self._iteration,
-                "attempts_remaining": self._delegate_nudge_left,
+                "warning_type": decision.warning_type,
+                **(decision.data or {}),
             },
         ))
-        self.context.append({"role": "user", "content": note})
+        assert decision.note is not None
+        self.context.append({"role": "user", "content": decision.note})
 
     def _maybe_warn_iterations_low(self) -> None:
         """Inject ONE hard wrap-up message when iterations are running low.
@@ -1205,42 +1151,32 @@ class Agent:
         hand the unfinished remainder plus any relevant context to its parent so
         it can decide what to schedule in other tasks. Fires at most
         ``_iteration_warning_attempts`` times; tail-append-only so the prompt
-        prefix (and the provider's cache contiguity) is preserved.
+        prefix (and the provider's cache contiguity) is preserved. The condition
+        + wording live in the ``NudgePolicy``.
         """
-        if self._iteration_warning_left <= 0:
-            return
-        remaining = self._safety_max_iterations - self._iteration
-        if remaining > self._iteration_warning_margin:
-            return
-        if remaining < 0:
-            remaining = 0
-        self._iteration_warning_left -= 1
-
-        note = (
-            "Your iteration budget is almost exhausted: you have roughly "
-            f"{remaining} iterations left before the hard limit at "
-            f"{self._safety_max_iterations} (you are on iteration "
-            f"{self._iteration}). Stop starting new work. Finish whatever is "
-            "naturally closable right now. For anything you cannot complete, "
-            "return the remaining items and all relevant intermediate context "
-            "(discoveries, file paths, partial results, and what the parent "
-            "would need to pick this up) to your parent, and report / escalate / "
-            "fail as appropriate so the parent can decide what is reasonable to "
-            "finish off in other tasks."
+        policy = NudgePolicy(
+            iteration_warning_margin=self._iteration_warning_margin,
+            iteration_warning_attempts=self._iteration_warning_attempts,
+            safety_max_iterations=self._safety_max_iterations,
         )
+        decision = policy.iteration_warning(
+            iteration=self._iteration,
+            attempts_left=self._iteration_warning_left,
+        )
+        if not decision.fire:
+            return
+        self._iteration_warning_left -= 1
 
         self._event_bus.emit_activity(ActivityEvent(
             agent_id=self.id,
             event_type=ActivityEventType.SAFETY_WARNING,
             data={
-                "warning_type": "iterations_running_low",
-                "iteration": self._iteration,
-                "remaining": remaining,
-                "limit": self._safety_max_iterations,
-                "attempts_remaining": self._iteration_warning_left,
+                "warning_type": decision.warning_type,
+                **(decision.data or {}),
             },
         ))
-        self.context.append({"role": "user", "content": note})
+        assert decision.note is not None
+        self.context.append({"role": "user", "content": decision.note})
 
     def _maybe_warn_spawn_limits(self) -> None:
         """Inject ONE non-fatal notice when a delegation cap is nearly exhausted.
@@ -1522,11 +1458,7 @@ class Agent:
                 "error": f"agent {agent_id} is not one of your direct children; "
                          "you may only kill agents you delegated",
             })
-        if target.task.status in (
-            TaskStatus.completed,
-            TaskStatus.failed,
-            TaskStatus.escalated,
-        ):
+        if not ToolPermissionPolicy.killable(target.task.status):
             return json.dumps({
                 "error": f"agent {agent_id} already {target.task.status.value}; "
                          "nothing to kill",
@@ -1848,18 +1780,27 @@ class Agent:
                            "nothing to resume",
             })
 
-        strategy = (strategy or "automatic").strip().lower()
-        if strategy not in ("automatic", "resume", "fresh"):
+        strategy, strategy_error = ResumePlanner.validate(strategy)
+        if strategy_error:
             return json.dumps({
-                "error": f"unknown strategy '{strategy}'. One of: "
-                         f"automatic | resume | fresh",
+                "error": strategy_error,
             })
+        assert strategy is not None
 
         failures: list[str] = []
         effective: Agent = target
         diagnosis = self._runtime._diagnose(target)
         counts = self._runtime._heal_counts_for(target.id)
         note_text = note.strip() if note else ""
+
+        rot_refusal = ResumePlanner.refusal_for_rot(strategy, diagnosis)
+        if rot_refusal is not None:
+            return json.dumps({
+                "agent_id": agent_id,
+                "status": "refused_rot",
+                "diagnosis": diagnosis,
+                "error": rot_refusal,
+            })
 
         def _resume_nudge(child: Agent) -> str:
             reason = (
@@ -1886,20 +1827,9 @@ class Agent:
             return f"{base}\n\n{progress}\n\nParent instruction: {note_text}" if note_text else f"{base}\n\n{progress}"
 
         healed = False
-        if strategy == "resume" and diagnosis == "rot":
-            return json.dumps({
-                "agent_id": agent_id,
-                "status": "refused_rot",
-                "diagnosis": diagnosis,
-                "error": "the child's context is rotted (repeated calls / safety "
-                         "stop / many iterations); force-resuming would replay the "
-                         "problem. Use strategy='fresh' to restart it cleanly.",
-            })
-
-        # Layer 1: resume the same child on a blunt miss.
-        if strategy in ("automatic", "resume") and (
-            diagnosis == "blunt" or strategy == "resume"
-        ):
+        # Layer 1: resume the same child on a blunt miss (planning above; this
+        # branch only executes + budgets).
+        if ResumePlanner.should_attempt_resume(strategy, diagnosis):
             if counts["resume"] < self._runtime.heal_policy.max_resumes:
                 counts["resume"] += 1
                 self._event_bus.emit_activity(ActivityEvent(
@@ -1924,15 +1854,14 @@ class Agent:
                 )
             else:
                 failures.append(
-                    "resume budget exhausted "
-                    f"(self_heal.max_resumes={self._runtime.heal_policy.max_resumes})"
+                    ResumePlanner.budget_exhausted(
+                        "resume", counts["resume"],
+                        self._runtime.heal_policy.max_resumes,
+                    )
                 )
 
         # Layer 2: fresh worker when resuming didn't heal (or rot / forced).
-        if (
-            not healed
-            and strategy != "resume"
-        ):
+        if ResumePlanner.should_attempt_fresh(strategy, healed=healed):
             if counts["fresh"] < self._runtime.heal_policy.max_fresh:
                 counts["fresh"] += 1
                 self._event_bus.emit_activity(ActivityEvent(
@@ -1967,8 +1896,10 @@ class Agent:
                     effective = fresh
             else:
                 failures.append(
-                    "fresh budget exhausted "
-                    f"(self_heal.max_fresh_retries={self._runtime.heal_policy.max_fresh})"
+                    ResumePlanner.budget_exhausted(
+                        "fresh", counts["fresh"],
+                        self._runtime.heal_policy.max_fresh,
+                    )
                 )
 
         # Keep the parent's children list in sync when recovery replaced the

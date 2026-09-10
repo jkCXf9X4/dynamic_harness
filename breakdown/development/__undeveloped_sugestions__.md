@@ -172,3 +172,8 @@ Im having problems with bash commands not completing and killing the agents by t
 can we utilie external agents for single question context?
 would this be a gain? where should it best be used?
 we can ask external agents if they think that delegation is needed without the polluting context 
+
+---
+
+How do we enable rg and other commands to be executed on result handlers? 
+- this ould enable searching the results without rerunning the commands in case they are expensive

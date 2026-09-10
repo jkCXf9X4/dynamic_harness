@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import shlex as _shlex
 import signal as _signal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..policies.process import BashSafetyPolicy
 from .registry import ToolDef
 
 if TYPE_CHECKING:
@@ -34,55 +34,6 @@ TOOL_BASH_DEF = ToolDef(
 )
 
 
-_READ_ONLY_COMMANDS = {
-    "ls", "cat", "head", "tail", "grep", "find", "pwd", "which",
-    "python3", "python", "echo", "env", "printenv", "wc", "sort", "uniq",
-}
-_READ_ONLY_GIT_SUBCOMMANDS = {
-    "status", "log", "show", "diff", "branch", "config", "stash", "blame", "rev-parse",
-}
-
-# Shell metacharacters that require a shell to interpret (&&, ||, |, ;, <, >,
-# backtick). A leading `cd <dir> &&` is handled separately and stripped before
-# this check so a bare `cd X && ls` chain still funnels into the shell path.
-_SHELL_META = re.compile(r"[|&;<>`]")
-
-# Leading `cd <dir> && ` (or a bare `cd <dir>`). Captured as the working
-# directory; the remainder is the command to run.
-_LEADING_CD = re.compile(r"^\s*cd\s+(\S+)\s*(?:&&\s*)?")
-
-
-def _is_read_only(args: list[str]) -> bool:
-    """Heuristic: does this command only read, so no repo lock is needed?"""
-    if not args:
-        return True
-    base = Path(args[0]).name
-    if base in _READ_ONLY_COMMANDS:
-        return True
-    if base == "git" and len(args) > 1 and args[1] in _READ_ONLY_GIT_SUBCOMMANDS:
-        return True
-    return False
-
-
-def _resolve_workdir(command: str, workdir: str | None) -> tuple[str, str | None]:
-    """Pull a leading ``cd <dir> &&`` prefix into the working directory.
-
-    Stripping it here means a common agent habit — ``cd /path && ls ...`` — stops
-    failing as an ``exec`` ``[Errno 2] No such file or directory: 'cd'`` error,
-    which was churning the conversation prefix with identical repeated failures
-    and (because each retry re-ran the whole chain) thinning the provider prompt
-    cache. Returns ``(command_without_cd, resolved_workdir)``.
-    """
-    m = _LEADING_CD.match(command or "")
-    if not m:
-        return command, (workdir or None)
-    resolved = workdir or m.group(1)
-    rest = (command[m.end():]).strip()
-    if not rest:
-        return "", resolved
-    return rest, resolved
-
-
 async def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
     """Kill every process in ``proc``'s group (spawned via start_new_session,
     so pgid == proc.pid) and reap it. Kills the grandchildren too — a plain
@@ -103,7 +54,7 @@ async def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
 
 
 async def bash(*, ctx: ToolContext, command: str, timeout: int = 120000, workdir: str | None = None) -> str:
-    command, workdir = _resolve_workdir(command, workdir)
+    command, workdir = BashSafetyPolicy.resolve_workdir(command, workdir)
     if not command:
         return f"(no-op) Working directory would be: {workdir or ctx.generated_root}"
 
@@ -112,15 +63,16 @@ async def bash(*, ctx: ToolContext, command: str, timeout: int = 120000, workdir
 
     # Shell operators present -> interpret via a shell so `cd X && ...`, pipes,
     # and chained commands actually run instead of producing a hard exec error.
-    use_shell = bool(_SHELL_META.search(command))
+    use_shell = BashSafetyPolicy.needs_shell(command)
 
     # Heuristic read-only check (kept even in shell mode: base the decision on
-    # the first command token, which is generally the mutating one).
+    # the first command token, which is generally the mutating one). Decision
+    # lives in BashSafetyPolicy so an MCP bash wrapper reuses the same rule.
     try:
         tokens = _shlex.split(command)
     except ValueError:
         tokens = []
-    if tokens and not _is_read_only(tokens):
+    if tokens and not BashSafetyPolicy.is_read_only(tokens):
         repo_lock = ctx.repo_lock()
         await repo_lock.acquire()
     try:

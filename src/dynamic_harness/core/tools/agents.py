@@ -5,7 +5,9 @@ import json
 import sys
 from typing import TYPE_CHECKING
 
-from ..task import ReportPayload, TaskStatus
+from ..policies.disclosure import DisclosurePolicy
+from ..policies.permissions import ToolPermissionPolicy
+from ..task import ReportPayload
 from .registry import ToolDef
 
 if TYPE_CHECKING:
@@ -236,15 +238,6 @@ TOOL_READ_ARTIFACT_DEF = ToolDef(
     },
 )
 
-_VIEW_LEVELS: dict[str, tuple[str, ...]] = {
-    "auto": ("headline", "summary_200", "summary_1000"),
-    "headline": ("headline",),
-    "summary": ("headline", "summary_200", "summary_1000"),
-    "technical": ("technical",),
-    "full": ("full_report",),
-    "raw": ("raw_data",),
-}
-
 
 def _resolve_artifact(ctx: ToolContext, artifact_id: str):
     """Resolve an artifact by id; fall back to resolving a child *agent* id."""
@@ -262,56 +255,6 @@ def _resolve_artifact(ctx: ToolContext, artifact_id: str):
                         artifact = candidate
                         break
     return artifact
-
-
-async def read_artifact(
-    *, ctx: ToolContext, artifact_id: str,
-    file: str | None = None, level: str = "auto",
-) -> str:
-    artifact = _resolve_artifact(ctx, artifact_id)
-    if not artifact:
-        return f"Error: no artifact found with ID '{artifact_id}'"
-
-    if file:
-        content = ctx.artifact_store.read_text(artifact.id, file)
-        if content is None:
-            names = [p.name for p in ctx.artifact_store.list_files(artifact.id)]
-            return (f"Error: artifact {artifact.id} has no stored file named '{file}'. "
-                    f"Available: {', '.join(sorted(n for n in names if n != 'artifact.json')) or '(none)'}")
-        return content
-
-    level = (level or "auto").strip().lower()
-    if level not in _VIEW_LEVELS:
-        return (f"Error: unknown level '{level}'. One of: "
-                f"{', '.join(_VIEW_LEVELS)}")
-    names = _VIEW_LEVELS[level]
-
-    parts: list[str] = []
-    for name in names:
-        v = getattr(artifact.views, name, None)
-        if v:
-            parts.append(f"[{name}] {v}")
-    if not parts and level != "raw":
-        # Progressive fallback: if the requested preview is empty but deeper
-        # content exists (e.g. a prose-only report with a full_report), reveal
-        # the first deeper view so the parent is not left empty-handed.
-        for name in ("technical", "full_report", "raw_data"):
-            v = getattr(artifact.views, name, None)
-            if v:
-                parts.append(f"[{name}] {v}")
-                break
-    if not parts:
-        return f"Artifact {artifact.id} has no content at level '{level}'."
-
-    body = "\n".join(parts)
-    # For summary-level reads, hint at withheld detail so the parent can opt in.
-    if level in ("auto", "summary", "headline"):
-        deeper = [n for n in ("technical", "full_report", "raw_data")
-                  if getattr(artifact.views, n, None)]
-        if deeper:
-            body += (f"\n\n[More detail available: {', '.join(deeper)}. "
-                     f"Re-read with level='{deeper[0]}' to see it.]")
-    return body
 
 
 async def delegate(
@@ -364,7 +307,7 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
     target = ctx.get_other_agent(agent_id)
     if not target:
         return f"Error: no agent found with ID {agent_id}"
-    if target.task.status not in (TaskStatus.completed, TaskStatus.running):
+    if not ToolPermissionPolicy.conversable(target.task.status):
         return (
             f"Error: agent {agent_id} status is "
             f"'{target.task.status.value}', cannot converse. "
@@ -417,29 +360,29 @@ async def read_artifact(*, ctx: ToolContext, artifact_id: str, file: str | None 
                     f"Available: {', '.join(names) or '(none)'}")
         return content
 
-    level = (level or "auto").strip().lower()
-    if level not in _VIEW_LEVELS:
-        return (f"Error: unknown level '{level}'. One of: {', '.join(_VIEW_LEVELS)}")
-    names = _VIEW_LEVELS[level]
+    norm = DisclosurePolicy.validate_level(level)
+    if norm is None:
+        return (f"Error: unknown level '{level}'. One of: "
+                f"{', '.join(DisclosurePolicy.VIEW_LEVELS)}")
 
-    parts: list[str] = []
-    for name in names:
-        v = getattr(artifact.views, name, None)
-        if v:
-            parts.append(f"[{name}] {v}")
-    if not parts and level != "raw":
-        for name in ("technical", "full_report", "raw_data"):
-            v = getattr(artifact.views, name, None)
-            if v:
-                parts.append(f"[{name}] {v}")
-                break
+    # Level selection + progressive fallback live in the DisclosurePolicy
+    # (the same tier decisions deliver_report / archive use).
+    parts = [
+        f"[{name}] {content}"
+        for name, content in DisclosurePolicy.reveal_fields(artifact, norm)
+    ]
+    if not parts and norm != "raw":
+        deeper = DisclosurePolicy.first_deeper_content(artifact, below=norm)
+        if deeper:
+            content = artifact.views.views[deeper]
+            parts.append(f"[{deeper}] {content}")
     if not parts:
-        return f"Artifact {artifact.id} has no content at level '{level}'."
+        return f"Artifact {artifact.id} has no content at level '{norm}'."
 
     body = "\n".join(parts)
-    if level in ("auto", "headline", "summary"):
+    if norm in ("auto", "headline", "summary"):
         deeper = [n for n in ("technical", "full_report", "raw_data")
-                  if getattr(artifact.views, n, None)]
+                  if artifact.views.views.get(n)]
         if deeper:
             body += (f"\n\n[More detail available: {', '.join(deeper)}. "
                      f"Re-read with level='{deeper[0]}' to see it.]")

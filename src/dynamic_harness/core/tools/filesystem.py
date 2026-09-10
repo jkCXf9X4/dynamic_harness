@@ -6,6 +6,7 @@ import re as _re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..policies.filesystem import SandboxPolicy
 from .registry import ToolDef
 
 if TYPE_CHECKING:
@@ -81,40 +82,18 @@ TOOL_EDIT_DEF = ToolDef(
 
 
 def is_hidden(path: str | Path) -> bool:
-    p = Path(path)
-    for part in p.parts:
-        if part.startswith("."):
-            return True
-    return False
+    return SandboxPolicy.is_hidden(path)
 
 
 def sandbox_root(ctx: ToolContext) -> Path:
     """The workspace an agent is allowed to operate in (read/glob/grep)."""
-    return ctx.generated_root or Path.cwd()
+    return SandboxPolicy.for_context(ctx.generated_root).root
 
 
 def resolve_safe_path(path: str, ctx: ToolContext) -> Path:
-    sandbox = ctx.generated_root or Path.cwd()
-    p = Path(path)
-    if p.is_absolute():
-        resolved = p.resolve()
-    else:
-        resolved = (sandbox / p).resolve()
-    if sandbox not in resolved.parents and resolved != sandbox:
-        raise ValueError(
-            f"Path '{path}' is outside the workspace. You may only access "
-            f"paths under the workspace root: {sandbox}. Use a relative path "
-            f"or report a file and reference it by its artifact ID instead."
-        )
-    return resolved
-
-
-def is_hidden(path: str | Path) -> bool:
-    p = Path(path)
-    for part in p.parts:
-        if part.startswith("."):
-            return True
-    return False
+    # Path-traversal containment lives in the host-agnostic SandboxPolicy (an
+    # MCP filesystem wrapper reuses the same boundary).
+    return SandboxPolicy.for_context(ctx.generated_root).resolve_safe_path(path)
 
 
 async def read(*, ctx: ToolContext, path: str) -> str:

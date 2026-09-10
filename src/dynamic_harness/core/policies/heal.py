@@ -12,9 +12,91 @@ children) stays in the runtime; this module only decides.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..task import TaskStatus
+
+
+class ResumePlanner:
+    """Decision half of the parent-driven ``resume`` tool's recovery ladder.
+
+    ``Agent.resume_child`` kept the strategy validation, rot refusal, layer
+    ordering, and budget-exhausted wording inline. Those decisions live here so
+    a plugin host (or a second implementation of the recovery execution) can
+    reuse the exact same ladder — and so the wording cannot drift from the
+    heal budget checks.
+    """
+
+    VALID_STRATEGIES: tuple[str, ...] = ("automatic", "resume", "fresh")
+
+    @classmethod
+    def validate(cls, strategy: str | None) -> tuple[str | None, str | None]:
+        """Normalize + validate a strategy. Returns ``(normalized, error)``;
+        at most one is set (both ``None`` is impossible for a valid input)."""
+        normalized = (strategy or "automatic").strip().lower()
+        if normalized not in cls.VALID_STRATEGIES:
+            return None, (
+                f"unknown strategy '{strategy}'. One of: "
+                + " | ".join(cls.VALID_STRATEGIES)
+            )
+        return normalized, None
+
+    @staticmethod
+    def refusal_for_rot(strategy: str, diagnosis: str) -> str | None:
+        """When a parent forces ``resume`` on a rotted child, refuse instead of
+        replaying the poisoned context. Returns the refusal message or None."""
+        if strategy == "resume" and diagnosis == "rot":
+            return (
+                "the child's context is rotted (repeated calls / safety "
+                "stop / many iterations); force-resuming would replay the "
+                "problem. Use strategy='fresh' to restart it cleanly."
+            )
+        return None
+
+    @staticmethod
+    def should_attempt_resume(strategy: str, diagnosis: str) -> bool:
+        """Layer 1 (resume same child): only for a blunt miss, unless forced."""
+        return strategy in ("automatic", "resume") and (
+            diagnosis == "blunt" or strategy == "resume"
+        )
+
+    @staticmethod
+    def should_attempt_fresh(strategy: str, healed: bool) -> bool:
+        """Layer 2 (fresh worker): whenever resuming didn't heal, unless the
+        caller forced the SAME child (`strategy='resume'` ends the ladder)."""
+        return not healed and strategy != "resume"
+
+    @staticmethod
+    def budget_exhausted(layer: str, used: int, limit: int) -> str:
+        """Message when a layer's heal budget is exhausted."""
+        if layer == "resume":
+            return (
+                "resume budget exhausted "
+                f"(self_heal.max_resumes={limit})"
+            )
+        return (
+            "fresh budget exhausted "
+            f"(self_heal.max_fresh_retries={limit})"
+        )
+
+
+@dataclass(frozen=True)
+class ResumeDecision:
+    """A single planned action for ``Agent.resume_child`` to execute."""
+
+    layer: str  # "resume" | "fresh"
+    attempt: int  # 1-based attempt number for the activity event
+    refuse_rot: bool = False
+    refusal: str | None = None
+
+    @staticmethod
+    def rot_refusal(message: str) -> "ResumeDecision":
+        return ResumeDecision(layer="none", attempt=0, refuse_rot=True, refusal=message)
+
+    @staticmethod
+    def for_layer(layer: str, attempt: int) -> "ResumeDecision":
+        return ResumeDecision(layer=layer, attempt=attempt)
 
 
 class HealBudget:
