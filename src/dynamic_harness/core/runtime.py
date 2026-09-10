@@ -14,6 +14,8 @@ from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
 from .references import discover_references, render_reference_index
+from .policies.heal import HealBudget, HealPolicy
+from .policies.spawn import SpawnPolicy
 from .spawn_limits import (
     DelegationLimit,
     SpawnLedger,
@@ -156,18 +158,24 @@ class Runtime:
         self._active_turn_window = (config.agent.active_turn_window if config else 50)
         self._stream_children = (config.agent.stream_children if config else False)
         self._self_heal_mode = config.self_heal.mode if config else True
-        self._self_heal_max_resumes = config.self_heal.max_resumes if config else 1
-        self._self_heal_max_fresh = config.self_heal.max_fresh_retries if config else 1
-        self._heal_counts: dict[str, dict[str, int]] = {}
+        # Recovery limits live on the HealPolicy (the shared *per-child* used
+        # counters are HealBudget instances keyed by agent id, so parent-driven
+        # `resume` and runtime-driven self-heal consume the same budget).
+        self.heal_policy = HealPolicy(
+            max_resumes=config.self_heal.max_resumes if config else 1,
+            max_fresh=config.self_heal.max_fresh_retries if config else 1,
+        )
+        self._heal_counts: dict[str, HealBudget] = {}
         # Delegation / spawn caps (A: total agents, B: tree depth, C: same-target
-        # re-delegation). Enforced at the single choke point Runtime.delegate().
-        self._max_agents: int | None = (config.safety.max_agents if config else 200) or None
-        self._max_depth: int | None = (config.safety.max_depth if config else 25) or None
-        self._max_same_target: int | None = (
-            config.safety.max_same_target_delegations if config else 15
-        ) or None
-        self._spawn_warning_attempts: int = (
-            config.safety.spawn_limit_warning_attempts if config else 2
+        # re-delegation). Decisions + refusal wording live in SpawnPolicy,
+        # enforced at the single choke point Runtime.delegate().
+        self.spawn_policy = SpawnPolicy(
+            max_agents=((config.safety.max_agents if config else 200) or None),
+            max_depth=((config.safety.max_depth if config else 25) or None),
+            max_same_target=(
+                (config.safety.max_same_target_delegations if config else 15) or None
+            ),
+            warning_attempts=(config.safety.spawn_limit_warning_attempts if config else 2),
         )
         refs_index = _build_reference_index(config)
         notes = list(config.agent.environment_notes if config else [])
@@ -205,6 +213,60 @@ class Runtime:
     @property
     def generated_root(self) -> Path | None:
         return self._generated_root
+
+    # -- policy back-compat shims ---------------------------------------
+    # Config values migrated into the composable policies (SpawnPolicy /
+    # HealPolicy). Old private names are kept as forwarding properties for
+    # tests and callers that mutate them (e.g. a harness disabling the resume
+    # ladder at runtime).
+
+    @property
+    def _max_agents(self) -> int | None:
+        return self.spawn_policy.max_agents
+
+    @_max_agents.setter
+    def _max_agents(self, value: int | None) -> None:
+        self.spawn_policy.max_agents = value if value != 0 else None
+
+    @property
+    def _max_depth(self) -> int | None:
+        return self.spawn_policy.max_depth
+
+    @_max_depth.setter
+    def _max_depth(self, value: int | None) -> None:
+        self.spawn_policy.max_depth = value if value != 0 else None
+
+    @property
+    def _max_same_target(self) -> int | None:
+        return self.spawn_policy.max_same_target
+
+    @_max_same_target.setter
+    def _max_same_target(self, value: int | None) -> None:
+        self.spawn_policy.max_same_target = value if value != 0 else None
+
+    @property
+    def _spawn_warning_attempts(self) -> int:
+        return self.spawn_policy.warning_attempts
+
+    @_spawn_warning_attempts.setter
+    def _spawn_warning_attempts(self, value: int) -> None:
+        self.spawn_policy.warning_attempts = max(int(value), 0)
+
+    @property
+    def _self_heal_max_resumes(self) -> int:
+        return self.heal_policy.max_resumes
+
+    @_self_heal_max_resumes.setter
+    def _self_heal_max_resumes(self, value: int) -> None:
+        self.heal_policy.max_resumes = max(int(value), 0)
+
+    @property
+    def _self_heal_max_fresh(self) -> int:
+        return self.heal_policy.max_fresh
+
+    @_self_heal_max_fresh.setter
+    def _self_heal_max_fresh(self, value: int) -> None:
+        self.heal_policy.max_fresh = max(int(value), 0)
 
     @property
     def provider(self) -> LLMProvider | None:
@@ -401,8 +463,8 @@ class Runtime:
 
     # -- self-heal (docs/concepts/self-healing.md) ------------------------
 
-    def _heal_counts_for(self, agent_id: str) -> dict[str, int]:
-        return self._heal_counts.setdefault(agent_id, {"resume": 0, "fresh": 0})
+    def _heal_counts_for(self, agent_id: str) -> HealBudget:
+        return self._heal_counts.setdefault(agent_id, HealBudget())
 
     def _emit_heal(self, agent: Agent, action: str, diagnosis: str, attempt: int) -> None:
         self.event_bus.emit_activity(ActivityEvent(
@@ -413,31 +475,32 @@ class Runtime:
 
     def _diagnose(self, agent: Agent) -> str:
         """Rot (poisoned context → fresh worker) vs blunt (healthy → resume)."""
-        return "rot" if agent.is_rot() else "blunt"
+        return HealPolicy.diagnose(agent.is_rot())
 
     def heal_diagnosis(self, agent: Agent) -> str:
         """Public blunt-vs-rot diagnosis for an agent (used by the ``status``
         tool so a parent sees the same signal the runtime's self-heal uses)."""
-        if agent.task.status is TaskStatus.failed or (
-            agent.task.status is TaskStatus.completed
-            and not self._has_deliverable(agent)
-        ):
-            return self._diagnose(agent)
-        return "none"
+        return HealPolicy.diagnose_for_status(
+            agent.task.status,
+            self._has_deliverable(agent),
+            agent.is_rot(),
+        )
 
     def _has_deliverable(self, agent: Agent) -> bool:
         """True when the agent produced its required on-disk deliverable.
 
-        If ``expected_outputs`` were declared for the run, they must all exist
-        on disk. Otherwise, fall back to the system contract: a report that
-        declares written files or saved artifact IDs. A prose-only report (no
-        files, no artifacts) is not a deliverable.
+        Decision lives in ``HealPolicy.deliverable_ok``: expected outputs must
+        all exist on disk, else a report that declares written files or saved
+        artifact IDs. A prose-only report (no files, no artifacts) is not a
+        deliverable.
         """
         outputs = getattr(agent, "_expected_outputs", None)
-        if outputs is not None:
-            return all(Path(p).exists() for p in outputs)
         r = agent.last_report
-        return bool(r and (r.artifact_ids or r.files_written))
+        return HealPolicy.deliverable_ok(
+            outputs,
+            getattr(r, "artifact_ids", None) or None,
+            getattr(r, "files_written", None) or None,
+        )
 
     def _store_written_files(self, artifact: Artifact, files_written: list[str]) -> None:
         """Make an artifact self-contained by copying written files into its dir.
@@ -471,28 +534,12 @@ class Runtime:
 
     def _resume_nudge(self, agent: Agent) -> str:
         if agent.last_failure is None:
-            outputs = getattr(agent, "_expected_outputs", None)
-            if outputs:
-                return (
-                    f"You finished your previous turn but did not write the "
-                    f"required output file(s): {', '.join(outputs)}. Resume NOW "
-                    f"from your current context: write exactly these files to "
-                    f"disk via write(), verify they parse, then call report() "
-                    f"declaring the artifact_ids / files_written."
-                )
-            return (
-                f"You finished your previous turn but did not write a deliverable "
-                f"to disk (no files were written and no artifact was saved). "
-                f"Resume NOW from your current context: write your findings to "
-                f"disk via write(), then call report() declaring the "
-                f"artifact_ids / files_written."
-            )
-        err = agent.last_failure.error or "the previous attempt failed"
-        return (
-            f"A previous attempt of this task failed with: {err}. "
-            f"Resume your current work and correct the failure — do not repeat "
-            f"the same mistake — then write your deliverable(s) to disk and "
-            f"complete the task to a final report."
+            failure_error = None
+        else:
+            failure_error = agent.last_failure.error or "the previous attempt failed"
+        return HealPolicy.resume_nudge(
+            getattr(agent, "_expected_outputs", None),
+            failure_error,
         )
 
     def _fresh_restart(self, agent: Agent, *, note: str | None = None) -> Agent:
@@ -509,26 +556,10 @@ class Runtime:
         task = agent.task
         if agent.last_failure:
             reason = agent.last_failure.error or "the prior attempt failed"
-            note_block = (
-                f"[Note: a prior attempt failed — {reason}. Begin from a clean "
-                f"slate and complete the task; do not repeat the prior failure.]"
-            )
+            note_block = HealPolicy.fresh_restart_note(reason, None, note)
         else:
             outputs = getattr(agent, "_expected_outputs", None)
-            if outputs:
-                note_block = (
-                    f"[Note: a prior attempt finished without writing "
-                    f"{', '.join(outputs)}. Begin from a clean slate and complete "
-                    f"the task, writing those files and reporting them.]"
-                )
-            else:
-                note_block = (
-                    f"[Note: a prior attempt finished without producing an "
-                    f"on-disk deliverable. Begin from a clean slate and complete "
-                    f"the task, writing your findings to disk and reporting them.]"
-                )
-        if note:
-            note_block += f"\n\nParent instruction: {note}"
+            note_block = HealPolicy.fresh_restart_note(None, outputs, note)
         desc = f"{task.description}\n\n{note_block}"
         new_task = Task(
             description=desc,
@@ -570,7 +601,7 @@ class Runtime:
             return agent  # healthy
 
         counts = self._heal_counts_for(agent.id)
-        diagnosis = self._diagnose(agent)
+        diagnosis = HealPolicy.diagnose(agent.is_rot())
 
         def _healed(a: Agent) -> bool:
             # A terminal report that carries an on-disk deliverable. Keyed on the
@@ -579,8 +610,8 @@ class Runtime:
             return a.last_report is not None and self._has_deliverable(a)
 
         # Layer 1: resume the same agent once on a blunt miss (salvage context).
-        if diagnosis == "blunt" and counts["resume"] < self._self_heal_max_resumes:
-            counts["resume"] += 1
+        if diagnosis == "blunt" and counts.can("resume", self.heal_policy.max_resumes):
+            counts.bump("resume")
             self._emit_heal(agent, "resume", diagnosis, counts["resume"])
             try:
                 await agent.continue_with_input(self._resume_nudge(agent))
@@ -590,8 +621,8 @@ class Runtime:
                 return agent  # healed
 
         # Layer 3: fresh worker on rot (or when resume didn't heal).
-        if not _healed(agent) and counts["fresh"] < self._self_heal_max_fresh:
-            counts["fresh"] += 1
+        if not _healed(agent) and counts.can("fresh", self.heal_policy.max_fresh):
+            counts.bump("fresh")
             self._emit_heal(agent, "fresh", diagnosis, counts["fresh"])
             fresh = self._fresh_restart(agent)
             if fresh is None:
@@ -632,38 +663,30 @@ class Runtime:
         # Enforced BEFORE the agent is constructed. A refused delegation must
         # never add to `_agents`/`_task_graph`; callers (the delegate tool and
         # self-heal) turn the exception into guidance to the model/parent.
+        # Decisions + refusal wording live in SpawnPolicy; the runtime keeps
+        # the lineage ledger and the signature extraction.
         depth = (parent._depth + 1) if parent is not None else 0
         ledger = (
             parent._spawn_ledger
             if parent is not None and parent._spawn_ledger is not None
             else SpawnLedger()
         )
-        if self._max_agents is not None and len(self._agents) >= self._max_agents:
-            raise DelegationLimit(
-                f"agent limit reached: {self._max_agents} agents have been spawned "
-                f"this run. Do NOT delegate more work — finish whatever is "
-                f"naturally closable in-context, return remaining items to your "
-                f"parent, and report/escalate/fail."
-            )
-        if self._max_depth is not None and depth > self._max_depth:
-            raise DelegationLimit(
-                f"tree depth limit reached: this delegation would be at depth "
-                f"{depth} (max {self._max_depth}). The task hierarchy is too deep — "
-                f"do NOT recurse further; solve the remaining work in-context, "
-                f"return it to your parent, or escalate."
-            )
-        if self._max_same_target is not None:
-            sig = delegate_target_signature(task.description)
-            if ledger.count(sig) >= self._max_same_target:
-                raise DelegationLimit(
-                    f"target delegation limit reached: '{sig}' has already been "
-                    f"delegated {ledger.count(sig)} times along this lineage "
-                    f"(max {self._max_same_target}). Repeatedly re-delegating the "
-                    f"same target returns no new information and looks like a loop. "
-                    f"Verify the existing child's failure/report, solve it "
-                    f"in-context, or escalate — do NOT spawn another identical "
-                    f"sub-agent."
-                )
+        sig = (
+            delegate_target_signature(task.description)
+            if self.spawn_policy.max_same_target is not None
+            else ""
+        )
+        verdict = self.spawn_policy.check(
+            agents_spawned=len(self._agents),
+            depth=depth,
+            same_target_count=(
+                ledger.count(sig) if self.spawn_policy.max_same_target is not None else 0
+            ),
+            same_target_signature=sig,
+        )
+        if not verdict.allowed:
+            raise DelegationLimit(verdict.reason)
+        if self.spawn_policy.max_same_target is not None:
             ledger.record(sig)
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
@@ -720,7 +743,7 @@ class Runtime:
         # budget for its caps) is shared down the whole lineage.
         agent._depth = depth
         agent._spawn_ledger = ledger
-        agent._spawn_warning_left = int(self._spawn_warning_attempts)
+        agent._spawn_warning_left = int(self.spawn_policy.warning_attempts)
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:
@@ -841,13 +864,13 @@ class Runtime:
         """
         usage: dict[str, Any] = {
             "agents": len(self._agents),
-            "max_agents": self._max_agents,
+            "max_agents": self.spawn_policy.max_agents,
         }
         if agent is not None:
             usage["depth"] = agent._depth
-            usage["max_depth"] = self._max_depth
+            usage["max_depth"] = self.spawn_policy.max_depth
             ledger: SpawnLedger = agent._spawn_ledger or SpawnLedger()
-            usage["max_same_target"] = self._max_same_target
+            usage["max_same_target"] = self.spawn_policy.max_same_target
             usage["top_same_targets"] = [
                 {"target": sig, "count": cnt}
                 for sig, cnt in ledger.top_targets()

@@ -187,13 +187,17 @@ async def test_result_handle_pages_without_rerunning(runtime: Runtime) -> None:
     assert "token_offset" in first.content
 
     # Page a later region of the SAME snapshot (line ~40 of `seq 1 50`).
+    # snapshot = 140 chars = 35 tokens; token_offset=30 → 120 chars in, which
+    # lands on line "44" (1..9 = 2 chars each, 10..30 = 3 chars each → 81 chars
+    # covers 1..30; 120 = 13 more lines). Assertion must not depend on the
+    # random result_id hex, so verify the first line is deterministically "44".
     page = await reg.execute(
         "result_read", "tc2", agent=agent,
-        result_id=first.result_id, token_offset=38, token_limit=4,
+        result_id=first.result_id, token_offset=30, token_limit=4,
     )
     assert page.content
     assert probe.read_text().count("RUN") == 1   # result_read must NOT re-run bash
-    assert page.content.startswith("4") or "4" in page.content.split("\n")[0]
+    assert page.content.startswith("44")
 
     # Re-call bash WITHOUT result_id => fresh execution, counter increments.
     await reg.execute(

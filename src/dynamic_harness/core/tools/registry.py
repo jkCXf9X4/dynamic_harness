@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from pydantic import BaseModel
 
+from ..policies.result_cache import ResultCachePolicy
+
 if TYPE_CHECKING:
     from ...core.agent import Agent
     from ...core.tool_context import ToolContext
@@ -49,11 +51,8 @@ def tools_for_role(role: str | None) -> frozenset[str] | None:
 # state, move execution, or drive control flow (or are views over other
 # results like result_read itself) — caching them would let a later
 # `result_read` resurrect a side effect or present a meaningless snapshot.
-NON_CACHEABLE_TOOLS: frozenset[str] = frozenset({
-    "write", "edit", "delegate", "report", "escalate", "fail", "kill", "ask",
-    "archive", "prune", "restore", "compress", "converse", "resume",
-    "result_read",
-})
+# Kept for back-compat; the set now lives with ResultCachePolicy.
+NON_CACHEABLE_TOOLS: frozenset[str] = ResultCachePolicy.DEFAULT_NON_CACHEABLE
 
 
 class ToolResult:
@@ -68,8 +67,12 @@ class ToolResult:
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        cache_policy: ResultCachePolicy | None = None,
+    ) -> None:
         self._tools: dict[str, tuple[ToolDef, ToolFunc]] = {}
+        self._cache_policy: ResultCachePolicy = cache_policy or ResultCachePolicy()
 
     def register(self, tool_def: ToolDef, fn: ToolFunc) -> None:
         self._tools[tool_def.name] = (tool_def, fn)
@@ -140,48 +143,15 @@ class ToolRegistry:
         # Every cacheable tool's FULL output is snapshotted behind an opaque
         # handle before any truncation, so the model can page later parts with
         # the read-only `result_read` tool instead of re-running slow work.
-        cacheable = name not in NON_CACHEABLE_TOOLS
-        result_id: str | None = None
-        if cacheable:
-            result_id = ctx.result_store.store(content)
-
-        char_limit = max(1, token_limit * 4)
-        char_offset = max(0, token_offset * 4)
-        total_chars = len(content)
-        if char_offset >= total_chars:
-            hint = (
-                f" (result_id={result_id}; page with result_read "
-                "using a smaller token_offset)" if result_id else ""
-            )
-            return ToolResult(
-                tool_call_id=tool_call_id,
-                content=f"(offset beyond content length){hint}",
-                result_id=result_id,
-            )
-        content = content[char_offset:]
-        if len(content) > char_limit:
-            content = content[:char_limit]
-            if result_id:
-                content += (
-                    f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
-                    f"Page without re-running: result_read(result_id=\"{result_id}\", "
-                    f"token_offset={token_offset + token_limit}). "
-                    f"Call {name} again for a fresh result. (more)"
-                )
-            elif name == "bash":
-                # Bash output (bash is non-cacheable only in the pathological
-                # case above; normally it IS cached) — keep a safe fallback.
-                content += (
-                    f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
-                    "To see more, re-run THIS command with a larger "
-                    f"token_limit (e.g. {max(token_limit * 2, 200)})."
-                )
-            else:
-                content += (
-                    f"\n... ({token_limit} tokens shown, {total_chars // 4} total. "
-                    f"Use token_limit={max(token_limit * 2, 200)} "
-                    f"or token_offset={token_offset + token_limit} to see more)"
-                )
+        # Cacheability + truncation/footer policy live in ResultCachePolicy.
+        result_id = self._cache_policy.snapshot(ctx.result_store, name, content)
+        content = self._cache_policy.render(
+            content,
+            token_limit=token_limit,
+            token_offset=token_offset,
+            name=name,
+            result_id=result_id,
+        )
         return ToolResult(tool_call_id=tool_call_id, content=content, result_id=result_id)
 
     def openai_schemas(self, role: str | None = None) -> list[dict]:
