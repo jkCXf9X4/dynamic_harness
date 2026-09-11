@@ -53,11 +53,12 @@ parent of `artifacts/`, `repo/`, and `traces/`):
 
 ### FR-3. Visible "progress is happening"
 
-While a run is active the terminal shows a lightweight single-line token
-counter whose (optional) label reflects the latest activity (tool calls,
-delegations, compression, self-heal). The indicator must not corrupt the
-terminal output; the agent `ask` interaction pauses it while prompting on
-stdin.
+While a run is active the terminal shows a lightweight live token counter whose
+(optional) label reflects the latest activity (tool calls, delegations,
+compression, self-heal). The counter is rendered as the **prompt line itself**
+of the otherwise-prompt-only input (via `prompt_toolkit`), so it cannot corrupt
+the terminal output; the agent `ask` interaction swaps that same prompt to
+`[ask] <question>` and pauses the counter while prompting.
 
 ### FR-3.5. Always-available input during a run
 
@@ -101,9 +102,12 @@ stdin.
 - **NFR-2. Isolation of rendering** — the presentation layer
   (`cli/present.py`) is pure text/JSON view-models with no terminal-library
   dependency, so it can render to console *or* disk without coupling.
-- **NFR-3. Cheap live helpers** — the token counter and input line share a
-  single foreground asyncio loop in raw mode with no new dependencies and no
-  live-dashboard machinery.
+- **NFR-3. Cheap live helpers** — the input line runs in the foreground asyncio
+  loop via `prompt_toolkit` (bracketed paste, multi-line input, history,
+  wide-char/wrap handling are all delegated to it); no live-dashboard machinery
+  (no Rich `Live`, no full-screen TUI) is used, keeping the run loop itself
+  free of TUI dependencies. `prompt_toolkit` is the single input dependency
+  added for the interactive surface.
 - **NFR-4. Atomic, append-only event log** — `events.jsonl` is append-only to
   allow tailing; tree/stats snapshots are atomic rewrites (write-then-replace).
 

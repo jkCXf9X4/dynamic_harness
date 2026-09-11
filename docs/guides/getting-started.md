@@ -102,9 +102,10 @@ export OPENAI_API_KEY=sk-your-key-here
 dynamic-harness
 ```
 
-Opens the prompt-only interactive terminal. Type a task and press Enter.
-During the run a single live line shows a **token counter** + the current
-activity, and the `>>>` input stays **always available**: type a command (e.g.
+Opens the prompt-only interactive terminal. Type a task and press Enter (paste
+in multi-line text directly, or use Ctrl+J to add a line break). During the run
+the prompt shows a live **token counter** + the current activity, and input
+stays **always available**: type a command (e.g.
 `/tree` for a live status snapshot) or send a message to the running agent —
 it is queued while the agent works and applied immediately when the agent is
 waiting on its children. Final outcome prints at the end; everything else — the

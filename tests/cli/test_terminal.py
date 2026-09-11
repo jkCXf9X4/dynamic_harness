@@ -125,6 +125,7 @@ def test_drive_tty_ask_roundtrip(runtime, monkeypatch):
     class _TtyStream:
         def __init__(self, fd):
             self.fd = fd
+            self.encoding = "utf-8"
 
         def isatty(self) -> bool:
             return True
@@ -132,8 +133,10 @@ def test_drive_tty_ask_roundtrip(runtime, monkeypatch):
         def fileno(self) -> int:
             return self.fd
 
-        def write(self, s: str) -> None:
-            os.write(self.fd, s.encode())
+        def write(self, s: str | bytes) -> None:
+            if isinstance(s, str):
+                s = s.encode()
+            os.write(self.fd, s)
 
         def flush(self) -> None:
             pass

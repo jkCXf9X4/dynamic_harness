@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
-import select
 import sys
-import termios
-import time
-import tty
 from pathlib import Path
+
+from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.shortcuts import PromptSession
 
 from rich.console import Console
 from rich.table import Table
@@ -25,206 +24,34 @@ from .state import StateWriter, attach_events
 
 console = Console()
 
-_HISTORY: list[str] = []
+_history: InMemoryHistory | None = None
 
 
-def _render_input(prompt: str, text: list[str], pos: int) -> None:
-    """Redraw a multi-line editable prompt anchored at the saved cursor position."""
-    text_str = "".join(text)
-    lines = text_str.split("\n")
-    before = text_str[:pos]
-    line_idx = before.count("\n")
-    col = len(before.split("\n")[-1]) + (len(prompt) if line_idx == 0 else 0) + 1
+def _make_session() -> PromptSession[str]:
+    """A fresh prompt_toolkit session for the input line.
 
-    sys.stdout.write("\x1b[?25l")      # hide cursor during redraw
-    sys.stdout.write("\x1b[u\x1b[J")   # restore to anchor, clear from there down
-    sys.stdout.write(prompt + lines[0])
-    for extra in lines[1:]:
-        sys.stdout.write("\r\n" + extra)
-    up = (len(lines) - 1) - line_idx
-    if up:
-        sys.stdout.write(f"\x1b[{up}A")
-    sys.stdout.write("\r")
-    if col > 1:
-        sys.stdout.write(f"\x1b[{col - 1}C")
-    sys.stdout.write("\x1b[?25h")      # show cursor at edit position
-    sys.stdout.flush()
-
-
-def _utf8_char(fd: int, lead: int) -> str:
-    if 0xC0 <= lead <= 0xDF:
-        n = 1
-    elif 0xE0 <= lead <= 0xEF:
-        n = 2
-    elif 0xF0 <= lead <= 0xF7:
-        n = 3
-    else:
-        n = 0
-    data = bytes([lead]) + os.read(fd, n)
-    return data.decode("utf-8", "replace")
-
-
-def _is_word_char(ch: str) -> bool:
-    return ch.isalnum() or ch == "_"
-
-
-def _prev_word_start(text: list[str], pos: int) -> int:
-    """Move pos to the start of the preceding word (readline-style backward-word)."""
-    i = pos
-    n = len(text)
-    while i > 0 and not _is_word_char(text[i - 1]):
-        i -= 1
-    while i > 0 and _is_word_char(text[i - 1]):
-        i -= 1
-    return i
-
-
-def _next_word_end(text: list[str], pos: int) -> int:
-    """Move pos to the end of the next word (readline-style forward-word)."""
-    i = pos
-    n = len(text)
-    while i < n and _is_word_char(text[i]):
-        i += 1
-    while i < n and not _is_word_char(text[i]):
-        i += 1
-    return i
-
-
-def _read_input(prompt: str) -> str:
-    """Read a line (or multi-line via Ctrl+J/paste) with arrow-key cursor editing.
-
-    Bracketed paste is enabled up front so a pasted newline can never be
-    mistaken for Enter: pasted bytes arrive wrapped in ``\\x1b[200~`` /
-    ``\\x1b[201~`` and are inserted literally.
+    Enter submits; bracket-pasted multi-line text is inserted literally and
+    re-rendered once (fast, never corrupts the screen); Ctrl+J / Alt+Enter
+    insert an explicit newline. prompt_toolkit owns all terminal specifics
+    (bracketed paste, wide chars, word wrap, history).
     """
+    global _history
+    if _history is None:
+        _history = InMemoryHistory()
+    kb = KeyBindings()
+    @kb.add("escape", "enter")
+    @kb.add("c-j")
+    def _insert_newline(event):
+        event.app.current_buffer.insert_text("\n")
+    return PromptSession(multiline=False, key_bindings=kb, history=_history)
+
+
+async def _read_input(prompt: str) -> str:
+    """Read a REPL input line (multi-line via paste / Ctrl+J) with editing."""
     if not sys.stdin.isatty():
         return input(prompt)
-
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    prompt = console.render_str(prompt).plain
-    text: list[str] = []
-    pos = 0
-    saved = ""
-    hist_nav: int | None = None
-    pasting = False
-    try:
-        tty.setraw(fd)
-        sys.stdout.write("\r\n\x1b[s\x1b[?2004h")
-        sys.stdout.flush()
-        _render_input(prompt, text, pos)
-        while True:
-            raw = os.read(fd, 1)
-            if not raw:
-                continue
-            b = raw[0]
-            if b == 0x0D:  # Enter (submit) or pasted newline
-                if pasting or select.select([fd], [], [], 0)[0]:
-                    # A CR inside a paste, or one followed by more buffered
-                    # input, is a line break -- never a submit.
-                    text.insert(pos, "\n")
-                    pos += 1
-                    hist_nav = None
-                else:
-                    sys.stdout.write("\r\n")
-                    break
-            elif b == 0x03:  # Ctrl+C
-                raise KeyboardInterrupt
-            elif b == 0x04:  # Ctrl+D
-                raise EOFError
-            elif b == 0x0A:  # LF (Ctrl+J / pasted newline) -> new line
-                text.insert(pos, "\n")
-                pos += 1
-                hist_nav = None
-            elif b in (0x7F, 0x08):  # backspace
-                if pos > 0:
-                    del text[pos - 1]
-                    pos -= 1
-                hist_nav = None
-            elif b == 0x1B:  # escape sequence
-                seq = os.read(fd, 1)
-                if not seq or seq[0] != 0x5B:  # expect '['
-                    continue
-                csi = bytearray()
-                while True:
-                    s = os.read(fd, 1)
-                    if not s:
-                        break
-                    byte = s[0]
-                    # Full-text string (F): 200~/201~ bracketed paste, etc.
-                    if byte == 0x7E and csi[:1] == b"2" and len(csi) >= 2:
-                        tail = csi[1:]
-                        if tail == b"00":
-                            pasting = True
-                        elif tail == b"01":
-                            pasting = False
-                        break
-                    if 0x40 <= byte <= 0x7E:  # final byte of the CSI
-                        csi.append(byte)
-                        break
-                    csi.append(byte)
-                if not 0x40 <= (csi[-1] if csi else 0) <= 0x7E:
-                    continue
-                c = csi[-1]
-                params = [int(p) if p else 0 for p in "".join(
-                    chr(x) for x in csi[:-1]
-                ).split(";")] or [0]
-                ctrl = 5 in params or "5" in "".join(chr(x) for x in csi[:-1])
-                if c == 0x41:  # up
-                    if hist_nav is None:
-                        saved = "".join(text)
-                        hist_nav = len(_HISTORY)
-                    if hist_nav > 0:
-                        hist_nav -= 1
-                        text[:] = list(_HISTORY[hist_nav])
-                        pos = len(text)
-                elif c == 0x42:  # down
-                    if hist_nav is not None:
-                        hist_nav += 1
-                        if hist_nav >= len(_HISTORY):
-                            hist_nav = None
-                            text[:] = list(saved)
-                        else:
-                            text[:] = list(_HISTORY[hist_nav])
-                        pos = len(text)
-                elif c == 0x43:  # right (or Ctrl+Right = forward word)
-                    if ctrl:
-                        pos = _next_word_end(text, pos)
-                    elif pos < len(text):
-                        pos += 1
-                    hist_nav = None
-                elif c == 0x44:  # left (or Ctrl+Left = backward word)
-                    if ctrl:
-                        pos = _prev_word_start(text, pos)
-                    elif pos > 0:
-                        pos -= 1
-                    hist_nav = None
-                elif c == 0x48:  # home
-                    pos = 0
-                elif c == 0x46:  # end
-                    pos = len(text)
-                elif c == 0x7E:  # CSI ~ keypad sequences: 3~ delete, 1~/7~ home, 4~/8~ end
-                    if params and params[0] == 3 and pos < len(text):
-                        del text[pos]
-                    elif params and params[0] in (1, 7):
-                        pos = 0
-                    elif params and params[0] in (4, 8):
-                        pos = len(text)
-                    hist_nav = None
-            elif b >= 0x80:
-                text.insert(pos, _utf8_char(fd, b))
-                pos += 1
-                hist_nav = None
-            else:
-                text.insert(pos, chr(b))
-                pos += 1
-                hist_nav = None
-            _render_input(prompt, text, pos)
-    finally:
-        sys.stdout.write("\x1b[?2004l")
-        sys.stdout.flush()
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    return "".join(text)
+    session = _make_session()
+    return await session.prompt_async(console.render_str(prompt).plain)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -269,16 +96,6 @@ def _make_writer(runtime: Runtime) -> StateWriter:
     return StateWriter(runtime.artifact_store.root.parent)
 
 
-def _render_line(prefix: str, buf: list[str], pos: int) -> None:
-    """Redraw the single live line: `\\r` + clear + prefix + buffer, cursor at pos."""
-    sys.stdout.write("\r\x1b[2K")
-    sys.stdout.write(prefix + "".join(buf))
-    back = len(buf) - pos
-    if back > 0:
-        sys.stdout.write(f"\x1b[{back}D")
-    sys.stdout.flush()
-
-
 def _progress_status(runtime: Runtime, label: str) -> str:
     tokens = runtime.total_usage().get("total_tokens", 0)
     return f"{tokens} tokens" + (f" \u00b7 {label}" if label else "")
@@ -300,7 +117,10 @@ async def _submit_input(runtime: Runtime, line: str) -> None:
     ):
         root.submit_input(line)
     else:
-        console.print("[yellow]No active agent to receive input.[/yellow]")
+        status = root.task.status.value if root is not None else "none"
+        console.print(
+            f"[yellow]No active agent to receive input (root is {status}).[/yellow]"
+        )
 
 
 async def _drive(
@@ -312,11 +132,12 @@ async def _drive(
 ) -> Agent | None:
     """Run ``task`` to completion with an always-available input line.
 
-    A lightweight single-line editor shows a live token counter + activity label
-    and a ``>>>`` prompt. Enter submits the line (commands or agent input); the
-    agent-``ask`` tool swaps the prompt to ``[ask] <question>`` and returns your
-    answer. Ctrl+C cancels the run. Non-TTY sessions skip the editor entirely
-    and just await the task (clean for batch/pipelines).
+    A prompt_toolkit input line shows a live token counter + activity label in
+    the prompt; Enter submits (commands or agent input), pasting works fast and
+    multi-line. The agent-``ask`` tool swaps the live prompt to
+    ``[ask] <question>`` and returns your answer. Ctrl+C cancels the run.
+    Non-TTY sessions skip the editor entirely and just await the task (clean
+    for batch/pipelines).
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         while not task.done():
@@ -330,94 +151,70 @@ async def _drive(
             await asyncio.sleep(0.2)
         return await task
 
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    buf: list[str] = []
-    pos = 0
-    mode = "user"
-    qtext = ""
+    mode: dict[str, object] = {"ask": False, "qtext": ""}
 
-    def prefix() -> str:
-        if mode == "ask":
-            return f"[ask] {qtext} \xbb "
-        return "\xbb "
+    def message() -> str:
+        if mode["ask"]:
+            return f"[ask] {mode['qtext']} \u00bb "
+        return f"{_progress_status(runtime, label_state.get('label', ''))} \u00bb "
 
-    def draw() -> None:
-        _render_line(_progress_status(runtime, label_state.get("label", "")) + " " + prefix(), buf, pos)
+    session = _make_session()
 
+    async def prompt_once() -> str:
+        return await session.prompt_async(message, refresh_interval=0.5)
+
+    prompt_task: asyncio.Task[str] = asyncio.ensure_future(prompt_once())
+    q_task: asyncio.Task[str] = asyncio.ensure_future(question_queue.get())
     try:
-        tty.setraw(fd)
-        draw()
-        last_draw = time.monotonic()
         while not task.done():
-            if mode == "user" and not question_queue.empty():
-                mode = "ask"
-                qtext = question_queue.get_nowait().strip()
-                buf = []
-                pos = 0
-            ready, _, _ = select.select([sys.stdin], [], [], 0.1)
-            if ready:
-                b = os.read(fd, 1)
-                if not b:
-                    continue
-                by = b[0]
-                if by in (0x0D, 0x0A):  # Enter
-                    sys.stdout.write("\r\n")
-                    sys.stdout.flush()
-                    line = "".join(buf)
-                    if mode == "ask":
-                        answer_queue.put_nowait(line.strip())
-                        mode = "user"
-                        qtext = ""
-                    else:
-                        await _submit_input(runtime, line)
-                    buf = []
-                    pos = 0
-                elif by == 0x03:  # Ctrl+C
+            done, _ = await asyncio.wait(
+                {task, prompt_task, q_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if q_task in done:
+                # An agent question arrived: switch the live prompt to ``[ask]``.
+                mode["qtext"] = q_task.result().strip()
+                if not mode["ask"]:
+                    if not prompt_task.done():
+                        prompt_task.cancel()  # discard the partial draft
+                    prompt_task = asyncio.ensure_future(prompt_once())
+                mode["ask"] = True
+                q_task = asyncio.ensure_future(question_queue.get())
+            if prompt_task in done:
+                try:
+                    line = prompt_task.result()
+                except asyncio.CancelledError:
+                    line = None  # a queued ask interrupted the draft
+                except KeyboardInterrupt:
                     sys.stdout.write("\r\n")
                     sys.stdout.flush()
                     task.cancel()
                     break
-                elif by == 0x04:  # Ctrl+D
-                    buf = []
-                    pos = 0
-                elif by in (0x7F, 0x08):  # backspace
-                    if pos > 0:
-                        del buf[pos - 1]
-                        pos -= 1
-                elif by >= 0x80:  # UTF-8 multibyte
-                    extra = b""
-                    if 0xC0 <= by <= 0xDF:
-                        extra = os.read(fd, 1)
-                    elif 0xE0 <= by <= 0xEF:
-                        extra = os.read(fd, 2)
-                    elif 0xF0 <= by <= 0xF7:
-                        extra = os.read(fd, 3)
-                    ch = (b + extra).decode("utf-8", "replace")
-                    buf.insert(pos, ch)
-                    pos += 1
-                elif by >= 0x20:
-                    buf.insert(pos, chr(by))
-                    pos += 1
-                await asyncio.sleep(0)
-                draw()
-                last_draw = time.monotonic()
-            elif time.monotonic() - last_draw >= 0.5:  # throttle the live status to 2 Hz
-                await asyncio.sleep(0)
-                draw()
-                last_draw = time.monotonic()
-        if task.cancelled():
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
-            return None
-        root = await task
-        sys.stdout.write("\r\n")
-        sys.stdout.flush()
-        return root
+                except EOFError:
+                    line = None  # Ctrl+D at an empty prompt: no-op
+                if mode["ask"]:
+                    answer_queue.put_nowait(line.strip() if line else "")
+                elif line:
+                    await _submit_input(runtime, line)
+                mode["ask"] = False
+                mode["qtext"] = ""
+                if task.done():
+                    break
+                prompt_task = asyncio.ensure_future(prompt_once())
+                q_task = asyncio.ensure_future(question_queue.get())
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        if not prompt_task.done():
+            prompt_task.cancel()
+        if not q_task.done():
+            q_task.cancel()
+    if task.cancelled():
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        return None
+    root = await task
+    return root
 
 
 async def _run(
@@ -638,7 +435,7 @@ async def _run_interactive_async(runtime: Runtime) -> None:
 
     while True:
         try:
-            text = _read_input("[bold]>>>[/]")
+            text = await _read_input("[bold]>>>[/]")
         except (EOFError, KeyboardInterrupt):
             console.print()
             break
@@ -646,7 +443,6 @@ async def _run_interactive_async(runtime: Runtime) -> None:
         text = text.strip()
         if not text:
             continue
-        _HISTORY.append(text)
         if text.lower() in ("exit", "quit"):
             break
         if text.startswith("/"):
