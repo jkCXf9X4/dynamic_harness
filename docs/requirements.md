@@ -69,7 +69,10 @@ the terminal output; the agent `ask` interaction swaps that same prompt to
   work.
 - **FR-3.5.3** A message typed while the top agent is **waiting on its
   children** is **applied immediately** — it interrupts the wait so the agent
-  reacts now (still-running children continue in the background).
+  reacts now. Interrupted children are not discarded: they are re-gathered and
+  their results fold into the parent's context once they settle, so answering
+  the user never loses the in-flight delegation (still-running children
+  otherwise continue in the background).
 - **FR-3.5.4** Slash commands such as `/tree`, `/agents`, `/provenance` are
   available **during** the run to inspect live status, not only when idle.
   Mutating commands (`/resume`, `/reset`) are refused while a run is active.

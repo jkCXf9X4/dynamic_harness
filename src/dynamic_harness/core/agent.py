@@ -197,8 +197,11 @@ class Agent:
         # fills while this agent is executing. Messages land as fresh user
         # context between turns (a working agent finishes its current turn
         # first) and an injection also unblocks a child-gather early, so a
-        # parent waiting on its children reacts to the input immediately while
-        # still-running children switch to fire-and-forget.
+        # parent waiting on its children reacts to the input immediately. The
+        # interrupted children are NOT dropped: still-running ones stay
+        # registered and are re-gathered (their results fold into the parent's
+        # context) in a later turn, so answering the user never costs the
+        # delegation.
         self._inject_queue: asyncio.Queue[str] = asyncio.Queue()
         self._inject_event = asyncio.Event()
 
@@ -684,6 +687,17 @@ class Agent:
                 await self.run()
                 return
             self.task.status = TaskStatus.running
+            # Fresh-turn budget: reset the per-run loop-guard state that run()
+            # initialises, so iterations / wall-clock / warning counters do not
+            # accumulate across interactive REPL turns (a long session would
+            # otherwise trip the safety caps prematurely). The conversation
+            # (context) and result-store handles are deliberately retained.
+            self._iteration = 0
+            self._loop_guard.clear()
+            self._started_at = time.monotonic()
+            self._has_delegated = False
+            self._delegate_nudge_left = self._delegate_nudge_attempts
+            self._iteration_warning_left = self._iteration_warning_attempts
             self.context.messages.append({"role": "user", "content": user_message})
             await self._run_guarded()
 
@@ -866,6 +880,19 @@ class Agent:
 
         return json.dumps(result, indent=2)
 
+    async def _fold_child_result(self, child: Agent) -> tuple[str, Agent]:
+        """Format a settled child for injection into the parent's context,
+        self-healing it first if it finished without a deliverable.
+
+        Returns ``(formatted, child)`` where ``child`` is the (possibly
+        replaced) agent the caller should garbage-collect. Shared by the
+        streaming harvest and the interrupted deferred-gather fold-back so
+        both paths lose no child result.
+        """
+        if not self._runtime._has_deliverable(child):
+            child = await self._runtime._recover(child)
+        return self._format_delegate_result(child), child
+
     # -- run loop ---------------------------------------------------------
 
     def _safety_check(self) -> bool:
@@ -972,7 +999,11 @@ class Agent:
         has_delegates = any(tc.name == "delegate" for tc in response.tool_calls)
         if has_delegates:
             self._has_delegated = True
-            if not self.stream_children:
+            # Only open a fresh deferred batch when there is no carryover from
+            # an interrupted wait: children left over from a mid-run input keep
+            # their place so this turn's gather folds them as well instead of
+            # dropping the earlier delegation.
+            if not self.stream_children and self._deferred_delegates is None:
                 self._deferred_delegates = []
 
         for tc in response.tool_calls:
@@ -1218,7 +1249,9 @@ class Agent:
         A working agent finishes its current turn before the message lands as a
         fresh user turn; if the agent is instead blocked waiting on its children
         (deferred or streaming gather), the injection interrupts that wait so it
-        reacts immediately (still-running children continue in the background)."""
+        reacts immediately. Interrupted children are preserved: they are
+        re-gathered and their results fold into the parent's context once they
+        settle, so the mid-run answer never loses the in-flight delegation."""
         self._inject_queue.put_nowait(message)
         self._inject_event.set()
 
@@ -1310,10 +1343,11 @@ class Agent:
         self._deferred_delegates = None
 
         # Race the full child-gather against mid-run user input so a parent
-        # blocked on its children reacts to injected input immediately, with
-        # still-running children demoted to fire-and-forget (their commits and
-        # artifacts still land; only the parent's in-context formatting is
-        # skipped).
+        # blocked on its children reacts to injected input immediately. On
+        # interruption the children are NOT dropped: still-running ones stay
+        # registered so the run loop re-gathers them next turn and folds their
+        # results into context then, and any child that settled in the same
+        # instant is folded here and now.
         inject_waiter = asyncio.create_task(self._inject_event.wait())
         try:
             done, _ = await asyncio.wait(
@@ -1325,11 +1359,25 @@ class Agent:
                 inject_waiter.cancel()
 
         if inject_waiter.done():
-            # User input interrupted the wait: return without framing the
-            # children's results. Still-running children continue in the
-            # background; the run loop's next turn drains the queued input as a
-            # fresh user message (always *after* the current turn is committed,
-            # so the message ordering stays valid).
+            # User input interrupted the wait. Children that settled in the same
+            # instant are folded into context; still-running children keep their
+            # place in ``_deferred_delegates`` so the next turn re-gathers them.
+            # The run loop drains the queued input as a fresh user message
+            # (always *after* the current turn is committed, so message ordering
+            # stays valid).
+            leftovers: list[tuple[str, Agent, asyncio.Task[None]]] = []
+            for tcid, child, task in pending:
+                if task.done():
+                    folded, final = await self._fold_child_result(child)
+                    self.context.append({
+                        "role": "user",
+                        "content": f"[child settled]\n{folded}",
+                    })
+                    final.collect_garbage()
+                else:
+                    leftovers.append((tcid, child, task))
+            if leftovers:
+                self._deferred_delegates = leftovers
             return
 
         children = [child for _, child, _ in pending]
@@ -1345,10 +1393,22 @@ class Agent:
             if not self._runtime._has_deliverable(child):
                 deferred_map[tcid] = await self._runtime._recover(child)
 
+        patched: set[str] = set()
         for r in results:
             tcid = r["tool_call_id"]
             if tcid in deferred_map:
                 r["content"] = self._format_delegate_result(deferred_map[tcid])
+                patched.add(tcid)
+
+        # Children left over from an interrupted earlier gather have tool-call
+        # ids that are not part of this turn's results; fold them streaming-style
+        # so a mid-run answer never loses the pre-interruption delegation.
+        for tcid, child in list(deferred_map.items()):
+            if tcid not in patched:
+                self.context.append({
+                    "role": "user",
+                    "content": f"[child settled]\n{self._format_delegate_result(child)}",
+                })
 
         # Once a child's result is folded into the parent's context, its own
         # full conversation is dead weight — reclaim it to keep the runtime lean.
@@ -1395,13 +1455,12 @@ class Agent:
             if not task.done():
                 continue
             del self._stream_pending[tcid]
-            if not self._runtime._has_deliverable(child):
-                child = await self._runtime._recover(child)
+            folded, final = await self._fold_child_result(child)
             self.context.append({
                 "role": "user",
-                "content": f"[child settled]\n{self._format_delegate_result(child)}",
+                "content": f"[child settled]\n{folded}",
             })
-            child.collect_garbage()
+            final.collect_garbage()
             break
         return True
 

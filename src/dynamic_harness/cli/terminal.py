@@ -171,16 +171,9 @@ async def _drive(
                 {task, prompt_task, q_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            if q_task in done:
-                # An agent question arrived: switch the live prompt to ``[ask]``.
-                mode["qtext"] = q_task.result().strip()
-                if not mode["ask"]:
-                    if not prompt_task.done():
-                        prompt_task.cancel()  # discard the partial draft
-                    prompt_task = asyncio.ensure_future(prompt_once())
-                mode["ask"] = True
-                q_task = asyncio.ensure_future(question_queue.get())
             if prompt_task in done:
+                # Handle a completed prompt BEFORE a same-instant question so a
+                # user's submitted line is never misrouted as an ask answer.
                 try:
                     line = prompt_task.result()
                 except asyncio.CancelledError:
@@ -201,6 +194,13 @@ async def _drive(
                 if task.done():
                     break
                 prompt_task = asyncio.ensure_future(prompt_once())
+            if q_task in done:
+                # An agent question arrived: switch the live prompt to ``[ask]``.
+                mode["qtext"] = q_task.result().strip()
+                if not mode["ask"] and not prompt_task.done():
+                    prompt_task.cancel()  # discard the partial draft
+                    prompt_task = asyncio.ensure_future(prompt_once())
+                mode["ask"] = True
                 q_task = asyncio.ensure_future(question_queue.get())
     finally:
         if not prompt_task.done():
