@@ -185,3 +185,230 @@ def test_drive_tty_ask_roundtrip(runtime, monkeypatch):
 
     assert received == ["blue"]
     assert result == "done-blue"
+
+
+def test_drive_tty_prints_root_assistant_reply(runtime, monkeypatch):
+    """The top agent's text replies stream into the terminal above the live
+    prompt (children's chatter must stay invisible)."""
+    import os
+    import pty
+    import select
+    import threading
+    import time
+
+    from rich.console import Console
+
+    from dynamic_harness.cli import terminal
+    from dynamic_harness.cli.terminal import _drive
+    from dynamic_harness.core.task import ActivityEvent, ActivityEventType
+
+    master, slave = pty.openpty()
+
+    class _TtyStream:
+        def __init__(self, fd):
+            self.fd = fd
+            self.encoding = "utf-8"
+
+        def isatty(self) -> bool:
+            return True
+
+        def fileno(self) -> int:
+            return self.fd
+
+        def write(self, s: str | bytes) -> None:
+            if isinstance(s, str):
+                s = s.encode()
+            os.write(self.fd, s)
+
+        def flush(self) -> None:
+            pass
+
+    stream = _TtyStream(slave)
+    monkeypatch.setattr(terminal.sys, "stdin", stream)
+    monkeypatch.setattr(terminal.sys, "stdout", stream)
+    monkeypatch.setattr(terminal, "console", Console(file=stream, force_terminal=True))
+
+    root = runtime.delegate(Task(description="root"))
+    runtime._active_root = root
+
+    async def run_task():
+        runtime.emit_activity(ActivityEvent(
+            agent_id=root.id,
+            event_type=ActivityEventType.ASSISTANT_REPLY,
+            data={"content": "hello from the root agent"},
+        ))
+        await asyncio.sleep(0.2)
+
+    async def run():
+        qq: asyncio.Queue[str] = asyncio.Queue()
+        aq: asyncio.Queue[str] = asyncio.Queue()
+        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""})
+
+    captured: list[bytes] = []
+
+    def master_driver() -> None:
+        deadline = time.time() + 8
+        out = b""
+        while time.time() < deadline:
+            r, _, _ = select.select([master], [], [], 0.2)
+            if not r:
+                continue
+            try:
+                chunk = os.read(master, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+            if b"hello from the root agent" in out:
+                captured.append(out)
+                return
+
+    t = threading.Thread(target=master_driver, daemon=True)
+    t.start()
+    asyncio.run(run())
+    t.join(timeout=8)
+
+    assert captured, "root assistant reply was never printed to the terminal"
+
+
+def test_drive_tty_ignores_child_assistant_reply(runtime, monkeypatch):
+    """Only the root's replies are streamed; delegated children's text stays
+    out of the operator's terminal."""
+    import os
+    import pty
+    import select
+    import threading
+    import time
+
+    from rich.console import Console
+
+    from dynamic_harness.cli import terminal
+    from dynamic_harness.cli.terminal import _drive
+    from dynamic_harness.core.task import ActivityEvent, ActivityEventType
+
+    master, slave = pty.openpty()
+
+    class _TtyStream:
+        def __init__(self, fd):
+            self.fd = fd
+            self.encoding = "utf-8"
+
+        def isatty(self) -> bool:
+            return True
+
+        def fileno(self) -> int:
+            return self.fd
+
+        def write(self, s: str | bytes) -> None:
+            if isinstance(s, str):
+                s = s.encode()
+            os.write(self.fd, s)
+
+        def flush(self) -> None:
+            pass
+
+    stream = _TtyStream(slave)
+    monkeypatch.setattr(terminal.sys, "stdin", stream)
+    monkeypatch.setattr(terminal.sys, "stdout", stream)
+    console = Console(file=stream, force_terminal=True)
+    monkeypatch.setattr(terminal, "console", console)
+
+    root = runtime.delegate(Task(description="root"))
+    child = runtime.delegate(Task(description="child"), parent=root)
+    runtime._active_root = root
+
+    async def run_task():
+        # A child's reply must be suppressed ...
+        runtime.emit_activity(ActivityEvent(
+            agent_id=child.id,
+            event_type=ActivityEventType.ASSISTANT_REPLY,
+            data={"content": "child chatter, keep quiet"},
+        ))
+        # ... while the root's own reply still streams (render signal).
+        runtime.emit_activity(ActivityEvent(
+            agent_id=root.id,
+            event_type=ActivityEventType.ASSISTANT_REPLY,
+            data={"content": "root speaking now"},
+        ))
+        await asyncio.sleep(0.2)
+
+    async def run():
+        qq: asyncio.Queue[str] = asyncio.Queue()
+        aq: asyncio.Queue[str] = asyncio.Queue()
+        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""})
+
+    captured: list[bytes] = []
+
+    def master_driver() -> None:
+        deadline = time.time() + 8
+        out = b""
+        while time.time() < deadline:
+            r, _, _ = select.select([master], [], [], 0.2)
+            if not r:
+                continue
+            try:
+                chunk = os.read(master, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+            if b"root speaking now" in out:
+                captured.append(out)
+                return
+
+    t = threading.Thread(target=master_driver, daemon=True)
+    t.start()
+    asyncio.run(run())
+    t.join(timeout=8)
+
+    assert captured, "root assistant reply was never printed to the terminal"
+    assert b"child chatter" not in captured[0]
+
+
+def test_prune_done_tasks_survives_inner_discard():
+    """Regression: _sweep_prints used set.difference_update(gen) over the same
+    set — CPython rejects mutating a set while iterating it. With a single
+    completed task the discard shrank the set mid-iteration and raised
+    'Set changed size during iteration'."""
+    from dynamic_harness.cli.terminal import _prune_done_tasks
+
+    async def _done() -> None:
+        return None
+
+    loop = asyncio.new_event_loop()
+    try:
+        done = loop.create_task(_done())
+        loop.run_until_complete(done)
+        pending = {done}
+        _prune_done_tasks(pending)
+        assert pending == set()
+        # An unfinished task must stay put.
+        waiting: set[asyncio.Task[None]] = set()
+        _prune_done_tasks(waiting)
+        assert waiting == set()
+    finally:
+        loop.close()
+
+
+def test_print_reply_treats_agent_text_as_data_not_markup(monkeypatch):
+    """Brackets/numbers in a reply must survive verbatim: Rich must not parse
+    the agent's words as markup (MarkupError) or highlight them."""
+    import io
+
+    from rich.console import Console
+
+    from dynamic_harness.cli import terminal
+    from dynamic_harness.cli.terminal import _print_reply
+
+    out = io.StringIO()
+    monkeypatch.setattr(
+        terminal, "console",
+        Console(file=out, force_terminal=False, color_system=None, width=200),
+    )
+    _print_reply("ab" * 6, "[1] 'the [x] fix' vs step 2\n  second line")
+    text = out.getvalue()
+    assert "[1] 'the [x] fix' vs step 2" in text
+    assert "second line" in text
+    assert text.replace(" ", "").startswith("abababab[1]")  # id prefix present

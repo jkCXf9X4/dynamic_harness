@@ -79,6 +79,17 @@ the terminal output; the agent `ask` interaction swaps that same prompt to
 - **FR-3.5.5** Non-TTY sessions (batch/pipelines) do not render the input line
   or token counter at all — output stays clean and machine-parseable.
 
+### FR-3.6. Streaming the top agent's replies
+
+- **FR-3.6.1** Each LLM call that produces text emits an `assistant_reply`
+  activity event carrying that content (empty/tool-only turns stay silent).
+- **FR-3.6.2** In interactive sessions the **root** agent's replies are printed
+  above the live prompt as they happen (a printed line, not a dashboard — the
+  input line itself is untouched), so the operator sees the top agent answer a
+  mid-run question instead of talking to a silent terminal.
+- **FR-3.6.3** Replies from delegated children are never printed; the operator
+  only hears from the agent they talk to.
+
 ### FR-4. Quick operator evaluation
 
 - **FR-4.1** The operator can view a plain-text agent tree showing per-agent

@@ -177,3 +177,17 @@ we can ask external agents if they think that delegation is needed without the p
 
 How do we enable rg and other commands to be executed on result handlers? 
 - this ould enable searching the results without rerunning the commands in case they are expensive
+
+---
+
+evaluate the step from complicated development where broblems can be broken down into subparts and be solved to complex development where parents can setup multiple children that can communicate and solve problems together
+
+
+---
+
+try to delegate 4 small task to subagents
+how are they doing?
+
+---
+
+enable contrl+c to exit the application

@@ -336,7 +336,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 ## Process (CLI / programmatic)
 
-- Default CLI = `cli/terminal.py` (prompt-only; batch + `-i` REPL prints the final outcome).
+- Default CLI = `cli/terminal.py` (prompt-only; batch + `-i` REPL prints the final outcome, and interactive sessions stream the root agent's text replies above the live prompt).
 - The `agent_system_prompt.txt` is loaded at import time into `AGENT_SYSTEM_PROMPT`.
 - Applies `harness.json` via `config.load_harness_config()` (discovery: `--config` → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults).
 - No-LLM mode: without `set_llm()`, `Agent.run()` fails with "No LLM provider configured".

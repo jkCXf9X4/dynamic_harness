@@ -5,6 +5,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.shortcuts import PromptSession
@@ -101,6 +102,37 @@ def _progress_status(runtime: Runtime, label: str) -> str:
     return f"{tokens} tokens" + (f" \u00b7 {label}" if label else "")
 
 
+def _prune_done_tasks(tasks: set[asyncio.Task[None]]) -> None:
+    """Drop completed tasks from ``tasks``.
+
+    Snapshot-then-mutate: ``set.difference_update(gen_over_self)`` mutates the
+    set while a generator is iterating it, which CPython rejects with "Set
+    changed size during iteration" as soon as the first discard shrinks the
+    set mid-iteration."""
+    finished = {t for t in tasks if t.done()}
+    if finished:
+        tasks.difference_update(finished)
+
+
+def _print_reply(agent_id: str, content: str) -> None:
+    """Render one assistant reply above the live prompt.
+
+    The agent's words are treated as data, never Rich markup: without this,
+    brackets in a reply raise ``MarkupError`` and inline numbers get
+    highlighted, garbling the streamed text."""
+    from rich.text import Text
+
+    lines = [ln for ln in content.splitlines() if ln.strip()]
+    for i, ln in enumerate(lines):
+        line = Text()
+        if i == 0:
+            line.append(agent_id[:8], style="bold cyan")
+        else:
+            line.append(" " * 9)
+        line.append(f" {ln}")
+        console.print(line)
+
+
 async def _submit_input(runtime: Runtime, line: str) -> None:
     """Route a mid-run line: `/command` becomes a command; anything else is
     injected into the active root agent (queued while it works, applied
@@ -134,10 +166,11 @@ async def _drive(
 
     A prompt_toolkit input line shows a live token counter + activity label in
     the prompt; Enter submits (commands or agent input), pasting works fast and
-    multi-line. The agent-``ask`` tool swaps the live prompt to
-    ``[ask] <question>`` and returns your answer. Ctrl+C cancels the run.
-    Non-TTY sessions skip the editor entirely and just await the task (clean
-    for batch/pipelines).
+    multi-line. The top agent's text replies stream into the terminal above the
+    prompt as they happen (children's chatter stays invisible). The agent-``ask``
+    tool swaps the live prompt to ``[ask] <question>`` and returns your answer.
+    Ctrl+C cancels the run. Non-TTY sessions skip the editor entirely and just
+    await the task (clean for batch/pipelines).
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         while not task.done():
@@ -159,6 +192,25 @@ async def _drive(
         return f"{_progress_status(runtime, label_state.get('label', ''))} \u00bb "
 
     session = _make_session()
+
+    # Stream the root agent's text replies into the terminal, printed above the
+    # live prompt (suspend/render via prompt_toolkit so the input line survives).
+    pending_prints: set[asyncio.Task[None]] = set()
+
+    def display_root_reply(event) -> None:
+        if event.event_type is not ActivityEventType.ASSISTANT_REPLY:
+            return
+        root = runtime.active_root()
+        if root is None or event.agent_id != root.id:
+            return
+        content = (event.data.get("content") or "").strip()
+        if not content:
+            return
+        task = run_in_terminal(lambda: _print_reply(root.id, content))
+        pending_prints.add(task)
+        task.add_done_callback(lambda _t: _prune_done_tasks(pending_prints))
+
+    runtime.on_activity(display_root_reply)
 
     async def prompt_once() -> str:
         return await session.prompt_async(message, refresh_interval=0.5)
@@ -203,6 +255,16 @@ async def _drive(
                 mode["ask"] = True
                 q_task = asyncio.ensure_future(question_queue.get())
     finally:
+        if pending_prints:
+            # Bounded drain: each print is microseconds, but never let teardown
+            # hang on a wedged render task — cancel whatever is left over.
+            _done, _stuck = await asyncio.wait(
+                list(pending_prints), timeout=5.0,
+                return_when=asyncio.ALL_COMPLETED,
+            )
+            pending_prints.clear()
+            for t in _stuck:
+                t.cancel()
         if not prompt_task.done():
             prompt_task.cancel()
         if not q_task.done():

@@ -52,6 +52,11 @@ def format_event(
         ct = d.get("completion_tokens", 0)
         tc_str = ", ".join(tc) if tc else ("text-only" if emoji else "text")
         return f"{lead(CH if emoji else '')}LLM \u2192 {tc_str} ({pt}+{ct} tokens)"
+    elif et == ActivityEventType.ASSISTANT_REPLY:
+        text = (d.get("content", "") or "").strip().replace("\n", " ")
+        if len(text) > 200:
+            text = text[:200] + "\u2026"
+        return f"{lead(CH if emoji else '')}{text}"
     elif et == ActivityEventType.DELEGATION_START:
         child = d.get("child_id", "?")[:8]
         desc = (d.get("description", "") or "")[:60]

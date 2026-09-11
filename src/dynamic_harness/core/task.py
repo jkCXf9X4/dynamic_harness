@@ -92,6 +92,7 @@ class ActivityEventType(str, Enum):
     SAFETY_WARNING = "safety_warning"
     SELF_HEAL = "self_heal"
     ITERATION = "iteration"
+    ASSISTANT_REPLY = "assistant_reply"
 
 
 class ActivityEvent(BaseModel):

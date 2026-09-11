@@ -96,6 +96,13 @@ class Telemetry:
                 "tool_calls": names,
             },
         ))
+        content = (response.content or "").strip()
+        if content:
+            self._event_bus.emit_activity(ActivityEvent(
+                agent_id=self._agent_id,
+                event_type=ActivityEventType.ASSISTANT_REPLY,
+                data={"content": content},
+            ))
         ts = self._trace_store
         if ts is not None:
             tc_info = [
