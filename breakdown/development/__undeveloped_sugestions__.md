@@ -200,8 +200,9 @@ can you see if you can create a common interface for these to further facilitate
 
 > **PICKED UP** → working item `breakdown/development/plugin/INVESTIGATION.md`
 > (metric-reactive interface = the seed: `core/policies/interface.py`,
-> `Runtime.register_reactive_policy`; investigating uniform plugin contract +
-> discovery + lifecycle to complete the move)
+> `Runtime.register_reactive_policy`; direction = interface economy —
+> establish/minimize common interfaces + decouple/isolate components;
+> a loader/late-injection plugin architecture is explicitly out of scope)
 
 ---
 

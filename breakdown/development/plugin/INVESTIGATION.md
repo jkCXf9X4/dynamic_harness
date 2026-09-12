@@ -1,36 +1,44 @@
 ---
-title: "Investigation — Toward a Plugin-Centric Architecture"
+title: "Investigation — Interface Economy: Decoupling Toward a Plugin-Ready Structure"
 category: investigation
 status: open
 summary: >
-  Direction work (before implementation) for making Dynamic Harness a
-  plugin-centric runtime: a thin host core where tools, policies, agent
-  classes, event handlers, LLM providers, and CLI surfaces are uniformly
-  pluggable, discoverable, and replaceable — without touching the run loop.
+  Direction work (before implementation) for making Dynamic Harness'
+  internals decoupled and isolated: establish a minimal set of narrow, stable
+  common interfaces between components (tools, policies, agent, runtime,
+  artifact/memory, CLI). The structure should be plugin-ready — seams first,
+  and replaceable components as a consequence — NOT a plugin architecture with
+  late code injection.
 ---
 
-# Direction: Toward a Plugin-Centric Architecture
+# Direction: Plugin-Ready Structure Through Interface Economy
 
 ## The step being investigated
 
-Today the harness is a monolith of *near-seams*: tools grouped by concern,
-policies extracted into host-agnostic decision objects, event-bus handlers, a
-reactive-policy registry that already calls itself "the plugin seam". Each
-surface is individually extensible in code, but there is no **uniform plugin
-contract**, no **discovery/loading**, and no **lifecycle** — so "plugins" are
-an idiom you implement by hand, not a capability you install.
+The harness is a monolith of *near-seams*: tools grouped by concern, policies
+extracted into host-agnostic decision objects, a metric-reactive registry that
+already calls itself "the plugin seam", an event bus, an LLM provider ABC. Each
+surface is individually extensible in code — but the seams are *incidental*:
+their shapes differ, their breadth varies, and components still reach across
+them (observed couplings below).
 
-This working item investigates the step from **extensible monolith** to
-**plugin-centric host**:
+This working item investigates a **structural goal, not a mechanism**:
 
-| Aspect | Extensible today (default) | Plugin-centric (target) |
-|--------|----------------------------|-------------------------|
-| Extension mechanism | Register in code, per-surface | One plugin descriptor + one loader |
-| Discovery | Read the source, import the right hook | Declarative: scan a dir / entry point, load, wire |
-| Contract | Each seam has its own shape (`ReactivePolicy`, `ToolDef+fn`, agent class, event fn) | A shared `Plugin` interface that *contributions* into each seam |
-| Lifecycle | Nothing: registrations live as long as the runtime | Install → activate → verify health → deactivate, at load or mid-run |
-| Replace defaults | Subclass / monkey-patch / register-over-name | Explicit precedence + override semantics |
-| Portability | Policies reusable, tools coupled to core types | Core is a thin host; everything else is a plugin (see `docs/platform-evaluation.md`) |
+> Establish and **minimize** the common interfaces between internal components,
+> and **de-couple and isolate** those components behind them. A plugin
+> architecture with late injection of code is **not** required — plugin-ready
+> *structure* is the target; a loader is out of scope.
+
+| Aspect | Today (extensible monolith) | Target (plugin-ready structure) |
+|--------|------------------------------|---------------------------------|
+| Common interfaces | Many, incidental, broad (`ToolContext`, policies, event fns, ABCs) | Few, explicit, **narrow** — each exposing only what its consumers need |
+| Coupling | Components import each other directly across layers | Components know neighbors only through contracts |
+| Isolation | Private state reachable through wide façades | No outside reach into internals; data types pure |
+| Replaceability | By-hand subclass/register-over-name | A consequence of narrow seams, not a special feature |
+| Late injection | None today (good) | **Stays out of scope** — no loader, no dynamic code loading |
+
+The folder is named `plugin/` because the *vision* is plugin-centric structure;
+this document deliberately argues against building plugin *infrastructure* now.
 
 ## Why this matters (motivating context)
 
@@ -40,160 +48,172 @@ The seed suggestion (from `__undeveloped_sugestions__.md`):
 > way — can you see if you can create a common interface for these to further
 > facilitate the move towards a more plugin centric architecture.
 
-`ReactivePolicyRegistry` (core/policies/interface.py) answered exactly that for
-the *metric-reactive* family. `docs/platform-evaluation.md` argues the core
-worth porting is a ~25-tool tool-execution + spawn layer, and that a plugin
-host should reuse policies without coupling. This working item is the internal
-mirror of that thesis: make the harness itself plugin-centric so both (a) the
-codebase is clearly a host, and (b) third-party hosts / MCP extensions can be
-served by the same seams.
+`ReactivePolicyRegistry` (core/policies/interface.py) answered that for the
+*metric-reactive* family — it is the reference for what a good seam looks like:
+host-agnostic, narrow, stable. `docs/platform-evaluation.md` argues the core
+worth porting is a ~25-tool tool-execution + spawn layer, reusing policies
+without coupling.
 
-## What already exists (implemented seams)
+**Purpose decision (Q1 answered):** this work is *porting and adaptation of the
+current project structure into a more decoupled and manageable codebase* — the
+internal-structure enabler. External porting (MCP server / third-party host
+transport) belongs to `docs/platform-evaluation.md` and is **out of scope
+here**.
 
-| Seam | Where | Extendable today? | Plugin shape needed? |
-|------|-------|------------------|----------------------|
-| Metric-reactive policies | `ReactivePolicy` / `Observation` / `PromptInjection` / `ReactivePolicyRegistry` — `core/policies/interface.py:32-181`; registered per-factory via `Runtime.register_reactive_policy` (`core/runtime.py:464`, "the plugin seam") | Yes — register, ordered, replace-by-name | Contract is good; needs discovery/loading |
-| Tools | `ToolRegistry.register(ToolDef, fn)` + `openai_schemas()` (`core/tools/registry.py`); `register_default_tools(registry)` (`core/tools/registration.py:15`) | Yes — any async fn with `ToolContext` | ToolDef+fn is de-facto a plugin; needs a name/namespace + load path |
-| Custom agent classes | `Runtime.register_agent_class(name, cls)` (`core/runtime.py:454`); used by `delegate` via `agent_type` | Yes | Bare dictionary; no descriptor/validation |
-| Event handlers | `Runtime.on_report / on_escalation / on_failure / on_budget_request / on_activity` + `EventBus` (`core/events.py`) | Yes — multiple handlers, isolated dispatch | No envelope/metadata beyond the event; fine for now |
-| Decision policies (config-sourced) | `AgentPolicy`, `SpawnPolicy`, `HealPolicy`, `RetryPolicy`, `LoopGuard`, `BashSafetyPolicy`, `SandboxPolicy`, … — `core/policies/` | Yes — construct + pass in / subclass | Host-agnostic already; hardened for reuse |
-| LLM providers | `LLMProvider` ABC (`llm/provider.py`); injected via `Runtime.set_llm` | Yes — implement ABC | Natural plugin shape (entry-point pattern) |
-| CLI / state surfaces | `cli/terminal.py`, `cli/state.py` (`StateWriter`), `cli/present.py` | Code-level | No discovery — a plugin offering its own CLI/view is invisible today |
+## What already exists (interface inventory)
 
-Relevant supporting docs already in repo:
+### The seams today
 
-- `docs/api/policies.md` — policies are "reused by plugin hosts (MCP /
-  extension) without coupling to the harness core"
-- `docs/platform-evaluation.md` — portability thesis; recursion hosts'
-  extension APIs; OpenCode's `tool.execute.before/after` preview of what a
-  plugin contract looks like on a host
-- `docs/gap-analysis.md` — P1 flag: "no LLM-spawnable custom agents" (a
-  *runtime* plugin gap)
+| Seam | Where | Shape | Breadth concern |
+|------|-------|-------|-----------------|
+| Metric-reactive policies | `ReactivePolicy` / `Observation` / `PromptInjection` / `ReactivePolicyRegistry` — `core/policies/interface.py:32-181`; registered per-factory via `Runtime.register_reactive_policy` (`core/runtime.py:464`) | Host-agnostic protocol + frozen dataclasses | **Reference model** — narrow, stable, host-agnostic |
+| Tool façade | `ToolContext` (`core/tool_context.py`) handed to every tool fn in place of `Agent` | Concrete façade over `Agent` | **Wide** — see couplings below |
+| Tool registry | `ToolDef` / `ToolResult` / `ToolRegistry.register(...)` + `openai_schemas()` (`core/tools/registry.py`); `register_default_tools` (`core/tools/registration.py:15`) | Registration call, schema builder | Registry is the load choke point; definitions split by concern |
+| Decision policies | `AgentPolicy`, `SpawnPolicy`, `HealPolicy`, `RetryPolicy`, `LoopGuard`, `BashSafetyPolicy`, `SandboxPolicy`, … — `core/policies/` | Construct + pass in / subclass; no agent/runtime imports | Mostly pure; tools import some directly (see below) |
+| Event handlers | `Runtime.on_report / on_escalation / on_failure / on_budget_request / on_activity` + `EventBus` (`core/events.py`) | Subscribe fn per event type | Fine; isolated dispatch already |
+| LLM providers | `LLMProvider` ABC (`llm/provider.py`); `Runtime.set_llm` | ABC + injection | Textbook seam; clean |
+| Agent classes | `Runtime.register_agent_class(name, cls)` (`core/runtime.py:454`) | Dict keyed by name | Bare; no descriptor/validation |
+| CLI / state | `cli/terminal.py`, `cli/state.py` (`StateWriter`), `cli/present.py` | Code-level | Only consumer of agent-tree/state; fine as a shell |
 
-## The plugin-centric target (working definition)
+### Observed couplings worth reviewing (the decoupling target)
 
-A plugin is a **self-describing unit of extension** with three contract
-elements:
+- **`ToolContext` is a wide façade.** It exposes env, locks, llm, message
+  buffer, usage, artifact/result stores, plan/checkpoint, compress/prune/
+  restore, *and* authority actions (report/escalate/fail/kill/status/converse),
+  plus direct reach into private state
+  (`record_archived_artifact` appends to `agent._archived_artifact_ids`,
+  `tool_context.py:104-109`). Every tool fn receives all of this; nothing
+  restricts a file tool from pulling an agent's message buffer. Minimal
+  interface = **facet the façade** (or accept one deliberately-broad façade
+  and document it — decision needed).
+- **`ToolContext.compress` builds its compression prompt inline**
+  (`tool_context.py:126-136`) — policy-ish logic living in an interface
+  object, not in a policy.
+- **Tools import policies/task types directly.** `tools/agents.py` imports
+  `policies.disclosure.DisclosurePolicy` and `policies.permissions.
+  ToolPermissionPolicy`; `tools/context.py` imports `task.ActivityEvent`.
+  Policies are host-agnostic, so this is not a layering violation per se —
+  but it is an *un-centralized* decision path (policy applied inside a tool,
+  not delegated by the registry). Worth an explicit ruling: is policy
+  application registry-delegated (single path) or tool-embedded (many paths)?
+- **`ToolContext.status`/`kill`/`continue_with_input` reach the agent actor
+  directly** (`tool_context.py:199-228`) — coupling the tool façade to live
+  agent lifecycle. Fine while ToolContext is the only door; a narrow-interface
+  pass should list exactly which tools use which doorway methods.
 
-1. **Manifest** — name, version, what it contributes (tools / policies /
-   agent classes / event handlers / LLM providers / CLI views), and any
-   declared dependencies or conflicts.
-2. **Activation** — a load step (static, at runtime construction) and/or an
-   activate step (mid-run), returning a health result so the host can accept,
-   warn, or refuse.
-3. **Contributions** — one or more registrations against existing seams,
-   expressed through the *same* public register calls a host user would use
-   (no new "plugin-only" API surface).
+## The target (working definition)
 
-Desired properties:
+Not a plugin manifest/activation lifecycle. The target is **interface
+economy** — a small, stable set of narrow contracts, with these properties:
 
-- **Uniform loading.** A plugin directory / entry point is scanned; each plugin
-  is loaded and its contributions are wired. No editing `registration.py`.
-- **Precedence + replace.** Re-register-by-name already replaces (policy
-  registry). Make override semantics explicit per seam (later overrides? refuse
-  core-overrides unless marked?).
-- **Containment.** A crashing/ill-behaved plugin fails *its* activation or
-  contribution, not the run loop. Registrations must never weaken safety
-  invariants by accident (spawn caps, loop detection, result handles).
-- **Introspection.** Installed plugins are queryable (`Runtime` should answer
-  "what is installed" for tools/policies/agents), feeding `status`,
-  `docs/api/`, and diagnostics.
-- **Out of the box: the core IS thin.** Default tools/policies/agents/CLI
-  become the first "stdlib" plugins registered from a discovery default, so the
-  difference between built-in and third-party is *where it was loaded from*,
-  not *what it can do*.
+1. **Few.** One contract per *kind* of exchange (observe-and-react, tool call,
+   delegate, deliver report, persist state, generate) — not one per feature.
+2. **Narrow.** Each interface exposes exactly what its consumers need; nothing
+   private leaks through; no full-object handoffs where a view suffices.
+3. **Stable.** The contracts hold across refactors; components change behind
+   them, interfaces change rarely.
+4. **Host-agnostic where possible.** Decisions (`core/policies/`) import
+   neither agent nor runtime; data types (`Task`, `Artifact`, `Commit`,
+   `Observation`, `PromptInjection`) are pure. Mirrors the reactive-policy
+   reference model.
+5. **Isolated.** Components know neighbors only through contracts; internals
+   (agent context buffers, registry internals, store layouts) are private.
+6. **Replaceable as a side effect.** Narrow seams + explicit
+   register/inject points make swapping a tool, policy, handler, or provider a
+   one-call act — without a loader, without monkey-patching.
 
 ## Design space / options to weigh
 
-### A. Uniform `Plugin` interface + loader (native plugin host)
+### A. Loader / late-injection plugin architecture — ❌ OUT OF SCOPE
 
-Introduce a `Plugin` protocol (manifest + `install(host)`), a loader that scans
-`~/.config/dynamic-harness/plugins/` + a project `plugins/` dir (+ optional
-entry-point group in pyproject), and convert the default surface into resolved
-"stdlib" plugins registered through the same path.
+No manifest schema, no directory scanning, no entry points, no activate/
+deactivate lifecycle, no dynamic code loading. The user decided this is *not
+needed*: the goal is structural, and a loader is machinery that buys nothing
+until the seams are already minimal. Folded away so future work does not
+re-litigate it. (If contracts do prove stable much later, a loader could sit
+on top — but that is `docs/platform-evaluation.md` territory, not this item.)
 
-**Pros:** one contract, one load path; the harness is unmistakably a host;
-internal refactor forces every seam to be exercised through public APIs (dogfooding platform-evaluation's claims); a third-party plugin is indistinguishable from a built-in except provenance.
-**Cons:** machinery before payoff — a loader, manifest schema, error/containment
-policy, precedence rules, and migration of `register_default_tools` /
-`register_agent_class` / policy wiring to plugin-style registration. Larger
-surface to test (deterministic mock-LLM tests must not depend on plugin dirs).
+### B. Seam-first refactor (the recommended path)
 
-### B. Shared contracts only, no loader (contracts-first)
+Do the interface work only, in the codebase's natural order: inventory →
+narrow → isolate → consolidate registries. No new I/O, no new failure modes.
 
-Ship the *interface* work only: `Plugin` protocol + refine each seam so
-everything presentable as a plugin *is* a typed contribution object, but leave
-discovery to the user (pass a list into `Runtime`, like `set_llm`). Loader comes
-later once the contracts prove stable.
+**Pros:** low risk; every change is a refactor with existing tests as the
+guard (`pytest` mock-LLM determinism preserved); the reactive-policy refactor
+already proved the pattern; produces the plugin-ready structure directly.
+**Cons:** slower to see a "capability" land; requires discipline to avoid
+churning interfaces for their own sake (explicit non-goal: reshuffling without
+coupling reduction).
 
-**Pros:** small, low-risk, immediate value: the codebase becomes "composable
-from documented extension points" without new I/O or failure modes; the policy
-interface refactor already proved this pattern works.
-**Cons:** not yet plugin-*centric* — no discovery, no health, no containment;
-third parties still hand-wire; the "thin core" claim stays aspirational.
+### C. Two-worlds (internal seams + external transport) — ❌ OUT OF SCOPE here
 
-### C. Two worlds: native host *and* third-party host (external seam)
+Serving the decision layer behind an MCP/third-party-host transport belongs to
+`docs/platform-evaluation.md`. This item only makes the codebase portable;
+it does not ship a transport. (Enablement: B enables C later.)
 
-Pursue both the native plugin host (B→A) and the externalization thesis
-(`docs/platform-evaluation.md`): define the seam once, then expose it verbatim
-behind a transport (MCP server / config-driven preload) so a non-Python host
-drives the same decisions. The `ReactivePolicy` interface and
-`register_reactive_policy` are the existing seed.
+## Decisions (from review of the initial draft)
 
-**Pros:** maximizes reuse of the decision layer; directly answers the platform
-port; single contract serving two audiences.
-**Cons:** scope sprawl; transport adds auth/serialization concerns ("0 vs null"
-config conventions already show the attention such compatibility requires);
-risks conflating "the core is a host" with "every host can drive our core".
+- **Q1 — Purpose:** porting/adaptation of the current project structure into a
+  more decoupled and manageable codebase; external porting is out of scope.
+- **Q2 — Manifest schema (if ever considered):** minimal (name/version/
+  contributions); moot under "no loader".
+- **Q3 — Failure/containment:** **crash loudly and warn in the terminal** —
+  never silently swallow a broken component/registration.
+- **Q4 — Safety boundary:** go with the default bias: policies replaceable,
+  safety invariants frozen (loop detection, spawn limits, result handles,
+  mutator set), tools additive, agent classes additive.
+- **Q5 — Config interplay:** **start code-only**; components consume
+  `harness.json` exactly as today, no merged per-component schema.
+- **Q6 — Stdlib conversion:** open (see below).
+- **Q7 — Deterministic testing:** open (see below).
 
-## Open questions to resolve before implementation
+## Open questions to resolve next
 
-1. **Name collision with the platform thesis.** "Plugin-centric" in this repo
-   means the harness's own extension model. `docs/platform-evaluation.md` uses
-   "plugin" for *other* hosts. Is the internal work the enablement for the
-   external (option C), or a project in its own right (option A/B)? What does
-   success look like for each?
-2. **Manifest schema scope.** V1 minimal (name/version/contributions) or richer
-   (dependencies, conflicts, config defaults, permissions)? Over-spec vs
-   churn trade-off.
-3. **Containment policy.** What does a failing plugin do — refuse install with
-   a report, isolate to a disabled state, or crash loudly? Where do health
-   results surface (`status` tool? terminal? state files?)?
-4. **Safety boundary.** Can a plugin replace `LoopGuard`, `SpawnPolicy`, or the
-   mutator set? Since safety invariants are the differentiator, define what is
-   *overridable* vs *frozen*. Default bias: policies replaceable, safety
-   invariants frozen, tools additive, agent classes additive.
-5. **Config interplay.** Plugin behavior is config-sourced today
-   (`harness.json`). Do plugins contribute their own config schema (merged at
-   load) or stay code-only, consuming `harness.json` like the policies do?
-6. **The stdlib conversion.** Is converting the built-in tools/agents/policies
-   into "default plugins" a prerequisite (dogfooding) or a later cleanup that
-   risks churn? Which default-first is lowest-risk to prove the contract
-   (policies, already have a registry)?
-7. **Deterministic testing.** Plugin discovery introduces filesystem/IO into
-   runtime construction, which mock-LLM tests currently avoid. Where is the
-   discovery boundary so tests pass a plugin list explicitly?
+1. **ToolContext: facet or document?** Split the wide façade into role-scoped
+   facets (e.g. environment/context-observation vs authority actions vs
+   lifecycle), or keep one deliberately-broad contract and document it? The
+   minimal-interface direction favors splitting; the cost is a registry that
+   must hand over the right facet per tool. Which is the better first step?
+
+   
+2. **Policy application path (Q-unresolved).** Centralize every policy
+   decision in the registry/runtime (one delegated path), or accept tool- and
+   agent-embedded application? The near-identical/reactive work centralized;
+   the tool-level policies (sandbox, bash-safety, webfetch, permissions,
+   disclosure) still live inside individual tools.
+3. **Stdlib conversion (Q6).** Is converting built-in tools/agents/policies
+   into "registered defaults" a prerequisite (dogfooding) or a later cleanup?
+   Cobblestone candidates: policies already have a registry; tools already
+   have `register_default_tools`.
+4. **Deterministic tests (Q7).** Where is the seam between "component list is
+   injected by the test" and "registry defaults apply", so mock-LLM tests never
+   depend on ambient state? (A `Runtime(..., plugins=[...])` explicitness
+   boundary — without late loading.)
+5. **The count.** A concrete inventory of "how many common interfaces exist"
+   is step 1 below; its trimmed successor ("how few should exist") is the
+   measurable success criterion. What number/names are acceptable?
 
 ## Investigation next steps
 
-- [ ] Decide A vs B vs C (lean: B first — contracts; A follows if the contracts
-      hold; C only if enabled by A/B decisions)
-- [ ] Enumerate every current registration call site (`register_default_tools`,
+- [x] Decide the goal: interface economy (decouple + isolate + minimize
+      interfaces); loader/late-injection explicitly out of scope
+- [x] Record decisions Q1–Q5 (purpose / minimal manifest / crash loudly /
+      default safety / code-only config)
+- [ ] Enumerate every registration call site (`register_default_tools`,
       `register_agent_class`, `register_reactive_policy`, `on_*` handlers,
-      `set_llm`, custom CLI) into a single canonical "what the host can accept"
-      inventory
-- [ ] Draft the `Plugin` protocol + one `Contribution` type per seam, using the
-      existing `ReactivePolicy` interface as the reference for the shape
-      (runtime.py:153 comment already names the seam)
-- [ ] Read `docs/platform-evaluation.md` in full and reconcile terms
-      (internal plugin vs external host plugin) into one glossary
-- [ ] Spec the containment + health semantics (what a refused plugin reports,
-      where it surfaces)
-- [ ] Spec precedence/override rules and the frozen-safety boundary
-- [ ] Choose the discovery boundary for tests (explicit list vs directory
-      scan; default off in tests)
-- [ ] Decide stdlib-vs-defaults conversion strategy and pick the first pilot
-      seam (likely: policies → a `core/plugins/` loader with reactive registry
-      as first contribution)
-- [ ] Flag relations to G8 (budget/cost — another plugin-shaped mechanism) and
-      the P1 "no LLM-spawnable custom agents" gap
+      `set_llm`, CLI wiring) into one canonical "what the host accepts" map
+- [ ] List every common interface + its consumers + its breadth (start from
+      `ToolContext`, the policy set, event handlers, `LLMProvider`,
+      data types) → then propose the trimmed target set
+- [ ] Audit the observed couplings: `ToolContext` façade surface, `compress`
+      prompt inline in the façade, tool-level policy imports, direct actor
+      reach from `ToolContext.status`/`kill`/`converse`
+- [ ] Ruling: facet the ToolContext façade vs document-as-broad (open Q1)
+- [ ] Ruling: registry-delegated vs tool-embedded policy application (open Q2)
+- [ ] Design the explicit component-injection boundary for tests (open Q4)
+- [ ] Pick the pilot seam (likely: policies — registry exists, reactive
+      interface is the reference) and refactor it to be the demonstrated
+      pattern for the rest
+- [ ] Write the success criteria: fewer/narrower interfaces + no outside
+      private-state reach + zero regressions on `pytest`; then decide stdlib
+      conversion (open Q3)
