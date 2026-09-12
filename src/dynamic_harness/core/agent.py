@@ -9,11 +9,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .context import AgentContext
+from .policies.interface import (
+    Observation,
+    PromptInjection,
+    ReactivePolicy,
+    ReactivePolicyRegistry,
+)
 from .policies.loop_guard import (
     LoopAction,
     LoopGuard,
     bash_family,
     bash_read_regions,
+    loop_action_to_injection,
     normalize_tool_signature,
     paginationless_signature,
     regions_overlap,
@@ -24,6 +31,7 @@ from .policies.budget import TimeoutPolicy, TokenBudgetPolicy
 from .policies.heal import ResumePlanner
 from .policies.nudge import NudgePolicy
 from .policies.permissions import ToolPermissionPolicy
+from .policies.spawn import SpawnWarningPolicy
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
 from .result_store import ResultStore
 from .spawn_limits import DelegationLimit, delegate_target_signature
@@ -163,6 +171,30 @@ class Agent:
             near_identical_tools=near_identical_tools,
             near_identical_warning_attempts=near_identical_warning_attempts,
         )
+        # The metric-reactive policies behind the post-turn directive pass
+        # (core/policies/interface.py). Each implements ``ReactivePolicy``:
+        # it observes a live ``Observation`` and returns ``PromptInjection``(s)
+        # the shared applier injects into the context. A host can add (or
+        # replace) policies on ``reactive_policies`` without touching the loop.
+        self._nudge_policy = NudgePolicy(
+            delegate_nudge_threshold=delegate_nudge_threshold,
+            delegate_nudge_attempts=delegate_nudge_attempts,
+            iteration_warning_margin=iteration_warning_margin,
+            iteration_warning_attempts=iteration_warning_attempts,
+            safety_max_iterations=safety_max_iterations,
+        )
+        # Per-agent near-cap warning budget; the shared SpawnPolicy wordings
+        # come from the runtime. Runtime.delegate() sets the starting budget.
+        self._spawn_warning_policy = SpawnWarningPolicy(
+            runtime.spawn_policy, warning_attempts=0
+        )
+        # The post-turn reactive registry. LoopGuard is NOT evaluated here: loop
+        # detection runs at commit time (right after a tool turn) so it also
+        # fires on stream-harvest iterations that `continue` past the tail.
+        self.reactive_policies = ReactivePolicyRegistry(
+            self._nudge_policy,
+            self._spawn_warning_policy,
+        )
         self._safety_timeout_seconds = safety_timeout_seconds
         # Hard total-request deadline per LLM call (llm.call_timeout_seconds),
         # enforced here via asyncio.wait_for. Distinct from the run-level
@@ -220,14 +252,10 @@ class Agent:
         # Delegate-rarity nudge: set to True once a delegate call is observed, so
         # the reminder never fires for agents that are already delegating.
         self._has_delegated: bool = False
-        self._delegate_nudge_threshold: int = max(int(delegate_nudge_threshold), 1)
-        self._delegate_nudge_attempts: int = max(int(delegate_nudge_attempts), 0)
-        self._delegate_nudge_left: int = self._delegate_nudge_attempts
         # Low-iteration warning: fires a hard wrap-up notice once when remaining
         # turns drop to `iteration_warning_margin` or fewer before the hard limit.
-        self._iteration_warning_margin: int = max(int(iteration_warning_margin), 1)
-        self._iteration_warning_attempts: int = max(int(iteration_warning_attempts), 0)
-        self._iteration_warning_left: int = self._iteration_warning_attempts
+        # The nudge thresholds / attempt budgets now live on `self._nudge_policy`;
+        # the old private names are kept as forwarding properties below.
         # On-disk outputs this agent must produce (set by Runtime.run). Self-heal
         # uses them as the deliverable check when provided.
         self._expected_outputs: list[str] | None = None
@@ -246,10 +274,11 @@ class Agent:
         # - `_spawn_ledger` : per-lineage share re-delegation counter (the same
         #   object is inherited by every descendant, so the same-target cap is
         #   lineage-scoped and survives self-heal restarts).
-        # - `_spawn_warning_left` : budget for near-cap [notice] injections.
+        # - `_spawn_warning_left` : budget for near-cap [notice] injections
+        #   (forwarded to the per-agent SpawnWarningPolicy).
         self._depth: int = 0
         self._spawn_ledger: Any = None
-        self._spawn_warning_left: int = 0
+        self._spawn_warning_left = 0  # forwards to _spawn_warning_policy
 
         self.context = AgentContext(
             active_turn_window=active_turn_window,
@@ -512,6 +541,68 @@ class Agent:
     def _recent_near_identical(self, value: Any) -> None:
         self._loop_guard.recent_near_identical = value
 
+    # -- nudge / spawn-warning compatibility shims -----------------------
+    # The nudge thresholds / attempt budgets used to be plain attributes on the
+    # Agent; they now live inside the stateful reactive policies (NudgePolicy /
+    # SpawnWarningPolicy). Tests and callers still read/write the old private
+    # names, so expose them as forwarding properties.
+
+    @property
+    def _delegate_nudge_threshold(self) -> int:
+        return self._nudge_policy.delegate_nudge_threshold
+
+    @_delegate_nudge_threshold.setter
+    def _delegate_nudge_threshold(self, value: int) -> None:
+        self._nudge_policy.delegate_nudge_threshold = max(int(value), 1)
+
+    @property
+    def _delegate_nudge_attempts(self) -> int:
+        return self._nudge_policy.delegate_nudge_attempts
+
+    @_delegate_nudge_attempts.setter
+    def _delegate_nudge_attempts(self, value: int) -> None:
+        self._nudge_policy.delegate_nudge_attempts = max(int(value), 0)
+
+    @property
+    def _delegate_nudge_left(self) -> int:
+        return self._nudge_policy.delegate_nudge_left
+
+    @_delegate_nudge_left.setter
+    def _delegate_nudge_left(self, value: int) -> None:
+        self._nudge_policy.delegate_nudge_left = max(int(value), 0)
+
+    @property
+    def _iteration_warning_margin(self) -> int:
+        return self._nudge_policy.iteration_warning_margin
+
+    @_iteration_warning_margin.setter
+    def _iteration_warning_margin(self, value: int) -> None:
+        self._nudge_policy.iteration_warning_margin = max(int(value), 1)
+
+    @property
+    def _iteration_warning_attempts(self) -> int:
+        return self._nudge_policy.iteration_warning_attempts
+
+    @_iteration_warning_attempts.setter
+    def _iteration_warning_attempts(self, value: int) -> None:
+        self._nudge_policy.iteration_warning_attempts = max(int(value), 0)
+
+    @property
+    def _iteration_warning_left(self) -> int:
+        return self._nudge_policy.iteration_warning_left
+
+    @_iteration_warning_left.setter
+    def _iteration_warning_left(self, value: int) -> None:
+        self._nudge_policy.iteration_warning_left = max(int(value), 0)
+
+    @property
+    def _spawn_warning_left(self) -> int:
+        return self._spawn_warning_policy.warning_left
+
+    @_spawn_warning_left.setter
+    def _spawn_warning_left(self, value: int) -> None:
+        self._spawn_warning_policy.warning_left = max(int(value), 0)
+
     # -- focus / reminders -------------------------------------------------
 
     @property
@@ -653,8 +744,7 @@ class Agent:
         self._loop_guard.clear()
         self.result_store.clear()
         self._has_delegated = False
-        self._delegate_nudge_left = self._delegate_nudge_attempts
-        self._iteration_warning_left = self._iteration_warning_attempts
+        self._nudge_policy.reset()
         self._started_at = time.monotonic()
         await self._run_guarded()
 
@@ -696,8 +786,7 @@ class Agent:
             self._loop_guard.clear()
             self._started_at = time.monotonic()
             self._has_delegated = False
-            self._delegate_nudge_left = self._delegate_nudge_attempts
-            self._iteration_warning_left = self._iteration_warning_attempts
+            self._nudge_policy.reset()
             self.context.messages.append({"role": "user", "content": user_message})
             await self._run_guarded()
 
@@ -1047,7 +1136,10 @@ class Agent:
             await self._gather_deferred_and_finalize(results)
 
         self.context.commit_turn(assistant_msg, results)
-        return self._check_repeated_calls(response)
+        # The loop-safety check used to run here; it is now applied by the
+        # post-turn reactive pass (_run_reactive_pass) so ALL metric-reactive
+        # policies — LoopGuard included — ride the shared directive path.
+        return False
 
     @staticmethod
     def _delegate_target_signature(arguments: dict[str, Any]) -> str:
@@ -1106,142 +1198,141 @@ class Agent:
         """True when the same file is read at overlapping ranges in both sets."""
         return regions_overlap(a, b)
 
+    def add_reactive_policy(self, policy: ReactivePolicy) -> None:
+        """Register a metric-reactive policy on this agent.
+
+        The plugin seam: a host-registered policy only implements ``name`` +
+        ``evaluate(observation)``; its directives flow through the same applier
+        as the built-in nudges / loop guard.
+        """
+        self.reactive_policies.add(policy)
+
+    def _observe(self, response: Any | None = None) -> Observation:
+        """Snapshot of the live metrics handed to the reactive policies."""
+        return Observation(
+            iteration=self._iteration,
+            max_iterations=self._safety_max_iterations,
+            has_delegated=self._has_delegated,
+            tool_calls=list(response.tool_calls) if response is not None else [],
+            assistant_content=(response.content if response is not None else None),
+            tree_depth=self._depth,
+            spawn_usage=self._runtime.spawn_usage(self) if self._runtime is not None else None,
+        )
+
+    def _apply_prompt_injection(self, injection: PromptInjection) -> bool:
+        """Apply one directive from a reactive policy: emit the activity event,
+        append its message to the live context, and — for a critical directive —
+        fail the run. Returns True when the run must stop."""
+        self._event_bus.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.SAFETY_WARNING,
+            data={"warning_type": injection.warning_type, **(injection.data or {})},
+        ))
+        if injection.message:
+            self.context.append({"role": "user", "content": injection.message})
+        if injection.stop:
+            self.fail(injection.message or injection.warning_type)
+            return True
+        return False
+
+    def _run_reactive_pass(self, response: Any) -> bool:
+        """One post-turn pass over the registered reactive policies.
+
+        Builds the observation once, lets each policy (in registration order)
+        decide, and applies the returned directives via the shared applier.
+        Returns True when a critical directive stopped the run.
+        """
+        observation = self._observe(response)
+        stop = False
+        for injection in self.reactive_policies.evaluate_all(observation):
+            if self._apply_prompt_injection(injection):
+                stop = True
+                break
+        return stop
+
     def _check_repeated_calls(self, response: Any) -> bool:
         """Return True when repeated calls were detected (loop stops).
 
-        Detection now lives in the composable ``LoopGuard`` policy
-        (``core/policies/loop_guard.py``): this method maps an LLM response
-        onto it and applies the returned actions (the nudge-then-fail ladder,
-        or a non-fatal near-identical notice).
+        Back-compat entry point for the ``LoopGuard`` reactive policy. The run
+        loop calls the same policy at commit time (so loop detection also fires
+        before a stream-harvest ``continue``); this standalone entry lets tests
+        and hosts drive just the loop policy through the shared directive path.
         """
-        actions = self._loop_guard.check(
-            response.tool_calls, content=response.content
-        )
         stop = False
-        for action in actions:
-            if self._apply_loop_action(action):
+        for injection in self._loop_guard.evaluate(self._observe(response)):
+            if self._apply_prompt_injection(injection):
                 stop = True
         return stop
 
     def _apply_loop_action(self, action: LoopAction) -> bool:
         """Apply one ``LoopAction`` verdict. Returns True when the run must
-        stop (the recovery ladder force-failed the agent)."""
-        if action.activity is not None:
-            self._event_bus.emit_activity(ActivityEvent(
-                agent_id=self.id,
-                event_type=ActivityEventType.SAFETY_WARNING,
-                data=action.activity,
-            ))
-        if action.user_message is not None:
-            self.context.append({"role": "user", "content": action.user_message})
-        if action.action == "fail":
-            self.fail(action.user_message or "Loop detected")
-            return True
-        return False
+        stop (the recovery ladder force-failed the agent). Back-compat wrapper
+        over the shared directive applier."""
+        return self._apply_prompt_injection(loop_action_to_injection(action))
 
     def _maybe_nudge_delegation(self) -> None:
         """Emit a stable, one-off reminder when an agent never delegates.
 
-        Scoped to agents that have reached ``_delegate_nudge_threshold`` turns
-        without any ``delegate`` call. Fires at most ``_delegate_nudge_attempts``
+        Scoped to agents that have reached ``delegate_nudge_threshold`` turns
+        without any ``delegate`` call. Fires at most ``delegate_nudge_attempts``
         times and appends a fixed-text user message at the end of the context —
-        never mutating a prior message — so the prompt prefix (and the provider's
-        cache contiguity) is preserved after the nudge lands. The condition +
-        wording live in the host-agnostic ``NudgePolicy``.
+        never mutating a prior message — so the prompt prefix (and the
+        provider's cache contiguity) is preserved after the nudge lands. The
+        condition + wording live in the host-agnostic ``NudgePolicy``.
         """
-        policy = NudgePolicy(
-            delegate_nudge_threshold=self._delegate_nudge_threshold,
-            delegate_nudge_attempts=self._delegate_nudge_attempts,
-        )
-        decision = policy.delegate_nudge(
+        decision = self._nudge_policy.delegate_nudge(
             iteration=self._iteration,
-            attempts_left=self._delegate_nudge_left,
+            attempts_left=self._nudge_policy.delegate_nudge_left,
             has_delegated=self._has_delegated,
         )
         if not decision.fire:
             return
-        self._delegate_nudge_left -= 1
-
-        self._event_bus.emit_activity(ActivityEvent(
-            agent_id=self.id,
-            event_type=ActivityEventType.SAFETY_WARNING,
-            data={
-                "warning_type": decision.warning_type,
-                **(decision.data or {}),
-            },
-        ))
-        assert decision.note is not None
-        self.context.append({"role": "user", "content": decision.note})
+        self._nudge_policy.delegate_nudge_left -= 1
+        self._apply_prompt_injection(
+            PromptInjection.warning(
+                decision.note or "",
+                warning_type=decision.warning_type,
+                data=decision.data,
+            )
+        )
 
     def _maybe_warn_iterations_low(self) -> None:
         """Inject ONE hard wrap-up message when iterations are running low.
 
-        When remaining iterations (``safety_max_iterations - iteration``) drop to
-        ``_iteration_warning_margin`` or fewer, append a fixed, assertive notice
-        telling the agent to stop expanding scope, finish off what it can, and
-        hand the unfinished remainder plus any relevant context to its parent so
-        it can decide what to schedule in other tasks. Fires at most
-        ``_iteration_warning_attempts`` times; tail-append-only so the prompt
-        prefix (and the provider's cache contiguity) is preserved. The condition
-        + wording live in the ``NudgePolicy``.
+        When remaining iterations (``safety_max_iterations - iteration``) drop
+        to ``iteration_warning_margin`` or fewer, append a fixed, assertive
+        notice telling the agent to stop expanding scope, finish off what it
+        can, and hand the unfinished remainder plus any relevant context to its
+        parent so it can decide what to schedule in other tasks. Fires at most
+        ``iteration_warning_attempts`` times; tail-append-only so the prompt
+        prefix (and the provider's cache contiguity) is preserved. The
+        condition + wording live in the ``NudgePolicy``.
         """
-        policy = NudgePolicy(
-            iteration_warning_margin=self._iteration_warning_margin,
-            iteration_warning_attempts=self._iteration_warning_attempts,
-            safety_max_iterations=self._safety_max_iterations,
-        )
-        decision = policy.iteration_warning(
+        decision = self._nudge_policy.iteration_warning(
             iteration=self._iteration,
-            attempts_left=self._iteration_warning_left,
+            attempts_left=self._nudge_policy.iteration_warning_left,
         )
         if not decision.fire:
             return
-        self._iteration_warning_left -= 1
-
-        self._event_bus.emit_activity(ActivityEvent(
-            agent_id=self.id,
-            event_type=ActivityEventType.SAFETY_WARNING,
-            data={
-                "warning_type": decision.warning_type,
-                **(decision.data or {}),
-            },
-        ))
-        assert decision.note is not None
-        self.context.append({"role": "user", "content": decision.note})
+        self._nudge_policy.iteration_warning_left -= 1
+        self._apply_prompt_injection(
+            PromptInjection.warning(
+                decision.note or "",
+                warning_type=decision.warning_type,
+                data=decision.data,
+            )
+        )
 
     def _maybe_warn_spawn_limits(self) -> None:
         """Inject ONE non-fatal notice when a delegation cap is nearly exhausted.
 
-        Mirrors ``_maybe_warn_iterations_low`` / ``_maybe_warn_near_identical``:
-        tail-append-only, fires at most ``_spawn_warning_left`` times total, and
-        never fails the run. The notice lists which cap is near its limit and
-        tells the agent to consolidate (finish in-context / verify existing
-        children / escalate) before the hard refusal kicks in.
+        Tail-append-only, fires at most the agent's spawn-warning budget times
+        total, and never fails the run. The notice lists which cap is near its
+        limit and tells the agent to consolidate (finish in-context / verify
+        existing children / escalate) before the hard refusal kicks in.
         """
-        if self._spawn_warning_left <= 0:
-            return
-        runtime = self._runtime
-        if runtime is None:
-            return
-        usage = runtime.spawn_usage(self)
-        warnings = runtime.spawn_policy.near_cap_warnings(usage, depth=self._depth)
-        if not warnings:
-            return
-        self._spawn_warning_left -= 1
-
-        note = runtime.spawn_policy.near_cap_note(warnings)
-
-        self._event_bus.emit_activity(ActivityEvent(
-            agent_id=self.id,
-            event_type=ActivityEventType.SAFETY_WARNING,
-            data={
-                "warning_type": "spawn_limits_near_cap",
-                "usage": usage,
-                "warnings": warnings,
-                "attempts_remaining": self._spawn_warning_left,
-            },
-        ))
-        self.context.append({"role": "user", "content": note})
+        for injection in self._spawn_warning_policy.evaluate(self._observe()):
+            self._apply_prompt_injection(injection)
 
     def submit_input(self, message: str) -> None:
         """Queue a mid-run user message for this agent.
@@ -1299,6 +1390,13 @@ class Agent:
                 if await self._handle_tool_calls(response):
                     self.persist_checkpoint()
                     return
+                # Loop detection runs at commit time — BEFORE a stream-harvest
+                # `continue` — so a parent that keeps delegating while its
+                # children settle is still bounded by the same detection a
+                # blocking gather would apply.
+                if self._check_repeated_calls(response):
+                    self.persist_checkpoint()
+                    return
                 # Streaming mode: block (respecting safety) until at least one
                 # delegated child settles, inject it into our context, and let the
                 # parent react to that child's event before siblings finish.
@@ -1323,12 +1421,13 @@ class Agent:
                 ))
                 self.persist_checkpoint()
                 return
-            # One-off, rare reminder: if the agent has gone past the threshold
-            # without delegating, append (don't mutate) a stable nudge so the
-            # next turn sees it without breaking the cached prompt prefix.
-            self._maybe_nudge_delegation()
-            self._maybe_warn_iterations_low()
-            self._maybe_warn_spawn_limits()
+            # Post-turn reactive pass: every registered metric-reactive policy
+            # (the built-in nudges + spawn near-cap warning, plus any host-
+            # registered policies) observes THIS turn and may inject a
+            # directive into the context. A critical directive stops the run.
+            if self._run_reactive_pass(response):
+                self.persist_checkpoint()
+                return
             self.persist_checkpoint()
 
     async def _gather_deferred_and_finalize(

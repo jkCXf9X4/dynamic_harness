@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .interface import Observation, PromptInjection, ReactivePolicy
+
 
 def delegate_target_signature(description: str) -> str:
     """Normalized key for a delegate call, keyed on the referenced path(s).
@@ -193,3 +195,61 @@ class SpawnPolicy:
             "to your parent, and report / escalate / fail. A further refusal "
             "will NOT create an agent — it will only come back as an error."
         )
+
+
+class SpawnWarningPolicy(ReactivePolicy):
+    """Per-agent near-cap warning injector (the reactive half of SpawnPolicy).
+
+    ``SpawnPolicy`` owns the shared cap *decisions* and wording and lives once
+    on the runtime; the near-cap warning *budget* is per agent (each lineage
+    warns independently and stops warning once spent). This policy wraps the
+    shared ``SpawnPolicy`` for wording and owns one agent's budget, so it can
+    be registered in an agent's reactive-policy registry like any other
+    ``ReactivePolicy`` — and a plugin host drives it identically.
+    """
+
+    name: str = "spawn_warning"
+
+    def __init__(
+        self,
+        spawn_policy: SpawnPolicy,
+        *,
+        warning_attempts: int = 0,
+    ) -> None:
+        self._spawn_policy = spawn_policy
+        self.warning_left: int = max(int(warning_attempts), 0)
+
+    @property
+    def warning_attempts(self) -> int:
+        return self._spawn_policy.warning_attempts
+
+    def reset(self) -> None:
+        self.warning_left = max(int(self.warning_attempts), 0)
+
+    def evaluate(self, observation: Observation) -> list[PromptInjection]:
+        """Inject one near-cap notice when any delegation cap is ≥80% used.
+
+        Fires at most ``warning_attempts`` times; non-fatal.
+        """
+        if self.warning_left <= 0:
+            return []
+        usage = observation.spawn_usage
+        if not usage:
+            return []
+        warnings = self._spawn_policy.near_cap_warnings(
+            usage, depth=observation.tree_depth
+        )
+        if not warnings:
+            return []
+        self.warning_left -= 1
+        return [
+            PromptInjection.notice(
+                self._spawn_policy.near_cap_note(warnings),
+                warning_type="spawn_limits_near_cap",
+                data={
+                    "usage": usage,
+                    "warnings": warnings,
+                    "attempts_remaining": self.warning_left,
+                },
+            )
+        ]

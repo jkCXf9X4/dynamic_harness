@@ -9,6 +9,7 @@ extension) would reuse.
 - ``LoopGuard``     — repeated-call / near-identical loop detection + ladder.
 - ``ResultCachePolicy`` — result-handle cacheability and paging-footers.
 - ``SpawnPolicy``   — delegation caps (agents / depth / same-target) + wording.
+- ``SpawnWarningPolicy`` — per-agent near-cap *warning* injector (reactive half).
 - ``HealPolicy`` / ``HealBudget`` — blunt-vs-rot diagnosis, deliverable gate,
   shared heal budget, nudge/restart messages.
 - ``ResumePlanner`` — decision half of the parent resume ladder (strategy
@@ -21,6 +22,11 @@ extension) would reuse.
 - ``BudgetPolicy``  — grant/deny for mid-run budget requests (G8).
 - ``VerifyPolicy``  — mechanical acceptance-term gate for child output (G1).
 - ``delegate_target_signature`` — canonical same-target key (host-agnostic).
+
+The metric-reactive half (``Observation`` → ``PromptInjection``) shares one
+common interface (``core/policies/interface.py``): ``LoopGuard``, ``NudgePolicy``
+and ``SpawnWarningPolicy`` all implement ``ReactivePolicy`` and are driven by
+the registry the same way a plugin-host policy would be.
 """
 
 from __future__ import annotations
@@ -32,12 +38,19 @@ from .cost import CostPolicy
 from .disclosure import DisclosurePolicy
 from .filesystem import SandboxPolicy
 from .heal import HealBudget, HealPolicy, ResumePlanner
+from .interface import (
+    Observation,
+    PromptInjection,
+    ReactivePolicy,
+    ReactivePolicyRegistry,
+)
 from .loop_guard import (
     LoopAction,
     LoopGuard,
     bash_family,
     bash_read_regions,
     delegate_target_signature,
+    loop_action_to_injection,
     normalize_tool_signature,
     paginationless_signature,
     regions_overlap,
@@ -49,7 +62,7 @@ from .permissions import ToolPermissionPolicy
 from .process import BashSafetyPolicy
 from .result_cache import ResultCachePolicy
 from .retry import RetryPolicy
-from .spawn import SpawnDecision, SpawnPolicy
+from .spawn import SpawnDecision, SpawnPolicy, SpawnWarningPolicy
 from .verify import VerifyPolicy, VerifyResult
 
 __all__ = [
@@ -66,12 +79,17 @@ __all__ = [
     "LoopGuard",
     "NudgeDecision",
     "NudgePolicy",
+    "Observation",
+    "PromptInjection",
+    "ReactivePolicy",
+    "ReactivePolicyRegistry",
     "ResumePlanner",
     "ResultCachePolicy",
     "RetryPolicy",
     "SandboxPolicy",
     "SpawnDecision",
     "SpawnPolicy",
+    "SpawnWarningPolicy",
     "TimeoutPolicy",
     "TokenBudgetPolicy",
     "ToolPermissionPolicy",
@@ -81,6 +99,7 @@ __all__ = [
     "bash_family",
     "bash_read_regions",
     "delegate_target_signature",
+    "loop_action_to_injection",
     "normalize_tool_signature",
     "paginationless_signature",
     "regions_overlap",

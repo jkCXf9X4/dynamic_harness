@@ -2,10 +2,10 @@
 
 The agent's soft, non-fatal nudges — "you have not delegated any work" and
 "your iteration budget is almost exhausted" — each had a fire-condition and a
-fixed message baked into the agent loop. This policy owns the conditions and
-the message text so a plugin host injecting the same guidance (or a host that
-wants different thresholds) reuses the identical phrasing without importing an
-agent.
+fixed message baked into the agent loop. This policy owns the conditions, the
+message text, AND (as a ``ReactivePolicy``) the per-instance warning budgets,
+so a plugin host injecting the same guidance (or a host that wants different
+thresholds) reuses the identical phrasing without importing an agent.
 
 The policy decides WHETHER to fire and WHAT to say; the agent owns the
 tail-append + activity-event side effects.
@@ -14,6 +14,8 @@ tail-append + activity-event side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from .interface import Observation, PromptInjection, ReactivePolicy
 
 
 @dataclass(frozen=True)
@@ -26,13 +28,20 @@ class NudgeDecision:
     data: dict | None = None
 
 
-class NudgePolicy:
+class NudgePolicy(ReactivePolicy):
     """Conditions + wording for the loop's soft guidance messages.
 
     All three nudges are tail-append-only and budgeted: they fire at most
     ``attempts`` times, never mutate a prior message, and never fail the run
     (the prompt prefix — and the provider's cache contiguity — stays intact).
+
+    As a ``ReactivePolicy`` the instance owns its remaining attempt budgets
+    (``delegate_nudge_left`` / ``iteration_warning_left``); ``evaluate``
+    consults them and the pure ``delegate_nudge``/``iteration_warning``
+    decisions, decrementing a budget when a nudge fires.
     """
+
+    name: str = "nudges"
 
     def __init__(
         self,
@@ -48,6 +57,47 @@ class NudgePolicy:
         self.iteration_warning_margin: int = max(int(iteration_warning_margin), 1)
         self.iteration_warning_attempts: int = max(int(iteration_warning_attempts), 0)
         self.safety_max_iterations: int = max(int(safety_max_iterations), 1)
+        self.delegate_nudge_left: int = self.delegate_nudge_attempts
+        self.iteration_warning_left: int = self.iteration_warning_attempts
+
+    def reset(self) -> None:
+        """Restore the warning budgets (fresh run / interactive resume)."""
+        self.delegate_nudge_left = self.delegate_nudge_attempts
+        self.iteration_warning_left = self.iteration_warning_attempts
+
+    # -- reactive policy entry point ----------------------------------------
+
+    def evaluate(self, observation: Observation) -> list[PromptInjection]:
+        """React to an observation: return every nudge that must fire.
+
+        Checks the delegate-reminder first, then the low-iteration wrap-up (the
+        historical application order), each consuming its own attempt budget.
+        """
+        out: list[PromptInjection] = []
+        d = self.delegate_nudge(
+            iteration=observation.iteration,
+            attempts_left=self.delegate_nudge_left,
+            has_delegated=observation.has_delegated,
+        )
+        if d.fire:
+            self.delegate_nudge_left -= 1
+            out.append(self._to_injection(d))
+        d = self.iteration_warning(
+            iteration=observation.iteration,
+            attempts_left=self.iteration_warning_left,
+        )
+        if d.fire:
+            self.iteration_warning_left -= 1
+            out.append(self._to_injection(d))
+        return out
+
+    @staticmethod
+    def _to_injection(decision: NudgeDecision) -> PromptInjection:
+        return PromptInjection.warning(
+            decision.note or "",
+            warning_type=decision.warning_type,
+            data=decision.data,
+        )
 
     # -- delegate-rarity nudge --------------------------------------------
 

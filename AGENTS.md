@@ -70,6 +70,8 @@ src/dynamic_harness/
 │   ├── telemetry.py         → Telemetry (per-agent facade isolating the run loop from usage/trace/activity/checkpoint I/O)
 │   ├── checkpoint.py        → AgentCheckpoint + CheckpointStore (plan/progress persisted to JSON for resumability)
 │   ├── policies/             → composable, host-agnostic decision objects (LoopGuard, SpawnPolicy, HealPolicy, AgentPolicy, RetryPolicy, DisclosurePolicy, …) wire into agent/runtime/tools
+│   │   ├── interface.py       → shared metric-reactive contract: Observation → PromptInjection via ReactivePolicy + ReactivePolicyRegistry
+│   │   └── …                  → each policy is host-agnostic (no agent/runtime import)
 │   └── tools/               → ToolDef/ToolResult/ToolRegistry + 25 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()

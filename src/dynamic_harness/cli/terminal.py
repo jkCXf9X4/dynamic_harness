@@ -114,6 +114,26 @@ def _prune_done_tasks(tasks: set[asyncio.Task[None]]) -> None:
         tasks.difference_update(finished)
 
 
+def _retire_task(t: asyncio.Task) -> None:
+    """Cancel or consume ``t`` so teardown leaves no reported exception.
+
+    prompt_toolkit surfaces Ctrl+C by raising ``KeyboardInterrupt`` inside the
+    prompt coroutine, which asyncio stores on the task **and** re-raises out of
+    the event loop (``Task.__step`` treats SystemExit/KeyboardInterrupt
+    specially). The escaped exception never returns through ``_drive``'s loop,
+    so the task's stored exception goes unretrieved — and when the last
+    reference drops, asyncio logs "Task exception was never retrieved". Doing
+    the retrieval here (before the task is dropped) silences that."""
+    if t.done():
+        if not t.cancelled():
+            try:
+                t.exception()
+            except asyncio.CancelledError:
+                pass
+    else:
+        t.cancel()
+
+
 def _print_reply(agent_id: str, content: str) -> None:
     """Render one assistant reply above the live prompt.
 
@@ -169,8 +189,8 @@ async def _drive(
     multi-line. The top agent's text replies stream into the terminal above the
     prompt as they happen (children's chatter stays invisible). The agent-``ask``
     tool swaps the live prompt to ``[ask] <question>`` and returns your answer.
-    Ctrl+C cancels the run. Non-TTY sessions skip the editor entirely and just
-    await the task (clean for batch/pipelines).
+    Ctrl+C cancels the run and exits the application. Non-TTY sessions skip the
+    editor entirely and just await the task (clean for batch/pipelines).
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         while not task.done():
@@ -185,6 +205,7 @@ async def _drive(
         return await task
 
     mode: dict[str, object] = {"ask": False, "qtext": ""}
+    interrupted = False
 
     def message() -> str:
         if mode["ask"]:
@@ -234,6 +255,7 @@ async def _drive(
                     sys.stdout.write("\r\n")
                     sys.stdout.flush()
                     task.cancel()
+                    interrupted = True
                     break
                 except EOFError:
                     line = None  # Ctrl+D at an empty prompt: no-op
@@ -265,10 +287,16 @@ async def _drive(
             pending_prints.clear()
             for t in _stuck:
                 t.cancel()
-        if not prompt_task.done():
-            prompt_task.cancel()
-        if not q_task.done():
-            q_task.cancel()
+        _retire_task(prompt_task)
+        _retire_task(q_task)
+    if interrupted:
+        # Ctrl+C during a run: the run is already cancelled; clean it up and
+        # raise so the whole application exits (see ``main``).
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        raise KeyboardInterrupt
     if task.cancelled():
         try:
             await task
@@ -313,8 +341,10 @@ async def _run(
         )
 
     task = asyncio.ensure_future(run_task())
-    root = await _drive(runtime, task, question_queue, answer_queue, label_state)
-    writer.snapshot(runtime, force=True)
+    try:
+        root = await _drive(runtime, task, question_queue, answer_queue, label_state)
+    finally:
+        writer.snapshot(runtime, force=True)
     return root, writer
 
 
@@ -538,6 +568,10 @@ def main() -> None:
             _run_batch(runtime, " ".join(args.prompt))
         else:
             asyncio.run(_run_interactive_async(runtime))
+    except KeyboardInterrupt:
+        # Ctrl+C exits the application (interactive run, idle prompt, or batch).
+        sys.stdout.write("\r\n")
+        console.print("[dim]Interrupted. Bye.[/]")
     finally:
         path = profiler.stop()
         if path is not None:

@@ -33,6 +33,7 @@ from .usage import UsageTracker
 
 if TYPE_CHECKING:
     from ..llm.provider import LLMProvider
+    from .policies.interface import ReactivePolicy
 
 
 def _build_reference_index(config: HarnessConfig | None) -> str:
@@ -148,6 +149,12 @@ class Runtime:
 
         self.tool_registry = ToolRegistry()
         register_default_tools(self.tool_registry)
+
+        # Metric-reactive policy factories (the plugin seam). A host registers a
+        # factory producing a fresh ``ReactivePolicy`` per agent; every
+        # subsequently-spawned agent gets one wired into its post-turn reactive
+        # pass. Factories (not instances) so per-agent state never shares.
+        self._reactive_policy_factories: list[Callable[[], "ReactivePolicy"]] = []
 
         self._path_locks: dict[str, asyncio.Lock] = {}
         self._lock_guard = asyncio.Lock()
@@ -453,6 +460,22 @@ class Runtime:
 
     def registered_agent_classes(self) -> list[str]:
         return sorted(self._agent_registry)
+
+    def register_reactive_policy(
+        self, policy_factory: Callable[[], "ReactivePolicy"]
+    ) -> None:
+        """Register a metric-reactive policy factory (the plugin seam).
+
+        ``policy_factory`` must return a FRESH ``ReactivePolicy`` instance per
+        call (policies keep per-agent state / budgets). Every agent spawned
+        after registration gets one instance wired into its post-turn reactive
+        pass, so a host can inject guidance without touching the run loop.
+        """
+        self._reactive_policy_factories.append(policy_factory)
+
+    def installed_reactive_policy_names(self) -> list[str]:
+        """Names of the runtime-registered reactive policy factories."""
+        return [f().name for f in self._reactive_policy_factories]
 
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
@@ -851,6 +874,10 @@ class Runtime:
         agent._depth = depth
         agent._spawn_ledger = ledger
         agent._spawn_warning_left = int(self.spawn_policy.warning_attempts)
+        # Plugin seam: wire a fresh instance of each host-registered reactive
+        # policy into the agent's post-turn directive pass.
+        for factory in self._reactive_policy_factories:
+            agent.add_reactive_policy(factory())
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
 
+from .interface import Observation, PromptInjection, ReactivePolicy
 from .spawn import delegate_target_signature as _delegate_target_signature
 
 # File-like token used by the bash near-identical read-region parser.
@@ -198,13 +199,41 @@ class LoopAction:
         return self.action == "fail"
 
 
-class LoopGuard:
+def loop_action_to_injection(action: LoopAction) -> PromptInjection:
+    """Map a ``LoopAction`` verdict onto the shared ``PromptInjection``
+    vocabulary so loop detection rides the same directive applier as the
+    other reactive policies."""
+    if action.action == "fail":
+        return PromptInjection.critical(
+            action.user_message or "Loop detected",
+            warning_type=action.warning_type,
+            data=action.activity,
+        )
+    if action.action == "nudge":
+        return PromptInjection.warning(
+            action.user_message or "",
+            warning_type=action.warning_type,
+            data=action.activity,
+        )
+    return PromptInjection.notice(
+        action.user_message or "",
+        warning_type=action.warning_type,
+        data=action.activity,
+    )
+
+
+class LoopGuard(ReactivePolicy):
     """Stateful repeated-call / near-identical detection.
 
     Each agent owns one guard. The guard records every observed turn's tool
     calls and, when a loop shape fires, returns ``LoopAction``(s) the agent
     applies (nudge → fail ladder, or a non-fatal near-identical notice).
+
+    As a ``ReactivePolicy`` it additionally exposes ``evaluate``, mapping the
+    same detection onto ``PromptInjection``(s) for the shared directive pass.
     """
+
+    name: str = "loop_guard"
 
     def __init__(
         self,
@@ -361,6 +390,17 @@ class LoopGuard:
         # Returns an action only when a family fired (warning, or an escalation
         # into the hard detection ladder).
         return self._warn_near_identical(tool_calls)
+
+    def evaluate(self, observation: Observation) -> list[PromptInjection]:
+        """Reactive-policy entry point: run the same detection, mapped onto the
+        shared directive vocabulary. A critical injection (``stop=True``) means
+        the run must end; the host applies it via the common applier."""
+        return [
+            loop_action_to_injection(action)
+            for action in self.check(
+                observation.tool_calls, content=observation.assistant_content
+            )
+        ]
 
     # -- near-identical detection ----------------------------------------
 

@@ -191,3 +191,28 @@ how are they doing?
 ---
 
 enable contrl+c to exit the application
+
+
+---
+
+Most policies react to some metric and inject or alter the prompt in some way
+can you see if you can create a common interface for these to further facilitate the move towarrds a more plugin centric architecture
+
+> **PICKED UP** → working item `breakdown/development/plugin/INVESTIGATION.md`
+> (metric-reactive interface = the seed: `core/policies/interface.py`,
+> `Runtime.register_reactive_policy`; investigating uniform plugin contract +
+> discovery + lifecycle to complete the move)
+
+---
+
+To provide the grounds for a working collaboration settings where we can facilitate child layer by layer collaboration
+How can we relate this to the work of the orchetrators or should it be a general capabillity that all agents should possess. 
+The core attributes relate a bit to Hackman: the five conditions, especially the first two
+
+1. **A real team** — clear membership, bounded, with interdependent task and
+   shared responsibility. *"A team whose members are unclear about who is on
+   it"* cannot perform.
+2. **A compelling direction** — a challenging, clear, consequential goal.
+
+
+   ---
