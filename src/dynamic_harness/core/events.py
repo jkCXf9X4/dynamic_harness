@@ -59,6 +59,21 @@ class EventBus:
     def on_failure(self, handler: Callable[[str, Failure], None]) -> None:
         self._failure_handlers.append(handler)
 
+    def handler_counts(self) -> dict[str, int]:
+        """Registered handler counts per event type (introspection).
+
+        Part of the canonical "what the host accepts" map — lets a host or
+        diagnostic report how many handlers are wired per seam without reaching
+        into the bus's private lists.
+        """
+        return {
+            "activity": len(self._activity_handlers),
+            "report": len(self._report_handlers),
+            "budget_request": len(self._budget_handlers),
+            "escalation": len(self._escalation_handlers),
+            "failure": len(self._failure_handlers),
+        }
+
     def clear(self) -> None:
         self._activity_handlers.clear()
         self._report_handlers.clear()

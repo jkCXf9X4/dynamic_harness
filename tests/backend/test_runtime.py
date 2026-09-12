@@ -270,3 +270,38 @@ async def test_run_auto_collects_descendants_preserves_root(runtime: Runtime) ->
     assert root.last_report.summary == "branch done"
 
 
+def test_installed_components_canonical_map(runtime: Runtime) -> None:
+    """The canonical "what the host accepts" map aggregates every seam
+    through public introspection — one surface, no registry internals."""
+    map = runtime.installed_components()
+
+    assert "read" in map["tools"]            # defaults registered
+    assert "result_bash" in map["tools"]
+    assert map["tools"] == runtime.tool_registry.list_tools()
+
+    assert map["agent_classes"] == runtime.registered_agent_classes()
+
+    assert map["reactive_policies"] == runtime.installed_reactive_policy_names()
+
+    assert isinstance(map["event_handlers"], dict)
+    assert set(map["event_handlers"]) == {
+        "activity", "report", "budget_request", "escalation", "failure",
+    }
+    assert all(v >= 0 for v in map["event_handlers"].values())
+
+    # LLM not configured on a bare runtime → None (no crash, no provider).
+    assert map["llm"] is None
+
+
+def test_event_bus_handler_counts(runtime: Runtime) -> None:
+    bus = runtime.event_bus
+    counts = bus.handler_counts()
+    assert counts["report"] == 0
+
+    bus.on_report(lambda agent_id, payload: None)
+    assert bus.handler_counts()["report"] == 1
+
+    bus.clear()
+    assert bus.handler_counts()["report"] == 0
+
+

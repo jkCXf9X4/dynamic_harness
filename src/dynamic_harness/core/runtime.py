@@ -477,6 +477,24 @@ class Runtime:
         """Names of the runtime-registered reactive policy factories."""
         return [f().name for f in self._reactive_policy_factories]
 
+    def installed_components(self) -> dict[str, Any]:
+        """The canonical "what the host accepts" map (introspection).
+
+        One surface aggregating every registration seam — tools, reactive
+        policy factories, agent classes, event handlers, and the LLM provider
+        — so a host or diagnostic can enumerate what is installed without
+        reaching into any registry's internals. This is the single source of
+        truth for the extension surfaces (see investigation
+        `breakdown/development/plugin/INVESTIGATION.md` §The count).
+        """
+        return {
+            "tools": self.tool_registry.list_tools(),
+            "reactive_policies": self.installed_reactive_policy_names(),
+            "agent_classes": self.registered_agent_classes(),
+            "event_handlers": self.event_bus.handler_counts(),
+            "llm": self._llm.__class__.__name__ if self._llm else None,
+        }
+
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
 

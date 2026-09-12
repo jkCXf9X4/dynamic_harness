@@ -25,6 +25,20 @@ class ContextMetricPolicy:
     #: Max LLM attempts when compressing a context.
     COMPRESS_RETRY_ATTEMPTS: int = 2
 
+    #: The prompt sent to the LLM when a context is compressed. Lives here so
+    #: the wording belongs to the context-metrics policy (host-agnostic,
+    #: reusable by any compression caller) instead of being inlined in a tool
+    #: façade or the agent loop.
+    COMPRESS_PROMPT: str = "\n".join([
+        "You are a context compression engine. Condense the following agent",
+        "conversation into a single concise paragraph. Preserve:",
+        "- The original task and goals",
+        "- Key findings, decisions, and code changes",
+        "- Open questions and unresolved issues",
+        "- Current state and next steps",
+        "Output ONLY the summary paragraph, no preamble.",
+    ])
+
     @staticmethod
     def estimate_tokens(text: str | None) -> int:
         """Ballpark token count for a string, provider-agnostic.

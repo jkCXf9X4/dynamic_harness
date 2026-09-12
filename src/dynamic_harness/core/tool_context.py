@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+from .policies.context import ContextMetricPolicy
 from .task import ActivityEvent, ReportPayload
 
 if TYPE_CHECKING:
@@ -57,32 +58,15 @@ class ToolContext:
         """Read-only snapshot of the agent's current message buffer."""
         return list(self._agent.context.messages)
 
-    @property
-    def message_count(self) -> int:
-        return self._agent.message_count
-
     def usage_summary(self) -> dict[str, Any]:
         """Live cumulative usage + context state for this agent.
 
         Cache-clean feedback: the agent calls the tool to read its own counters
         rather than the runtime appending a changing per-turn observation message
-        (which would zero the provider prompt cache). Callers shouldn't inspect
-        private agent state; this centralizes the reading here on ToolContext.
+        (which would zero the provider prompt cache). Delegates to the public
+        ``Agent.usage_summary`` — no private ``_runtime``/``_iteration`` reach.
         """
-        agent = self._agent
-        u = agent._runtime.get_usage(agent.id)
-        return {
-            "agent_id": agent.id,
-            "iteration": getattr(agent, "_iteration", 0),
-            "messages_in_context": agent.message_count,
-            "cumulative_messages_sent": u.get("message_count", 0),
-            "cumulative_prompt_tokens": u.get("prompt_tokens", 0),
-            "cumulative_completion_tokens": u.get("completion_tokens", 0),
-            "cumulative_total_tokens": u.get("total_tokens", 0),
-            "cumulative_cached_tokens": u.get("cached_tokens", 0),
-            "live_context_token_estimate": agent.context.estimate_prompt_tokens(),
-            "max_agent_tokens": agent.max_agent_tokens,
-        }
+        return self._agent.usage_summary()
 
     @property
     def artifact_store(self) -> Any:
@@ -105,8 +89,9 @@ class ToolContext:
         """Track an artifact this agent archived mid-run (via the `archive` tool).
         These ids are linked into the agent's final report commit so temp/working
         artifacts show up in repository provenance, not just the artifact index.
+        Delegates to the public Agent method — no private-state reach here.
         """
-        self._agent._archived_artifact_ids.append(artifact_id)
+        self._agent.record_archived_artifact(artifact_id)
 
     def latest_assistant_message(self, agent_id: str) -> str:
         """Latest assistant text from another agent (empty if none)."""
@@ -124,16 +109,9 @@ class ToolContext:
         return self._agent.checkpoint(note, done=done)
 
     async def compress(self) -> dict[str, Any]:
-        compression_prompt = "\n".join([
-            "You are a context compression engine. Condense the following agent",
-            "conversation into a single concise paragraph. Preserve:",
-            "- The original task and goals",
-            "- Key findings, decisions, and code changes",
-            "- Open questions and unresolved issues",
-            "- Current state and next steps",
-            "Output ONLY the summary paragraph, no preamble.",
-        ])
-        return await self._agent.context.compress(self.llm, compression_prompt)
+        return await self._agent.context.compress(
+            self.llm, ContextMetricPolicy.COMPRESS_PROMPT
+        )
 
     def prune(self, prune_ids) -> dict[str, Any] | None:
         return self._agent.context.prune(prune_ids)

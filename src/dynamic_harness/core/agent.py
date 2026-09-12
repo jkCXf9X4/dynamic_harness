@@ -341,6 +341,29 @@ class Agent:
         """Number of LLM iterations this agent has executed."""
         return self._iteration
 
+    def usage_summary(self) -> dict[str, Any]:
+        """Live cumulative usage + context state for this agent.
+
+        Cache-clean feedback: the agent reads its own counters via the
+        ``usage`` tool rather than the runtime appending a changing per-turn
+        observation message (which would zero the provider prompt cache).
+        Public method so callers (e.g. ``ToolContext``) never reach into
+        ``_runtime`` / ``_iteration`` directly — the narrow-seam contract.
+        """
+        u = self._runtime.get_usage(self.id)
+        return {
+            "agent_id": self.id,
+            "iteration": self._iteration,
+            "messages_in_context": self.message_count,
+            "cumulative_messages_sent": u.get("message_count", 0),
+            "cumulative_prompt_tokens": u.get("prompt_tokens", 0),
+            "cumulative_completion_tokens": u.get("completion_tokens", 0),
+            "cumulative_total_tokens": u.get("total_tokens", 0),
+            "cumulative_cached_tokens": u.get("cached_tokens", 0),
+            "live_context_token_estimate": self.context.estimate_prompt_tokens(),
+            "max_agent_tokens": self.max_agent_tokens,
+        }
+
     def is_rot(self) -> bool:
         """True when the agent stopped because its *context* is the problem.
 
@@ -1876,6 +1899,16 @@ class Agent:
             self._cancel_stream_children()
         self.outcome.report = payload
         self._runtime.deliver_report(self.id, payload)
+
+    def record_archived_artifact(self, artifact_id: str) -> None:
+        """Track an artifact archived mid-run (via the ``archive`` tool).
+
+        These ids are linked into the final report commit so temp/working
+        artifacts show up in repository provenance, not just the artifact
+        index. The public method keeps tool-facing callers off the private
+        ``_archived_artifact_ids`` list (narrow ToolContext seam).
+        """
+        self._archived_artifact_ids.append(artifact_id)
 
     async def resume_child(
         self,
