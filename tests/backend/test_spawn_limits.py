@@ -328,9 +328,9 @@ async def await_tool(agent: Agent, description: str, tool_call_id: str) -> str:
 
 def test_safety_config_defaults() -> None:
     s = SafetyConfig()
-    assert s.max_agents == 200
+    assert s.max_agents == 300
     assert s.max_depth == 15
-    assert s.max_same_target_delegations == 7
+    assert s.max_same_target_delegations == 0
     assert s.spawn_limit_warning_attempts == 2
 
 

@@ -57,7 +57,9 @@ def test_environment_info_is_injected_not_hardcoded(tmp_path: Path) -> None:
     # The old hardcoded benchmark-era claims must not leak in by default.
     assert ".optimize_benchmarks" not in rendered
     cfg_default = HarnessConfig()
-    assert cfg_default.agent.environment_notes == []
+    assert cfg_default.agent.environment_notes == [
+        "Working dir is project root; run `pytest` from there."
+    ]
 
 
 def test_webfetch_rejects_restricted_hosts() -> None:

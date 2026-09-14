@@ -464,7 +464,7 @@ async def test_identical_assistant_content_triggers(runtime: Runtime) -> None:
 
 
 def test_runtime_wires_timeout_from_config(tmp_path) -> None:
-    cfg = HarnessConfig(safety=SafetyConfig(timeout_seconds=60.5))
+    cfg = HarnessConfig(safety=SafetyConfig(timeout_seconds=60.5, disable_root_timeout=False))
     rt = Runtime(
         artifact_root=tmp_path / "artifacts",
         repo_root=tmp_path / "repo",

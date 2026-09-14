@@ -57,7 +57,14 @@ async def test_tool_registry_execute_failure(runtime: Runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_delegate_tool_creates_and_runs_child(runtime: Runtime) -> None:
+async def test_delegate_tool_creates_and_runs_child(tmp_path: Path) -> None:
+    from dynamic_harness.config import AgentConfig, HarnessConfig
+
+    runtime = Runtime(
+        artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
+    )
     agent = runtime.delegate(Task(description="parent"))
     result = await runtime.tool_registry.execute("delegate", "tc1", agent=agent, description="child task")
     import json

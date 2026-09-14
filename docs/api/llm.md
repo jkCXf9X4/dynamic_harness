@@ -169,7 +169,7 @@ export OPENAI_API_KEY=sk-...                   # Fallback key
 }
 ```
 
-**Discovery order**: `--config` flag → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults.
+**Discovery (layered)**: `~/.config/dynamic-harness/harness.json` is the common base, overlaid by `./harness.json` (or explicit `--config`); local keys override the base per-field.
 
 **Precedence**: CLI args (`--model`, `--base-url`, `--api-key`) → `harness.json` → built-in defaults.
 

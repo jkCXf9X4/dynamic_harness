@@ -7,6 +7,7 @@ import json
 import pytest
 
 from dynamic_harness.core.agent import Agent
+from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import ReportPayload, Task
 
 
@@ -84,9 +85,17 @@ async def test_g3_progressive_disclosure_levels(runtime) -> None:
 
 
 @pytest.mark.asyncio
-async def test_g6_delegate_tool_agent_type(runtime) -> None:
+async def test_g6_delegate_tool_agent_type(tmp_path) -> None:
     """The LLM delegate tool accepts a registered agent_type and rejects
     unknown names instead of silently falling back to the base Agent."""
+    from dynamic_harness.config import AgentConfig, HarnessConfig
+
+    runtime = Runtime(
+        artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
+    )
+
     class Specialist(Agent):
         async def run(self) -> None:
             self.report(ReportPayload(task_id=self.task.id, summary="specialist output"))

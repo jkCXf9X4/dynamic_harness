@@ -49,7 +49,7 @@ class OpenAIProvider(LLMProvider):
         provider_ignore: list[str] | None = None,
         provider_allow_fallbacks: bool = True,
         provider_force: str | None = None,
-        timeout: httpx.Timeout | float = 120.0,
+        timeout: httpx.Timeout | float = 500.0,
         max_retries: int = 0,
     ) -> None:
         http_client = httpx.AsyncClient(verify=verify_ssl, timeout=timeout)

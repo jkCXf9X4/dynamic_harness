@@ -50,7 +50,7 @@ class NudgePolicy(ReactivePolicy):
         delegate_nudge_attempts: int = 1,
         iteration_warning_margin: int = 50,
         iteration_warning_attempts: int = 1,
-        safety_max_iterations: int = 500,
+        safety_max_iterations: int = 400,
     ) -> None:
         self.delegate_nudge_threshold: int = max(int(delegate_nudge_threshold), 1)
         self.delegate_nudge_attempts: int = max(int(delegate_nudge_attempts), 0)

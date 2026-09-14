@@ -217,3 +217,38 @@ The core attributes relate a bit to Hackman: the five conditions, especially the
 
 
    ---
+
+add support for a common config that can act as base and be overwritten by local configs
+
+   ---
+
+
+   ensure that these are the defaults config
+
+   {
+  "llm": {
+    "provider_allow_fallbacks": true,
+    "verify_ssl": true,
+    "call_timeout_seconds": 500
+  },
+  "safety": {
+    "max_iterations": 400,
+    "repeated_call_limit": 5,
+    "repeated_recovery_attempts": 2,
+    "repeated_call_exempt_tools": ["status", "usage", "result_read", "result_bash"],
+    "timeout_seconds": 7200,
+    "disable_root_timeout": true,
+    "max_agents": 300,
+    "max_depth": 15,
+    "max_same_target_delegations": 0,
+    "spawn_limit_warning_attempts": 2
+  },
+  "agent": {
+    "environment_notes": [
+      "Working dir is project root; run `pytest` from there."
+    ],
+    "stream_children": true 
+  }
+}
+
+---

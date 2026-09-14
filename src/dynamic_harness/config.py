@@ -24,7 +24,7 @@ class LLMProviderConfig(BaseModel):
     price_input_per_mtok: float | None = Field(default=None, description="USD per 1M input tokens, if known")
     price_output_per_mtok: float | None = Field(default=None, description="USD per 1M output tokens, if known")
     call_timeout_seconds: float = Field(
-        default=120.0, gt=0,
+        default=500.0, gt=0,
         description="Timeout for a single LLM request, in seconds. A slow or stuck "
                     "provider call is abandoned after this; the agent may retry "
                     "transient failures and keeps a separate full-run budget "
@@ -89,7 +89,7 @@ class LLMProviderConfig(BaseModel):
 
 
 class SafetyConfig(BaseModel):
-    max_iterations: int = 500
+    max_iterations: int = 400
     repeated_call_limit: int = 5
     repeated_recovery_attempts: int = Field(
         default=2, ge=0,
@@ -168,16 +168,16 @@ class SafetyConfig(BaseModel):
                     "over the whole run. 0 disables the feature entirely.",
     )
     timeout_seconds: float | None = Field(
-        default=None, gt=0,
+        default=7200.0, gt=0,
         description="Wall-clock budget for a single agent's ENTIRE run (its whole "
                     "context), in seconds. After this the loop force-fails with a "
                     "timeout. None disables the wall-clock cap (cost is then "
                     "bounded only by max_iterations / max_agent_tokens). This is "
-                    "separate from llm.call_timeout_seconds, which bounds a single "
-                    "LLM request.",
+"separate from llm.call_timeout_seconds, which bounds a single "
+                     "LLM request.",
     )
     disable_root_timeout: bool = Field(
-        default=False,
+        default=True,
         description="Exempt only the TOP (root) agent from safety.timeout_seconds. "
                     "The root's full-run wall-clock cap is cleared so it runs until "
                     "it finishes on its own; the person overseeing the run decides "
@@ -195,7 +195,7 @@ class SafetyConfig(BaseModel):
                     "cap is configured) recommends staying under ~50,000 total tokens for best performance.",
     )
     max_agents: int = Field(
-        default=200, ge=1,
+        default=300, ge=1,
         description="Hard cap on the number of agents one runtime may spawn per run "
                     "(root included), before the delegate tool refuses further "
                     "delegations. Guards against recursive / runaway delegation trees "
@@ -211,7 +211,7 @@ class SafetyConfig(BaseModel):
                     "trees bounded even when the total agent count is not the problem.",
     )
     max_same_target_delegations: int = Field(
-        default=7, ge=0,
+        default=0, ge=0,
         description="Per-lineage cap on delegations aimed at the SAME target "
                     "(normalized file/directory path(s) in the description). The "
                     "counter is shared across an entire family (root → all "
@@ -263,7 +263,7 @@ class AgentConfig(BaseModel):
         description="How many recent committed turns the Context Observation lists.",
     )
     stream_children: bool = Field(
-        default=False,
+        default=True,
         description="When true, an agent that delegates multiple children stays "
                     "responsive: it is re-admitted to its LLM loop as each child "
                     "settles (report/escalate/fail) instead of blocking until ALL "
@@ -283,6 +283,13 @@ class HarnessConfig(BaseModel):
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:
+    """Return the single most-specific config file that applies.
+
+    Backward-compatible first-match lookup (explicit → `./harness.json` →
+    XDG user-global). Loading itself uses :func:`_discover_config_files` to
+    layer the XDG base under the local overlay; this helper only reports which
+    file would take precedence.
+    """
     if explicit:
         return Path(explicit)
     cwd_candidate = Path.cwd() / DEFAULT_CONFIG_FILENAME
@@ -294,15 +301,60 @@ def _discover_path(explicit: str | None = None) -> Path | None:
     return None
 
 
+def _discover_config_files(explicit: str | None = None) -> list[Path]:
+    """Config files to merge, from lowest (common base) to highest (local overlay) priority.
+
+    The XDG user-global ``harness.json``
+    (``~/.config/dynamic-harness/harness.json``) acts as the common base shared
+    across all projects; the working-directory ``harness.json`` — or an explicit
+    ``--config`` path — is the local overlay that overrides it. Only files that
+    exist are collected, except an explicit path is always appended so a missing
+    explicit file still raises when read.
+    """
+    files: list[Path] = []
+    xdg_candidate = XDG_CONFIG_DIR / DEFAULT_CONFIG_FILENAME
+    if xdg_candidate.exists():
+        files.append(xdg_candidate)
+    if explicit:
+        files.append(Path(explicit))
+    else:
+        cwd_candidate = Path.cwd() / DEFAULT_CONFIG_FILENAME
+        if cwd_candidate.exists():
+            files.append(cwd_candidate)
+    return files
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge ``overlay`` into ``base`` and return a new dict.
+
+    Nested dicts merge field-by-field (a local ``{"llm": {"model": "..."}}``
+    keeps the base's other ``llm`` keys), so a local config can override just one
+    setting inside a section. Anything else in the overlay — scalars and lists
+    alike — replaces the base value wholesale.
+    """
+    result = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def load_harness_config(path: str | None = None) -> HarnessConfig:
-    cfg_path = _discover_path(path)
-    if cfg_path is None:
+    files = _discover_config_files(path)
+    if not files:
         return HarnessConfig()
-    try:
-        raw = json.loads(cfg_path.read_text())
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in config file '{cfg_path}': {e}") from e
-    return HarnessConfig.model_validate(raw)
+    merged: dict = {}
+    for cfg_path in files:
+        try:
+            raw = json.loads(cfg_path.read_text())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in config file '{cfg_path}': {e}") from e
+        if not isinstance(raw, dict):
+            raise ValueError(f"Config file '{cfg_path}' must contain a JSON object")
+        merged = _deep_merge(merged, raw)
+    return HarnessConfig.model_validate(merged)
 
 
 def merge_api_key(config: HarnessConfig | None = None) -> str | None:

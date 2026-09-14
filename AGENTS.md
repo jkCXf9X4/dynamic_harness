@@ -212,7 +212,7 @@ ReportPayload(
 ### Agent (`core/agent.py`)
 - Constructor: `Agent(agent_id, task, runtime, parent=None, *, system_prompt=None, safety_max_iterations=500, repeated_call_limit=5, safety_timeout_seconds=None, active_turn_window=50, max_pruned_retained=100, stream_children=False)`
 - `async run()` — executes tool-calling loop to completion
-- `stream_children: bool` — when True, delegations are fire-and-forget and the parent is re-admitted to its loop as each child settles (`[child settled]` injected to its context), so it can act on child events (report/escalate/fail/ask) before siblings finish. Via `agent.stream_children` in `harness.json`. Default False preserves the block-until-all gather.
+- `stream_children: bool` — when True (default via `agent.stream_children` in `harness.json`), delegations are fire-and-forget and the parent is re-admitted to its loop as each child settles (`[child settled]` injected to its context), so it can act on child events (report/escalate/fail/ask) before siblings finish. Set `false` to restore the block-until-all gather.
 - `delegate(description, role=None, system_prompt=None, **metadata)` — creates child Agent
 - `report(payload: ReportPayload)` — delivers report to Runtime
 - `escalate(issue, **context)` — escalates to parent
@@ -320,19 +320,19 @@ the immutable checkpoint, not only in agent memory.
 
 All safety mechanisms are in `Agent._run_loop()`:
 
-1. **Max iterations:** Default 500. Exceeding → force-fail with message.
+1. **Max iterations:** Default 400. Exceeding → force-fail with message.
 2. **Repeated-call detection:** 5 identical batches in a row → force-fail (prevents LLM loops). Pure monitoring tools (`safety.repeated_call_exempt_tools`, default `status`, `usage`, `result_read`, `result_bash`) are excluded entirely — these are cheap read-only observations whose outputs change as live state changes, so a parent polling its running/self-healing children is waiting, not looping; a turn composed solely of them is not counted at all (genuinely stuck agents are still bounded by max_iterations / max_agent_tokens / timeout). **Near-identical warning + escalation:** when `<N` string-similar-but-not-identical `bash` commands recur inside a sliding window (`safety.near_identical_threshold`, default 3 in `near_identical_window` 6), a `[notice]` user message is injected telling the agent to use the `read` tool / raise `token_limit` / delegate / move on. Bash signatures are pagination-normalized (`sed -n 'A,Bp'` / `awk NR>=A&&NR<=B` / `head -N` collapse to a family) and *same-file overlapping ranges* are the primary repeat signal, so re-fetching the same lines through a different wrapper is caught while strictly-disjoint forward paging and different files stay silent. The budget (`safety.near_identical_warning_attempts`, default 2) is **per command family**, not global; a family that keeps re-reading the same material past its budget escalates into hard repeated-call detection (nudge via `safety.repeated_recovery_attempts`, default 2, then force-fail) instead of going silent. `token_offset`/`token_limit` are excluded from the signature so *read-style* paged reads are never flagged, and whitespace-only assistant responses are never counted as repeated text.
 
 3. **Result caching (read-only):** every cacheable tool call (`read`, `glob`, `grep`, `bash`, `webfetch`, `read_artifact`, `status`, `usage`, `plan`, `checkpoint` — anything not in the mutator set `write`/`edit`/`delegate`/`report`/`escalate`/`fail`/`kill`/`ask`/`archive`/`prune`/`restore`/`compress`/`converse`/`resume`) stores its FULL output in a per-agent, bounded, in-memory `ResultStore` behind an opaque handle. When a result is truncated, the footer advertises the handle and the read-only `result_read` tool pages the snapshot by `result_id`, and `result_bash` pipes it to a shell command's **stdin** (so `rg`/`jq`/`awk`/`wc -l` etc. can probe an expensive cached result) — **never re-executing** the producing tool (so paging slow bash/webfetch is free). Handles are always read-only: getting a fresh result means calling the work tool again (work tools accept no `result_id` input). The store is memory-only and cleared on agent GC/reset, so a resumed agent never sees stale snapshots (an unknown handle errors with "re-run the producing tool").
-4. **Wall-clock timeout:** Optional `safety_timeout_seconds` → force-fail when exceeded.
+4. **Wall-clock timeout:** `safety.timeout_seconds` (default 7200) → force-fail when exceeded. `safety.disable_root_timeout` (default true) exempts only the root.
 5. **Token budget:** Optional `safety.max_agent_tokens` cap → force-fail when cumulative usage exceeds it.
 6. **Context observation:** Kept static/cache-friendly — agents read their own live turn count, message count, and token estimates on demand via the `usage` tool instead of a changing per-turn message.
 7. **Compress tool:** LLM can compress its own context when past ~50 messages.
 8. **Prune/restore tools:** LLM can drop stale committed turns (`prune`) and recover them (`restore`).
 9. **Delegation / spawn caps** (`Runtime.delegate()` copies, so every spawn — roots, children, self-heal fresh restarts — passes through the same gate):
-   - `safety.max_agents` (default 200): total agents per runtime run. Reached → every further `delegate` is **refused** (never creates an agent).
+   - `safety.max_agents` (default 300): total agents per runtime run. Reached → every further `delegate` is **refused** (never creates an agent).
    - `safety.max_depth` (default 15): tree depth; root = 0. Delegating past it is refused.
-   - `safety.max_same_target_delegations` (default 7): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (canonical `delegate_target_signature` in `core/policies/spawn.py`, re-exported from `core/spawn_limits.py` for back-compat), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it. `0`/`null` disables the cap.
+   - `safety.max_same_target_delegations` (default 0, cap off): per-lineage cap on re-delegating the same target — the target signature is the normalized file/directory path(s) in the description (canonical `delegate_target_signature` in `core/policies/spawn.py`, re-exported from `core/spawn_limits.py` for back-compat), shared down the whole family so re-spawning an identical 'explore the same repo' sub-agent over and over (even across self-heal restarts) trips it when the cap is set (`>0`). `0`/`null` disables the cap.
    - Refusals raise `DelegationLimit`; the `delegate` tool surfaces them to the model as a `status: refused` tool result (with a `[delegation budget]` line) plus a `safety_warning` activity. Every delegate result carries that budget line (agents spawned/depth/repeated target) so the model self-regulates.
    - Non-fatal `[notice]` injected when any cap is ≥80% used (`safety.spawn_limit_warning_attempts`, default 2).
 
@@ -340,7 +340,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 - Default CLI = `cli/terminal.py` (prompt-only; batch + `-i` REPL prints the final outcome, and interactive sessions stream the root agent's text replies above the live prompt).
 - The `agent_system_prompt.txt` is loaded at import time into `AGENT_SYSTEM_PROMPT`.
-- Applies `harness.json` via `config.load_harness_config()` (discovery: `--config` → `./harness.json` → `~/.config/dynamic-harness/harness.json` → defaults).
+- Applies `harness.json` via `config.load_harness_config()`. Config is a layered deep-merge: the XDG user-global base (`~/.config/dynamic-harness/harness.json`) is applied first, then the local overlay (`./harness.json`, or explicit `--config`) overrides it per-key (sections merge field-by-field; scalars/lists replace wholesale). No files → defaults.
 - No-LLM mode: without `set_llm()`, `Agent.run()` fails with "No LLM provider configured".
 
 ## Conventions for Modifying This Codebase

@@ -34,14 +34,14 @@ class AgentPolicy:
         self,
         *,
         # -- safety (loop) --
-        safety_max_iterations: int = 500,
+        safety_max_iterations: int = 400,
         repeated_call_limit: int = 5,
         repeated_recovery_attempts: int = 2,
         repeated_call_exempt_tools: tuple[str, ...] | list[str] | None = None,
-        safety_timeout_seconds: float | None = None,
-        disable_root_timeout: bool = False,
+        safety_timeout_seconds: float | None = 7200.0,
+        disable_root_timeout: bool = True,
         # -- LLM call / retry --
-        call_timeout_seconds: float | None = 120.0,
+        call_timeout_seconds: float | None = 500.0,
         retry_max_attempts: int = 4,
         rate_limit_max_attempts: int = 6,
         retry_base_delay_seconds: float = 1.0,
@@ -53,7 +53,7 @@ class AgentPolicy:
         max_agent_tokens: int | None = None,
         # -- context / behavior --
         active_turn_window: int = 50,
-        stream_children: bool = False,
+        stream_children: bool = True,
         iteration_warning_margin: int = 50,
         iteration_warning_attempts: int = 1,
         delegate_nudge_threshold: int = 8,

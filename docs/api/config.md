@@ -21,15 +21,31 @@ All runtime behavior is configured through a single JSON file, `harness.json`, l
 
 ## How the Config File Is Found
 
-Discovery order (first match wins):
+Config is loaded from a **layered merge** of (up to) two files, from lowest to
+highest priority — the *common base* is always applied first, then the *local
+overlay* overrides it on a per-key basis:
 
-1. Explicit `--config path/to/harness.json`
-2. `./harness.json` (current working directory)
-3. `~/.config/dynamic-harness/harness.json` (XDG user-global)
-4. Built-in defaults (no file needed)
+1. **Common base:** `~/.config/dynamic-harness/harness.json` (XDG user-global,
+   shared across all your projects).
+2. **Local overlay:** `./harness.json` (current working directory), or an
+   explicit `--config path/to/harness.json`.
 
-If no file is found, sensible defaults are used. All fields are optional — an empty
-`harness.json` (`{}`) is valid and yields the defaults below.
+The two files are deep-merged: section objects (`llm`, `safety`, `self_heal`,
+`agent`) merge field-by-field, so a local config can override a single setting
+(e.g. just `safety.max_iterations`) while keeping every other value from the
+common base. Scalar and list fields are replaced wholesale by the overlay — a
+local `provider_ignore` list replaces the base's list entirely.
+
+If no file exists at a given level, that level is skipped and the next one
+applies:
+
+- XDG common base + local overlay → merged (local wins on conflicts)
+- XDG common base only → base applies
+- local overlay only → overlay applies
+- neither → built-in defaults (no file needed)
+
+If no file is found at all, sensible defaults are used. All fields are optional
+— an empty `harness.json` (`{}`) is valid and yields the defaults below.
 
 > **Defaults are the single source of truth.** A bare `Runtime()` (no `config`
 > passed) now constructs the same defaults as a default `HarnessConfig()` —
@@ -39,8 +55,9 @@ If no file is found, sensible defaults are used. All fields are optional — an 
 > `None` config simply yields the `HarnessConfig()` defaults (e.g. via
 > `AgentPolicy.from_config(None)`).
 
-The config is validated with Pydantic. Invalid JSON raises `ValueError`; invalid field
-values (out-of-range, wrong type) fail model validation with a clear message.
+The config is validated with Pydantic. Invalid JSON in any file raises
+`ValueError` naming that file; invalid field values (out-of-range, wrong type)
+fail model validation with a clear message.
 
 Unknown keys are ignored (forward-compatible). The API key is **never** stored in the
 config file — it comes from the `OPENROUTER_API_KEY` or `OPENAI_API_KEY` environment
@@ -79,7 +96,7 @@ positive value or `null`, so only `null` disables those. Per-cap notes call this
 | `verify_ssl` | `true` | Verify TLS certificates on LLM requests. |
 | `price_input_per_mtok` | `null` | USD per 1M input tokens, if known (used for cost reporting). |
 | `price_output_per_mtok` | `null` | USD per 1M output tokens, if known (used for cost reporting). |
-| `call_timeout_seconds` | `120.0` | Timeout for a single LLM request. Must be `> 0`. A slow/stuck provider call is abandoned after this; the agent may retry transient failures. This is a *per-call* deadline and is separate from `safety.timeout_seconds` (the whole-run wall clock). |
+| `call_timeout_seconds` | `500.0` | Timeout for a single LLM request. Must be `> 0`. A slow/stuck provider call is abandoned after this; the agent may retry transient failures. This is a *per-call* deadline and is separate from `safety.timeout_seconds` (the whole-run wall clock). |
 | `retry_max_attempts` | `4` | How many times a single LLM call may be retried after a generic transient failure (timeout, connection drop, 5xx) before it is given up. Each retry sleeps an exponential backoff (`retry_base_delay_seconds`, capped by `retry_max_delay_seconds`). Rate-limited calls get their own, larger budget (`rate_limit_max_attempts`). |
 | `rate_limit_max_attempts` | `6` | How many times a single LLM call may be retried after a rate limit (HTTP 429 / `engine_overloaded`). Shared upstream pool overloads can outlast the generic transient-error budget, so rate limits get more attempts and a longer backoff (`rate_limit_backoff_multiplier`). |
 | `retry_base_delay_seconds` | `1.0` | Base sleep before the first retry. The delay grows exponentially (`base * 2^attempt`), is capped at `retry_max_delay_seconds`, is extended by a provider `Retry-After` header when one is sent, and gets up to `retry_jitter_seconds` of random jitter. |
@@ -120,7 +137,7 @@ Example:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `max_iterations` | `500` | Hard cap on agent loop iterations. Exceeding it force-fails the agent. |
+| `max_iterations` | `400` | Hard cap on agent loop iterations. Exceeding it force-fails the agent. |
 | `repeated_call_limit` | `5` | Hard cap on *identical* consecutive tool-call batches before the agent force-fails (prevents LLM loops). |
 | `repeated_recovery_attempts` | `2` | How many times a looping agent is nudged ("you are repeating yourself, change strategy") before repeated-call detection force-fails it. `0` fails immediately on first detection. |
 | `repeated_call_exempt_tools` | `["status", "usage", "result_read", "result_bash"]` | Tool names ignored for pure monitoring: status/usage are cheap live observations; `result_read`/`result_bash` are read-only paging/filtering of already-cached result snapshots (never re-execute work). A turn made up solely of these is not counted toward loop detection (genuinely stuck agents are still bounded by `max_iterations` / `max_agent_tokens` / `timeout_seconds`). |
@@ -136,17 +153,17 @@ Example:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `timeout_seconds` | `null` | Wall-clock budget for a single agent's *entire* run (whole context), in seconds. After this the loop force-fails with a timeout. `None`/`null` disables the cap; `0` is rejected (must be `> 0` when set). Cost is then bounded only by `max_iterations` / `max_agent_tokens`. Separate from `llm.call_timeout_seconds`. |
-| `disable_root_timeout` | `false` | Exempt only the top (root) agent from `timeout_seconds`. The root runs until it finishes on its own; the person supervising decides when to kill it. Children still inherit the cap, so a stuck child force-fails and stays recoverable via `resume`/self-heal. The per-call httpx timeout still bounds every request. |
+| `timeout_seconds` | `7200.0` | Wall-clock budget for a single agent's *entire* run (whole context), in seconds. After this the loop force-fails with a timeout. `None`/`null` disables the cap; `0` is rejected (must be `> 0` when set). Cost is then bounded only by `max_iterations` / `max_agent_tokens`. Separate from `llm.call_timeout_seconds`. |
+| `disable_root_timeout` | `true` | Exempt only the top (root) agent from `timeout_seconds`. The root runs until it finishes on its own; the person supervising decides when to kill it. Children still inherit the cap, so a stuck child force-fails and stays recoverable via `resume`/self-heal. The per-call httpx timeout still bounds every request. |
 | `max_agent_tokens` | `null` | Hard cap on total tokens (prompt + completion) a single agent may use before it is force-failed. `None`/`0` disables the cap (the field is `ge=0`; `0` is normalized to `None`). When set, surfaced to the agent each turn as a live token budget; the `usage` tool lets an agent read its own counters. Recommended per-agent guidance: stay under ~50,000 total tokens. The wall-clock handling in `timeout_seconds` is unchanged — it is carried through to the per-agent `TimeoutPolicy` in `core/policies/` (see `docs/api/policies.md`). |
 
 ### Delegation / spawn caps
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `max_agents` | `200` | Hard cap on total agents per run (root included). Must be `>= 1` (or `null` to disable). Reaching it makes every further `delegate` refused (never creates an agent). |
+| `max_agents` | `300` | Hard cap on total agents per run (root included). Must be `>= 1` (or `null` to disable). Reaching it makes every further `delegate` refused (never creates an agent). |
 | `max_depth` | `15` | Hard cap on tree depth (root = 0, its children 1, ...). Must be `>= 1` (or `null` to disable). Delegating past it is refused. |
-| `max_same_target_delegations` | `7` | Per-lineage cap on delegations aimed at the **same target** (normalized file/directory path(s) in the description, via `delegate_target_signature`). The counter is shared across an entire family (root → all descendants), so re-spawning the same "explore X / read X" sub-agent — including across self-heal fresh restarts — trips this cap and is refused at the runtime choke point. **`0` or `null` disables the cap** (the field is `ge=0`; `0` is normalized to `None`). |
+| `max_same_target_delegations` | `0` | Per-lineage cap on delegations aimed at the **same target** (normalized file/directory path(s) in the description, via `delegate_target_signature`). The counter is shared across an entire family (root → all descendants), so re-spawning the same "explore X / read X" sub-agent — including across self-heal fresh restarts — trips this cap and is refused at the runtime choke point. **`0` or `null` disables the cap** (the field is `ge=0`; `0` is normalized to `None`). |
 | `spawn_limit_warning_attempts` | `2` | How many times a non-fatal "you are near the delegation caps" notice may be injected before a cap is hit. Fires once per cap at 80% usage. `0` disables the feature entirely. |
 
 **Interaction with the config disable convention:** `max_agent_tokens` and
@@ -213,10 +230,10 @@ Example:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `environment_notes` | `[]` | Extra environment instructions appended to every agent's context observation (e.g. "pip is unavailable"). Kept empty by default so agents are never told false environment facts. |
+| `environment_notes` | `["Working dir is project root; run \`pytest\` from there."]` | Extra environment instructions appended to every agent's context observation (e.g. "pip is unavailable"). |
 | `references_dir` | `null` | Directory of durable, git-tracked reference docs (rationale, tool motivations, guidelines) that survive prompt optimization. A compact index is injected into every agent's environment; the agent reads full bodies on demand. Defaults to `docs/references` relative to the working directory. |
 | `active_turn_window` | `50` | How many recent committed turns the Context Observation lists. Must be `>= 1`. |
-| `stream_children` | `false` | When true, an agent that delegates multiple children stays responsive: it is re-admitted to its LLM loop as each child settles (report/escalate/fail) instead of blocking until ALL children finish. Lets a parent react to child events — re-delegate a failed branch, converse, cancel the rest, or report early — before its siblings are done. Cost: generally more LLM turns per parent. Default off preserves block-until-all semantics. |
+| `stream_children` | `true` | When true, an agent that delegates multiple children stays responsive: it is re-admitted to its LLM loop as each child settles (report/escalate/fail) instead of blocking until ALL children finish. Lets a parent react to child events — re-delegate a failed branch, converse, cancel the rest, or report early — before its siblings are done. Cost: generally more LLM turns per parent. Set `false` to restore block-until-all semantics. |
 
 Example:
 

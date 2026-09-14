@@ -401,11 +401,11 @@ def test_agent_policy_from_config_defaults_match_no_config() -> None:
 
     a = AgentPolicy.from_config(None)
     b = AgentPolicy.from_config(HarnessConfig())
-    assert a.safety_max_iterations == b.safety_max_iterations == 500
+    assert a.safety_max_iterations == b.safety_max_iterations == 400
     assert a.max_agent_tokens is None and b.max_agent_tokens is None
-    assert a.call_timeout_seconds == b.call_timeout_seconds == 120.0
-    assert a.safety_timeout_seconds is None and b.safety_timeout_seconds is None
-    assert a.disable_root_timeout is False and b.disable_root_timeout is False
+    assert a.call_timeout_seconds == b.call_timeout_seconds == 500.0
+    assert a.safety_timeout_seconds == b.safety_timeout_seconds == 7200.0
+    assert a.disable_root_timeout is True and b.disable_root_timeout is True
 
 
 def test_agent_policy_root_timeout_exemption() -> None:

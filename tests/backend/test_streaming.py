@@ -131,6 +131,7 @@ async def test_default_non_streaming_blocks_until_all_children_done(tmp_path) ->
     rt = Runtime(
         artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
         generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
     )
     rt.register_agent_class("FastChild", _FastChild)
     rt.register_agent_class("SlowChild", _SlowChild)

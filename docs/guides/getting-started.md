@@ -45,7 +45,42 @@ export OPENROUTER_API_KEY=sk-or-v1-your-key-here
 Then reload: `source ~/.bashrc`.
 
 Configurable settings (model, base URL, provider blacklist, safety limits) are managed
-in a separate `harness.json` file. Copy the template:
+in a `harness.json` file. Config is **layered** so you can share one common base
+across all your projects and override it per-project:
+
+| File | Role |
+|------|------|
+| `~/.config/dynamic-harness/harness.json` | **Common base** — shared across every project on this machine. |
+| `./harness.json` (project root, or `--config path`) | **Local overlay** — overrides the base per-key. |
+
+The two are deep-merged: each section (`llm`, `safety`, `self_heal`, `agent`)
+merges field-by-field, so a local config can override a single setting while
+keeping the rest of the common base. Scalars and lists are replaced wholesale.
+If no file exists at a level, it is skipped; with neither file, built-in defaults
+are used.
+
+### Setting up the common config (recommended)
+
+Put shared settings in the common base so every project picks them up. A minimal
+example (this is what the harness uses by default for OpenRouter):
+
+```bash
+mkdir -p ~/.config/dynamic-harness
+cat > ~/.config/dynamic-harness/harness.json <<'EOF'
+{
+  "llm": {
+    "model": "deepseek/deepseek-v4-flash-0731",
+    "base_url": "https://openrouter.ai/api/v1",
+    "verify_ssl": false
+  }
+}
+EOF
+```
+
+### Project-local overrides
+
+If a specific project needs different settings, copy the template into the
+project and edit it — only the keys you set override the common base:
 
 ```bash
 cp harness.json.example harness.json
@@ -76,9 +111,10 @@ message/token counters — so a tight per-agent goal (e.g. **under 50,000
 tokens**) can be communicated both up-front and as the agent runs, without
 adding a per-turn observation message.
 
-The config file is discovered automatically from `./harness.json` (CWD),
-`~/.config/dynamic-harness/harness.json` (XDG user-global), or explicitly via
-`--config path/to/harness.json`. If no file is found, defaults are used.
+The config file is layered: `~/.config/dynamic-harness/harness.json` acts as a
+common base shared across projects, then `./harness.json` (CWD) — or an explicit
+`--config path/to/harness.json` — overlays it and overrides per-key. If no file
+exists, defaults are used.
 
 Every setting — including all the safety, self-heal, and agent keys shown below and
 more — is documented in the [Configuration Reference](../api/config.md), with defaults
@@ -222,10 +258,14 @@ prompt at a glance.
 Ensure `OPENROUTER_API_KEY` or `OPENAI_API_KEY` is set in your shell config (e.g. `~/.bashrc`), or pass `--api-key` on the command line.
 
 ### Missing harness.json
-Copy `harness.json.example` to `harness.json` and edit to your needs. Without it, sensible defaults are used (deepseek-v4-flash on OpenRouter).
+If you only rely on the defaults or the common base, no local `harness.json` is
+needed — settings come from `~/.config/dynamic-harness/harness.json` (common base)
+plus built-in defaults. To override per-project, copy `harness.json.example` to
+`harness.json` and edit to your needs. Without any file, sensible defaults are used
+(deepseek-v4-flash on OpenRouter).
 
 ### Agent runs forever
-If an agent exceeds 500 turns or makes 5 identical tool calls, it's force-failed. The task was likely too broad — try decomposing it into smaller pieces.
+If an agent exceeds 400 turns or makes 5 identical tool calls, it's force-failed. The task was likely too broad — try decomposing it into smaller pieces.
 
 ### High token costs
 Use `/tree` (or `agents.txt`) to see per-agent token usage, or `/agents` for the
