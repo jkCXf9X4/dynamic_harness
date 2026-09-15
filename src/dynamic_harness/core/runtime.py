@@ -786,8 +786,12 @@ class Runtime:
 
         Heals two unsatisfactory terminations: a failure, and a report that
         produced no on-disk deliverable (missing expected output / no declared
-        files or artifacts). Escalations are never healed. See
-        docs/concepts/self-healing.md.
+        files or artifacts). A WALL-CLOCK TIMEOUT is never self-healed — it is a
+        budget exhaustion, not poisoned context, and retrying on the runtime's
+        own initiative could burn the whole run budget again. The child stays
+        failed and is surfaced to its parent, who decides whether to resume it
+        (strategy=\"resume\"/\"fresh\") or re-delegate. Escalations are never
+        healed. See docs/concepts/self-healing.md.
         """
         # No LLM → nothing to resume; leave the agent as-is.
         if not self._self_heal_mode or self._llm is None:
@@ -796,6 +800,8 @@ class Runtime:
             return agent  # deliberately killed — never resurrect
         if agent.task.status is TaskStatus.escalated:
             return agent
+        if getattr(agent, "_timed_out", False):
+            return agent  # timeout is never auto-healed; the parent decides
         if agent.last_failure is None and self._has_deliverable(agent):
             return agent  # healthy
 

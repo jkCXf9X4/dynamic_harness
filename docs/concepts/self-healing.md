@@ -37,6 +37,8 @@ a **diagnosis-driven policy**:
 - If the agent stopped because its *context itself is the problem* (repeated
   identical calls, max iterations) → **start a fresh worker** over the same task
   (freshness fixes rot; on-disk artifacts preserve progress).
+- If the agent hit its **wall-clock budget** (`safety.timeout_seconds`) → it is
+  **never self-healed** (see below); the parent decides.
 - If the failure is structural (task impossible, bad spec) → **escalate**.
 
 ## Why Deterministic Runtime Logic, Not Prompt Text
@@ -58,6 +60,15 @@ the agent loop from code, using prompt nudges only as *input* to that machinery.
 | 2. Parent heal | child failed, cause clearable | parent `resume()` tool: resume the same child (blunt) or a fresh worker (rot), with the failure reason + a parent note | `max_resumes` / `max_fresh_retries`, per child |
 | 3. Fresh worker | context rot (repeated-call, max-iterations, poison) | re-delegate a fresh agent, inject failure reason + existing artifact IDs | 1 retry |
 | 4. Escalate | structural / impossible | escalate to parent | never |
+
+> **Wall-clock timeouts never self-heal.** A timed-out agent (`is_rot()` is false
+> for it — the *context* is fine, the run simply exhausted its wall-clock budget)
+> is exempt from Layers 1 and 3: the runtime must not spend the run budget again
+> on its own initiative, and re-running a big task twice burns the same cap
+> twice. The child is left failed, surfaced to its parent as-is, and the failure
+> message carries explicit `resume(child_id, strategy="resume"|"fresh")`
+> directions. The parent — not the runtime — decides whether to continue the same
+> context, retry cleanly, or fold the partial work in and re-delegate.
 
 ### Layer 0 — In-loop correction
 
@@ -104,13 +115,17 @@ without a deliverable, instead of relying only on the automatic policy:
   `"fresh"` (clean restart even on a blunt miss).
 - The parent's `note` is appended to the resume/fresh prompt as a targeted
   corrective instruction ("you missed the deliverable file", "look in X").
+- A timed-out child is *blunt* (its context is intact), so both `"resume"` and
+  `"fresh"` are legal — the parent chooses.
 
 Both layers consume the *same* heal budget as automatic self-heal
 (`max_resumes` / `max_fresh_retries`, per child), so parent-driven and
 runtime-driven recovery cannot stack unboundedly. Escalated and deliberately
-killed children are never resumed. Parents inspect the `heal` block on each
-`status` snapshot (diagnosis + counts + recoverable flag) to decide whether to
-resume a child or re-delegate it fresh themselves.
+killed children are never resumed. A timed-out child is never *automatically*
+healed, but the parent may resume it. Parents inspect the `heal` block on each
+`status` snapshot (diagnosis + counts + `recoverable` flag + `resume_hint` with
+explicit tool directions on a timeout) to decide whether to resume a child or
+re-delegate it fresh themselves.
 
 ### Layer 3 — Fresh worker
 
@@ -143,9 +158,12 @@ Structural or repeated failure → escalate to the parent / caller. Never grind.
 The Runtime already tracks both signals for free:
 
 - **Blunt** → `task failed/completed` with a *specific recoverable error*,
-  low iteration count, no repeated-call hit.
-- **Rot** → `repeated_call_limit` fired, or `max_iterations`/timeout reached,
-  or high iteration count with unchanged output.
+  low iteration count, no repeated-call hit. Includes **wall-clock timeouts**:
+  the context is healthy, the budget ran out — the parent decides whether to
+  resume (same context, `strategy="resume"`) or go fresh.
+- **Rot** → `repeated_call_limit` fired, or `max_iterations` reached
+  (beyond the wall-clock timeout), or high iteration count with unchanged
+  output.
 
 The discriminator maps observed state → layer, monotonically:
 `Layer 1 → (miss) → Layer 3 → (miss) → Layer 4`, bounded per task.

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 
 import pytest
 
+from dynamic_harness.config import HarnessConfig, SafetyConfig
 from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.runtime import Runtime
-from dynamic_harness.core.task import ReportPayload, TaskStatus
+from dynamic_harness.core.task import ReportPayload, Task, TaskStatus
 from dynamic_harness.llm.provider import LLMProvider, ToolCallData, ToolCallResponse
 
 
@@ -266,3 +269,133 @@ async def test_layer1_budget_exhausted_uses_fresh_then_stops(runtime: Runtime) -
     assert root.task.status == TaskStatus.failed
     actions = [e["action"] for e in events]
     assert actions == ["resume", "fresh"]
+
+
+class _TimesOutOnceLLM(LLMProvider):
+    """First call hangs past the wall-clock budget (timeout), then succeeds."""
+
+    def __init__(self, hang: float) -> None:
+        self.hang = hang
+        self.calls = 0
+
+    async def generate(self, system, user, config=None):
+        raise NotImplementedError
+
+    async def generate_with_tools(self, messages, tools, config=None):
+        self.calls += 1
+        if self.calls == 1:
+            await asyncio.sleep(self.hang)  # exceeds safety.timeout_seconds
+            return ToolCallResponse(content="too late", model="mock")
+        return ToolCallResponse(
+            content=None, model="mock",
+            tool_calls=[ToolCallData(
+                id="c2", name="report",
+                arguments={"summary": "done after resume", "files_written": ["/out.txt"]},
+            )],
+        )
+
+    async def generate_structured(self, system, user, response_model, config=None):
+        raise NotImplementedError
+
+
+def _runtime_with_timeout(tmp: Path, timeout: float = 0.3) -> Runtime:
+    """A runtime whose agents all inherit a tight wall-clock budget (roots too,
+    so a directly-delegated child can be driven to timeout in tests)."""
+    cfg = HarnessConfig(
+        safety=SafetyConfig(timeout_seconds=timeout, disable_root_timeout=False)
+    )
+    return Runtime(artifact_root=tmp / "artifacts", repo_root=tmp / "repo", generated_root=tmp, config=cfg)
+
+
+async def _run_to_timeout(runtime: Runtime, hang: float = 5.0) -> Agent:
+    """Delegate and run an agent whose LLM call hangs far beyond the budget,
+    so it force-fails with a wall-clock timeout. Returns the failed agent."""
+    agent = runtime.delegate(Task(description="slow child"))
+    await agent.run()
+    assert agent.task.status is TaskStatus.failed
+    assert agent.last_failure is not None
+    assert "timed out" in agent.last_failure.error
+    return agent
+
+
+@pytest.mark.asyncio
+async def test_timeout_is_blunt_not_rot(tmp: Path) -> None:
+    """A wall-clock timeout exhausts the budget, not the context: it is blunt,
+    so a parent may resume the SAME child (`strategy="resume"` is legal on it)."""
+    runtime = _runtime_with_timeout(tmp)
+    runtime.set_llm(_TimesOutOnceLLM(hang=5.0))
+
+    agent = await _run_to_timeout(runtime)
+
+    assert agent._timed_out is True
+    assert agent.is_rot() is False
+    assert runtime.heal_diagnosis(agent) == "blunt"
+
+
+@pytest.mark.asyncio
+async def test_timeout_is_never_self_healed(tmp: Path) -> None:
+    """Runtime._recover must leave a timed-out agent untouched: no resume, no
+    fresh worker, no self-heal events — the decision stays with the parent."""
+    runtime = _runtime_with_timeout(tmp)
+    runtime.set_llm(_TimesOutOnceLLM(hang=5.0))
+    events: list[dict] = []
+    runtime.on_activity(lambda e: events.append(e.data) if e.event_type.value == "self_heal" else None)
+
+    agent = await _run_to_timeout(runtime)
+    before = runtime.agent_count()
+
+    recovered = await runtime._recover(agent)
+
+    assert recovered is agent  # untouched — no heal applied
+    assert agent.task.status is TaskStatus.failed
+    assert events == []  # no self-heal events at all
+    assert runtime.agent_count() == before  # no fresh worker spawned
+
+
+@pytest.mark.asyncio
+async def test_timeout_parent_can_resume_same_child(tmp: Path) -> None:
+    """The parent-level surface (`Runtime.resume`) continues a timed-out child:
+    same context, fresh wall-clock budget, to a real deliverable."""
+    runtime = _runtime_with_timeout(tmp)
+    llm = _TimesOutOnceLLM(hang=5.0)
+    runtime.set_llm(llm)
+
+    child = await _run_to_timeout(runtime)
+    assert child._timed_out is True
+
+    resumed = await runtime.resume(child.id, message="continue the work")
+
+    assert resumed.task.status is TaskStatus.completed
+    assert resumed.last_report is not None
+    assert resumed.last_report.files_written  # delivered after the resume
+    assert llm.calls == 2  # original attempt + one continued run
+    assert resumed is child  # same agent continued in place (context intact)
+    assert resumed._timed_out is False  # a fresh budget cleared the stop marker
+
+
+@pytest.mark.asyncio
+async def test_timeout_parent_faces_resume_directions(tmp: Path) -> None:
+    """The failure surfaced to the parent (delegate result + status snapshot)
+    carries explicit directions for resuming the timed-out child."""
+    runtime = _runtime_with_timeout(tmp)
+    runtime.set_llm(_TimesOutOnceLLM(hang=5.0))
+
+    child = await _run_to_timeout(runtime)
+    parent = runtime.delegate(Task(description="parent"))
+    parent.children.append(child)
+    child.parent = parent
+
+    # delegate-style result: the failure field embeds the resume directions
+    result = json.loads(parent._format_delegate_result(child))
+    assert 'strategy="resume"' in result["failure"]
+    assert 'strategy="fresh"' in result["failure"]
+    assert "NOT auto-retried" in result["failure"]
+
+    # status snapshot: timed_out flag, not auto-recoverable, hint with directions
+    snap = child.runtime_snapshot()
+    assert snap["timed_out"] is True
+    assert snap["heal"]["recoverable"] is False
+    hint = snap["heal"]["resume_hint"]
+    assert hint is not None
+    assert f'agent_id="{child.id}"' in hint
+    assert 'strategy="resume"' in hint

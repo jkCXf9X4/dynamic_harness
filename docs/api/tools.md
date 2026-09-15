@@ -454,7 +454,7 @@ Terminates the agent with `TaskStatus.failed`.
 }
 ```
 
-**Implementation:** Returns a snapshot per child (or one child by id): `status`, `outcome` (`running`/`completed`/`failed`/`killed`/`escalated`), `killed`, final `summary` (or failure reason), `artifact_id`, the plan (`done`+`pending` steps, objective, deliverable), `checkpoint_notes`, iterations, and `partial_data` — a bounded tail of the child's recent in-context activity. Each snapshot also carries a `heal` block: the runtime's blunt-vs-rot `diagnosis` (the same signal self-heal uses), `resumes`/`fresh` heal counts already spent on the child, and a `recoverable` boolean. Use it after a child fails/is killed to recover its partial work, then re-delegate with that salvage to retry — or call `resume` on a recoverable child. Restricted to direct children.
+**Implementation:** Returns a snapshot per child (or one child by id): `status`, `outcome` (`running`/`completed`/`failed`/`killed`/`escalated`), `killed`, `timed_out`, final `summary` (or failure reason), `artifact_id`, the plan (`done`+`pending` steps, objective, deliverable), `checkpoint_notes`, iterations, and `partial_data` — a bounded tail of the child's recent in-context activity. Each snapshot also carries a `heal` block: the runtime's blunt-vs-rot `diagnosis` (the same signal self-heal uses), `resumes`/`fresh` heal counts already spent on the child, a `recoverable` boolean (False for timed-out children — they are never auto-healed), and a `resume_hint` with explicit `resume(...)` directions when the child timed out. Use it after a child fails/is killed to recover its partial work, then re-delegate with that salvage to retry — or call `resume` on a recoverable child. Restricted to direct children.
 
 ---
 
@@ -484,11 +484,18 @@ children, never an escalated child, never a deliberately-killed child
   its prior work and is corrected with a nudge carrying the failure reason and
   the parent's `note`. If the context is rotted (repeated calls / safety stop /
   many iterations) a forced `resume` is *refused* — replaying it would repeat
-  the problem — and the parent is told to use `fresh`.
+  the problem — and the parent is told to use `fresh`. A **timed-out** child is
+  *not* rot (only its wall-clock budget ran out), so both `resume` and `fresh`
+  are legal on it.
 - **`fresh`** (rot / after resume misses): starts a clean worker over the same
   task via `Runtime._fresh_restart`, injecting the failure reason, prior
   artifact ids, and the parent's `note`. Rot is diagnosed identically to
   self-heal via `agent.is_rot()`.
+
+A wall-clock timeout is **never auto self-healed** (`Runtime._recover` returns
+the timed-out child untouched) — the decision is deliberately left to the
+parent. The `failure` surfaced by `delegate` and the `heal.resume_hint` carried
+by `status` both embed the exact `resume(agent_id, strategy=...)` directions.
 
 When the child's context was garbage-collected, `Runtime.resume` rebuilds it
 from the on-disk checkpoint (a new agent id); the parent's `children` list is

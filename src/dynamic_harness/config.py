@@ -181,8 +181,10 @@ class SafetyConfig(BaseModel):
         description="Exempt only the TOP (root) agent from safety.timeout_seconds. "
                     "The root's full-run wall-clock cap is cleared so it runs until "
                     "it finishes on its own; the person overseeing the run decides "
-                    "when to kill it. Child agents still inherit the cap, so a stuck "
-                    "child force-fails and stays recoverable via resume/self-heal. "
+"when to kill it. Child agents still inherit the cap, so a stuck "
+                    "child force-fails and stays recoverable — a timeout is never "
+                    "auto self-healed; the parent decides via the resume tool "
+                    "(strategy=\"resume\"/\"fresh\") or by re-delegating. "
                     "The per-call httpx timeout (llm.call_timeout_seconds) still "
                     "bounds every individual request.",
     )

@@ -263,6 +263,11 @@ class Agent:
         # itself is the problem (repeated identical calls / a safety limit).
         # `_repeated_calls_detected` now lives on the LoopGuard (exposed below).
         self._terminated_by_safety: bool = False
+        # True only for a WALL-CLOCK timeout (`safety.timeout_seconds` or the
+        # run budget fired). Distinct from other safety stops: a timeout is a
+        # budget exhaustion, not a poisoned context, so it is never self-healed
+        # and stays resumable by the parent (blunt, not rot).
+        self._timed_out: bool = False
 
         # Total-token cap for this agent (None = uncapped). When set, the loop
         # force-fails once cumulative prompt+completion usage exceeds it, and the
@@ -374,7 +379,7 @@ class Agent:
         """
         return (
             self._repeated_calls_detected
-            or self._terminated_by_safety
+            or (self._terminated_by_safety and not self._timed_out)
             or self._iteration >= ROT_ITERATION_THRESHOLD
         )
 
@@ -768,6 +773,11 @@ class Agent:
         self.result_store.clear()
         self._has_delegated = False
         self._nudge_policy.reset()
+        # A fresh run is a fresh wall-clock budget: clear any prior safety-stop
+        # markers so a resumed/re-run agent that finishes cleanly is not still
+        # tagged timed-out / safety-stopped.
+        self._terminated_by_safety = False
+        self._timed_out = False
         self._started_at = time.monotonic()
         await self._run_guarded()
 
@@ -810,6 +820,8 @@ class Agent:
             self._started_at = time.monotonic()
             self._has_delegated = False
             self._nudge_policy.reset()
+            self._terminated_by_safety = False
+            self._timed_out = False
             self.context.messages.append({"role": "user", "content": user_message})
             await self._run_guarded()
 
@@ -935,6 +947,7 @@ class Agent:
             remaining = timeout.remaining_seconds(time.monotonic() - self._started_at)
             if remaining <= 0:
                 self._terminated_by_safety = True
+                self._timed_out = True
                 self.fail(
                     timeout.timeout_message(
                         self._safety_timeout_seconds, self._iteration
@@ -949,6 +962,7 @@ class Agent:
             return await self._llm_call_with_retry(tools, sent)
         except asyncio.TimeoutError:
             self._terminated_by_safety = True
+            self._timed_out = True
             self.fail(
                 TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds).timeout_message(
                     self._safety_timeout_seconds or 0.0, self._iteration, mid_call=True
@@ -988,9 +1002,31 @@ class Agent:
                 result["confidence"] = r.confidence
 
         if child.last_failure:
-            result["failure"] = child.last_failure.error[:500]
+            failure = child.last_failure.error[:500]
+            if getattr(child, "_timed_out", False):
+                failure += "\n\n" + self._timeout_resume_guidance(child.id)
+            result["failure"] = failure
 
         return json.dumps(result, indent=2)
+
+    @staticmethod
+    def _timeout_resume_guidance(agent_id: str) -> str:
+        """Parent-facing directions for continuing a child that ran out of wall clock.
+
+        A timeout never self-heals, so the failure surfaced to the parent says
+        WHAT happened and HOW to retry it (resume the same context vs a clean
+        retry vs re-delegate)."""
+        return (
+            "[timeout] This child hit its wall-clock budget and was NOT "
+            "auto-retried so you can decide what to do with it. Its context is "
+            f"intact (a timeout is not rot), so you may:\n"
+            f"  - resume(agent_id=\"{agent_id}\", strategy=\"resume\") to continue "
+            "the SAME context and finish the remaining work,\n"
+            f"  - resume(agent_id=\"{agent_id}\", strategy=\"fresh\") to retry "
+            "the task from a clean slate,\n"
+            f"  - or re-delegate this unit of work to a fresh child.\n"
+            "Only direct children you delegated can be resumed."
+        )
 
     async def _fold_child_result(self, child: Agent) -> tuple[str, Agent]:
         """Format a settled child for injection into the parent's context,
@@ -1016,6 +1052,7 @@ class Agent:
             and timeout.exceeded(time.monotonic() - self._started_at)
         ):
             self._terminated_by_safety = True
+            self._timed_out = True
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
                 event_type=ActivityEventType.SAFETY_WARNING,
@@ -1769,20 +1806,25 @@ class Agent:
             "status": self.task.status.value,
             "outcome": outcome,
             "killed": self._killed,
+            "timed_out": self._timed_out,
             "heal": {
                 "diagnosis": self._runtime.heal_diagnosis(self),
                 "resumes": self._runtime.get_heal_count(self.id, "resume"),
                 "fresh": self._runtime.get_heal_count(self.id, "fresh"),
                 # True when the runtime would re-run its automatic self-heal
                 # over this agent right now (failed, or no on-disk deliverable).
+                # A timed-out agent is exempt: it is never auto-healed, so the
+                # parent decides via the resume tool.
                 "recoverable": (
                     not self._killed
+                    and not self._timed_out
                     and self.task.status is not TaskStatus.escalated
                     and not (
                         self.last_report is not None
                         and self._runtime._has_deliverable(self)
                     )
                 ),
+                "resume_hint": self._timeout_resume_guidance(self.id) if self._timed_out else None,
             },
             "summary": summary[:500],
             "artifact_id": self._report_artifact_id,
