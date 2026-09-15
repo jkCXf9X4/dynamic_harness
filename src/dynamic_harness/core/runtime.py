@@ -696,13 +696,30 @@ class Runtime:
         names: list[str] = []
         for fp in files_written:
             try:
+                # Read in one step — no is_file()/read_text() check-then-use
+                # race (the file could be swapped between the two calls).
                 src = Path(fp).resolve()
-                if not src.is_file():
-                    continue
                 content = src.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             name = src.name
+            # Sanitize the artifact name before it is joined into the store
+            # path: reject separators, '..', NUL, and empty names so a crafted
+            # path cannot escape the artifact root.
+            if (
+                not name
+                or name in (".", "..")
+                or "/" in name
+                or "\\" in name
+                or "\x00" in name
+            ):
+                continue
+            # Resolve and verify the final destination stays inside the
+            # artifact root before writing (defense in depth against a symlink
+            # swap between validation and write).
+            dest = (self.artifact_store.root / artifact.id / name).resolve()
+            if not dest.is_relative_to(self.artifact_store.root):
+                continue
             self.artifact_store.write_text(artifact.id, name, content)
             names.append(name)
             raw_parts.append(f"--- {name} ({len(content)} chars) ---\n{content}")
@@ -815,7 +832,13 @@ class Runtime:
                 await fresh.run()
             except Exception:
                 pass
-            return fresh
+            if _healed(fresh):
+                return fresh
+            # The fresh worker failed too — bounded out. Return the ORIGINAL
+            # failed agent (not the fresh worker) so the parent sees the
+            # failure and the heal budget keyed on the original agent id
+            # stays authoritative: a failed heal attempt is not success.
+            return agent
 
         # Layer 4: escalate / leave the failed agent in place (bounded out).
         return agent

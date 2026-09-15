@@ -60,18 +60,35 @@ class ArtifactStore:
             except Exception:
                 logger.warning("Failed to load artifact from %s", p, exc_info=True)
 
+    def _validate_component(self, component: str) -> str:
+        """Reject path components that could escape the store root."""
+        if not component or component in (".", ".."):
+            raise ValueError(f"Invalid artifact path component: {component!r}")
+        if "/" in component or "\\" in component or "\x00" in component:
+            raise ValueError(f"Invalid artifact path component: {component!r}")
+        return component
+
     def _artifact_dir(self, artifact_id: str) -> Path:
+        artifact_id = self._validate_component(artifact_id)
         d = self.root / artifact_id
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     def write_text(self, artifact_id: str, name: str, content: str) -> Path:
-        p = self._artifact_dir(artifact_id) / name
+        name = self._validate_component(name)
+        d = self._artifact_dir(artifact_id)
+        p = (d / name).resolve()
+        if not p.is_relative_to(self.root):
+            raise ValueError(f"Artifact path escapes store root: {name!r}")
         p.write_text(content)
         return p
 
     def read_text(self, artifact_id: str, name: str) -> str | None:
-        p = self._artifact_dir(artifact_id) / name
+        name = self._validate_component(name)
+        d = self._artifact_dir(artifact_id)
+        p = (d / name).resolve()
+        if not p.is_relative_to(self.root):
+            raise ValueError(f"Artifact path escapes store root: {name!r}")
         return p.read_text() if p.exists() else None
 
     def list_files(self, artifact_id: str) -> Sequence[Path]:

@@ -30,7 +30,8 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["src/dynamic_harness"]
-branch = true
+branch = false
+parallel = true
 
 [tool.coverage.report]
 exclude_lines = [
@@ -49,4 +50,9 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"dynamic_harness" = ["py.typed"]
 "dynamic_harness.core" = ["*.txt"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 500

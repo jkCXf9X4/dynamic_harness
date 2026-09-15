@@ -138,7 +138,12 @@ class NudgePolicy(ReactivePolicy):
         if attempts_left <= 0:
             return NudgeDecision(fire=False, warning_type="iterations_running_low")
         remaining = self.safety_max_iterations - iteration
-        if remaining > self.iteration_warning_margin:
+        # A margin >= max would make ``remaining <= margin`` true from the very
+        # first turn, firing the wrap-up notice spuriously every turn. Cap the
+        # effective margin below the limit so the notice only fires once the
+        # agent has actually started consuming its iteration budget.
+        margin = min(self.iteration_warning_margin, self.safety_max_iterations - 1)
+        if remaining > margin:
             return NudgeDecision(fire=False, warning_type="iterations_running_low")
         remaining = max(remaining, 0)
         note = (

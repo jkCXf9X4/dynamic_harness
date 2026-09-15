@@ -24,7 +24,10 @@ TOOL_RESULT_BASH_DEF = ToolDef(
         "the work was expensive. Piping only reads the snapshot; the producing "
         "tool is NOT called again. An unknown result_id (evicted or the agent "
         "resumed) returns a clear error: call the producing tool again for a "
-        "fresh result."
+        "fresh result. WARNING: the command is executed as arbitrary shell code "
+        "WITHOUT a sandbox (same security boundary as the bash tool) — it can "
+        "read/write the host filesystem, access the network, and run as the "
+        "invoking user."
     ),
     input_schema={
         "type": "object",

@@ -63,7 +63,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("prompt", nargs="*", help="Task description (inline)")
     parser.add_argument("-m", metavar="FILE", help="Read task prompt from file")
     parser.add_argument("--config", help="Path to harness.json config file")
-    parser.add_argument("--no-llm", action="store_true", help="Run without an LLM")
     parser.add_argument("--temp", action="store_true", help="Use temporary directories")
     parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--base-url", help="LLM API base URL")
@@ -454,13 +453,22 @@ def _write_provenance_index(runtime: Runtime) -> Path:
     return path
 
 
-def _run_batch(runtime: Runtime, prompt: str, *, resume_id: str | None = None) -> None:
+def _run_batch(runtime: Runtime, prompt: str, *, resume_id: str | None = None) -> int:
     root, _writer, shown = asyncio.run(_run(runtime, prompt, resume_id=resume_id))
     _print_outcome(root, shown.get("content"))
 
     # Per-run provenance index: a flat, greppable artifact->agent map.
     if runtime.artifact_store.all():
         runtime.write_provenance_index()
+
+    # Map the run outcome to a process exit code: 0 on success, non-zero on
+    # failure/escalation so callers can detect a failed agent run.
+    if root is None:
+        return 1
+    status = root.task.status.value
+    if status in ("failed", "escalated"):
+        return 1
+    return 0
 
 
 def _print_tree(runtime: Runtime) -> None:
@@ -568,7 +576,7 @@ async def _run_interactive_async(runtime: Runtime) -> None:
         _print_outcome(root, shown.get("content"))
 
 
-def main() -> None:
+def main() -> int:
     args = _parse_args()
 
     runtime = build_runtime(args)
@@ -579,19 +587,21 @@ def main() -> None:
                            interval=args.profile_interval / 1000.0)
     profiler.start(meta=run_meta(args))
 
+    exit_code = 0
     try:
         if args.resume:
-            _run_batch(runtime, "", resume_id=args.resume)
+            exit_code = _run_batch(runtime, "", resume_id=args.resume)
         elif args.m:
-            _run_batch(runtime, Path(args.m).read_text())
+            exit_code = _run_batch(runtime, Path(args.m).read_text())
         elif args.prompt:
-            _run_batch(runtime, " ".join(args.prompt))
+            exit_code = _run_batch(runtime, " ".join(args.prompt))
         else:
             asyncio.run(_run_interactive_async(runtime))
     except KeyboardInterrupt:
         # Ctrl+C exits the application (interactive run, idle prompt, or batch).
         sys.stdout.write("\r\n")
         console.print("[dim]Interrupted. Bye.[/]")
+        exit_code = 130
     finally:
         path = profiler.stop()
         if path is not None:
@@ -601,7 +611,8 @@ def main() -> None:
                 f"({prof_dir / 'profile.txt'}, {prof_dir / 'profile.json'}, "
                 f"{prof_dir / 'meta.json'})"
             )
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

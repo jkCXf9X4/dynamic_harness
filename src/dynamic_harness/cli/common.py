@@ -47,21 +47,20 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
         config=config,
     )
 
-    if not args.no_llm:
-        load_dotenv()
-        api_key = args.api_key or merge_api_key()
-        if api_key:
-            model = args.model or config.llm.model
-            base_url = args.base_url or config.llm.base_url
-            llm = OpenAIProvider(
-                model=model,
-                base_url=base_url,
-                api_key=api_key,
-                verify_ssl=config.llm.verify_ssl,
-                provider_ignore=config.llm.provider_ignore or None,
-                provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
-                provider_force=config.llm.provider_force,
-                timeout=config.llm.call_timeout_seconds,
-            )
-            rt.set_llm(llm)
+    load_dotenv()
+    api_key = args.api_key or merge_api_key()
+    if api_key:
+        model = args.model or config.llm.model
+        base_url = args.base_url or config.llm.base_url
+        llm = OpenAIProvider(
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            verify_ssl=config.llm.verify_ssl,
+            provider_ignore=config.llm.provider_ignore or None,
+            provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
+            provider_force=config.llm.provider_force,
+            timeout=config.llm.call_timeout_seconds,
+        )
+        rt.set_llm(llm)
     return rt

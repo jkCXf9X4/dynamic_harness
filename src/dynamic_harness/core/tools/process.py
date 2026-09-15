@@ -21,7 +21,10 @@ TOOL_BASH_DEF = ToolDef(
                 "and an explicit workdir; when the command uses shell operators (&&, ||, |, "
                 ";, etc.) it runs through a shell so chained commands work. Each call is a "
                 "fresh process with no persistent working directory — use cd prefixes or the "
-                "workdir parameter to run in another directory.",
+                "workdir parameter to run in another directory. WARNING: arbitrary shell "
+                "commands are executed WITHOUT a sandbox and can read/write the host "
+                "filesystem, access the network, and run as the invoking user — this is a "
+                "deliberate security-boundary decision of the harness.",
     input_schema={
         "type": "object",
         "properties": {

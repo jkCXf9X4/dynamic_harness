@@ -12,6 +12,7 @@ The policy is pure (URL in → verdict/message out); the tool does the I/O.
 from __future__ import annotations
 
 import ipaddress as _ipaddress
+import socket as _socket
 from urllib.parse import urlparse
 
 
@@ -47,17 +48,52 @@ class WebFetchPolicy:
 
     @staticmethod
     def _is_restricted_host(hostname: str) -> bool:
-        """Reject URLs whose hostname is a literal loopback/private address."""
+        """Reject URLs whose host resolves to a loopback/private address.
+
+        Handles both literal IPs and hostnames. For hostnames (which a literal
+        string check would miss — the DNS-rebinding bypass), we resolve the name
+        and reject if ANY resolved address is private/loopback/link-local/
+        multicast. An empty resolution is treated as restricted (defensive:
+        we cannot prove the host is public).
+        """
+        # Literal IP fast path.
         try:
             addr = _ipaddress.ip_address(hostname)
         except ValueError:
-            return False
-        return (
-            addr.is_loopback
-            or addr.is_private
-            or addr.is_link_local
-            or addr.is_multicast
-        )
+            pass
+        else:
+            return (
+                addr.is_loopback
+                or addr.is_private
+                or addr.is_link_local
+                or addr.is_multicast
+            )
+
+        # Hostname: resolve and validate every address family we can see.
+        try:
+            infos = _socket.getaddrinfo(
+                hostname, None, proto=_socket.IPPROTO_TCP
+            )
+        except _socket.gaierror:
+            # Unresolvable host — cannot prove it is public; reject.
+            return True
+
+        addresses = {info[4][0] for info in infos}
+        if not addresses:
+            return True
+        for raw in addresses:
+            try:
+                addr = _ipaddress.ip_address(raw)
+            except ValueError:
+                continue
+            if (
+                addr.is_loopback
+                or addr.is_private
+                or addr.is_link_local
+                or addr.is_multicast
+            ):
+                return True
+        return False
 
     def truncation_note(self, fetched_bytes: int) -> str:
         return (

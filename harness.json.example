@@ -1,6 +1,51 @@
 {
   "llm": {
     "model": "deepseek/deepseek-v4-flash-0731",
-    "base_url": "https://openrouter.ai/api/v1"
+    "base_url": "https://openrouter.ai/api/v1",
+    "provider_ignore": [],
+    "provider_allow_fallbacks": true,
+    "provider_force": null,
+    "verify_ssl": true,
+    "price_input_per_mtok": null,
+    "price_output_per_mtok": null,
+    "call_timeout_seconds": 500.0,
+    "retry_max_attempts": 4,
+    "rate_limit_max_attempts": 6,
+    "retry_base_delay_seconds": 1.0,
+    "retry_max_delay_seconds": 30.0,
+    "retry_jitter_seconds": 0.5,
+    "rate_limit_backoff_multiplier": 3.0,
+    "fallback_on_rate_limit": true
+  },
+  "safety": {
+    "max_iterations": 400,
+    "repeated_call_limit": 5,
+    "repeated_recovery_attempts": 2,
+    "repeated_call_exempt_tools": ["status", "usage", "result_read", "result_bash"],
+    "near_identical_threshold": 3,
+    "near_identical_window": 6,
+    "near_identical_similarity": 0.6,
+    "near_identical_tools": ["bash"],
+    "near_identical_warning_attempts": 2,
+    "iteration_warning_margin": 50,
+    "iteration_warning_attempts": 1,
+    "timeout_seconds": 7200.0,
+    "disable_root_timeout": true,
+    "max_agent_tokens": null,
+    "max_agents": 300,
+    "max_depth": 15,
+    "max_same_target_delegations": 0,
+    "spawn_limit_warning_attempts": 2
+  },
+  "self_heal": {
+    "mode": true,
+    "max_resumes": 1,
+    "max_fresh_retries": 1
+  },
+  "agent": {
+    "environment_notes": ["Working dir is project root; run `pytest` from there."],
+    "references_dir": "docs/references",
+    "active_turn_window": 50,
+    "stream_children": true
   }
 }

@@ -424,6 +424,13 @@ async def test_bash_timeout_kills_grandchild(runtime: Runtime, tmp_path: Path) -
     )
     assert "timed out" in result.content
     pid = int(pidfile.read_text().strip())
+    # The kill is asynchronous: the grandchild may linger as a zombie for a
+    # moment before init reaps it, so poll (generously) instead of asserting
+    # on a single instant.
+    for _ in range(500):  # up to 5s, checked every 10ms
+        if not _pid_alive(pid):
+            break
+        await asyncio.sleep(0.01)
     assert not _pid_alive(pid), "grandchild survived the timeout kill"
 
 
@@ -446,6 +453,13 @@ async def test_bash_cancel_kills_tree(runtime: Runtime, tmp_path: Path) -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+    # The kill is asynchronous: the grandchild may linger as a zombie for a
+    # moment before init reaps it, so poll (generously) instead of asserting
+    # on a single instant.
+    for _ in range(500):  # up to 5s, checked every 10ms
+        if not _pid_alive(pid):
+            break
+        await asyncio.sleep(0.01)
     assert not _pid_alive(pid), "grandchild survived cancellation"
 
 

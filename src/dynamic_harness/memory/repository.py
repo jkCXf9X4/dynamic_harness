@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import fcntl
+import os
 import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -47,12 +50,44 @@ class Repository:
                 self._task_commits[c.task_id] = c.id
 
     def _flush(self) -> None:
-        """Rewrite the journal from the in-memory commit set (single source)."""
-        tmp = self._journal.with_suffix(".jsonl.tmp")
-        with open(tmp, "w") as f:
-            for c in self._commits.values():
-                f.write(c.model_dump_json() + "\n")
-        tmp.replace(self._journal)
+        """Rewrite the journal from the in-memory commit set (single source).
+
+        Atomic and concurrency-safe: a per-repo lock file serializes writers,
+        and the journal is written to a unique temp file then os.replace()d,
+        so concurrent agents never clobber each other's entries and readers
+        never observe a torn file.
+        """
+        lock_path = self.root / ".commits.lock"
+        with open(lock_path, "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                # Merge commits written by other processes since we loaded,
+                # so a stale in-memory snapshot cannot drop their entries.
+                if self._journal.exists():
+                    with open(self._journal) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            c = Commit.model_validate_json(line)
+                            if c.id not in self._commits:
+                                self._commits[c.id] = c
+                                self._task_commits[c.task_id] = c.id
+                fd, tmp = tempfile.mkstemp(
+                    dir=self.root, prefix=".commits.", suffix=".tmp"
+                )
+                try:
+                    with os.fdopen(fd, "w") as f:
+                        for c in self._commits.values():
+                            f.write(c.model_dump_json() + "\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp, self._journal)
+                finally:
+                    if os.path.exists(tmp):
+                        os.unlink(tmp)
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
     def commit(self, commit: Commit) -> Commit:
         self._commits[commit.id] = commit

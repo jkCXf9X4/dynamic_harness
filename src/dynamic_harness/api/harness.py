@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -80,10 +81,17 @@ class Harness:
     def _configure_llm(self, config: dict[str, Any]) -> None:
         from ..llm.openai_provider import OpenAIProvider
 
+        # Treat empty/whitespace api_key as unset and fall through to the
+        # environment (mirrors config.merge_api_key).
+        api_key = config.get("api_key", "")
+        if not api_key or not api_key.strip():
+            api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get(
+                "OPENAI_API_KEY"
+            )
         llm = OpenAIProvider(
             model=config.get("model", "deepseek/deepseek-v4-flash"),
             base_url=config.get("base_url", "https://openrouter.ai/api/v1"),
-            api_key=config.get("api_key", ""),
+            api_key=api_key,
             verify_ssl=config.get("verify_ssl", True),
             provider_force=config.get("provider_force"),
             timeout=config.get("call_timeout_seconds", 500.0),

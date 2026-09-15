@@ -81,8 +81,9 @@ class VerifyPolicy:
     def _term_present(cls, lowered_body: str, term: str) -> bool:
         """True when a normalized term's words appear in the body (case-
         insensitive, whitespace-insensitive — a term is a bag of words that
-        must all appear)."""
+        must all appear as whole words, not substrings)."""
         words = [w for w in cls._WORD_SPLIT.split(term.lower()) if w]
         if not words:
             return True
-        return all(w in lowered_body for w in words)
+        body_words = set(cls._WORD_SPLIT.split(lowered_body))
+        return all(w in body_words for w in words)

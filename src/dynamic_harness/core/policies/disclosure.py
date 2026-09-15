@@ -142,6 +142,11 @@ class DisclosurePolicy:
         deeper: tuple[str, ...] = tuple(
             n for n in TIER_ORDER if n not in DisclosurePolicy.VIEW_LEVELS[below]
         )
+        # Preview levels (headline/summary/auto) must never fall back to the
+        # full raw payload: that would leak raw_data when only a preview was
+        # requested.
+        if below in ("headline", "summary", "auto"):
+            deeper = tuple(n for n in deeper if n != "raw_data")
         views = artifact.views.views
         for name in deeper:
             if views.get(name):

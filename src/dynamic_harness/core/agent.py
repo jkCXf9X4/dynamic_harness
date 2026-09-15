@@ -1502,14 +1502,24 @@ class Agent:
                 self._deferred_delegates = leftovers
             return
 
-        children = [child for _, child, _ in pending]
-        outcomes = [await asyncio.wait_for(t, None) for _, _, t in pending]
+        # FIRST_COMPLETED fired: at least one child settled, but stragglers may
+        # still be running. Never block finalization on them — await only the
+        # tasks that are already done and detach the rest (they keep their place
+        # in ``_deferred_delegates`` so the next turn re-gathers them), instead
+        # of awaiting every pending task unconditionally.
         deferred_map: dict[str, Agent] = {}
-        for (tcid, child, task), outcome in zip(pending, outcomes):
+        leftovers: list[tuple[str, Agent, asyncio.Task[None]]] = []
+        for tcid, child, task in pending:
+            if not task.done():
+                leftovers.append((tcid, child, task))
+                continue
+            outcome = task.result()
             deferred_map[tcid] = child
             if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
                 if not child.last_report and not child.last_failure:
                     child.fail(f"Child agent raised: {outcome}")
+        if leftovers:
+            self._deferred_delegates = leftovers
 
         for tcid, child in list(deferred_map.items()):
             if not self._runtime._has_deliverable(child):

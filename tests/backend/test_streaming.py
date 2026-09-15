@@ -46,9 +46,15 @@ class _FastChild(Agent):
 
 
 class _SlowChild(Agent):
+    """Blocks until released (or cancelled). The release Event is controlled by
+    the test, so the sibling's lifetime is deterministic — no wall-clock sleep
+    to race against."""
+
+    release = asyncio.Event()
+
     async def run(self) -> None:
         try:
-            await asyncio.sleep(5.0)
+            await _SlowChild.release.wait()
         except asyncio.CancelledError:
             if not self.last_report and not self.last_failure:
                 self.fail("Agent cancelled")
@@ -77,6 +83,8 @@ async def test_streaming_parent_acts_on_child_before_sibling_done(tmp_path) -> N
     rt = _stream_runtime(tmp_path)
     rt.register_agent_class("FastChild", _FastChild)
     rt.register_agent_class("SlowChild", _SlowChild)
+    # The slow sibling stays blocked until the parent's report cancels it.
+    _SlowChild.release.clear()
 
     llm = _RecordingLLM([
         # Turn 1: delegate both children (fast + slow).
@@ -114,11 +122,15 @@ async def test_streaming_parent_acts_on_child_before_sibling_done(tmp_path) -> N
     # ...but NOT the slow child's result (it was still running when parent reported).
     assert "slow-result" not in joined
 
-    # The slow child was a straggler: cancelled, never reported.
-    await asyncio.sleep(0.05)  # let cancellation propagate to the child
+    # The slow child was a straggler: cancelled, never reported. Poll for the
+    # cancellation to propagate (deterministic — no fixed sleep to race).
     slow = rt.get_agent(
         next(aid for aid, a in rt.all_agents().items() if a.task.description == "slow task")
     )
+    for _ in range(500):  # up to 5s, checked every 10ms
+        if slow.task.status.value == "failed":
+            break
+        await asyncio.sleep(0.01)
     assert slow.last_report is None
     assert slow.task.status.value == "failed"
 
@@ -135,6 +147,8 @@ async def test_default_non_streaming_blocks_until_all_children_done(tmp_path) ->
     )
     rt.register_agent_class("FastChild", _FastChild)
     rt.register_agent_class("SlowChild", _SlowChild)
+    # Both children must settle for the gather to surface their results.
+    _SlowChild.release.set()
 
     llm = _RecordingLLM([
         ToolCallResponse(
