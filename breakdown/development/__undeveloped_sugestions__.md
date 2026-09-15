@@ -252,3 +252,15 @@ add support for a common config that can act as base and be overwritten by local
 }
 
 ---
+
+
+lets open up a new investigation under breakdown/verification
+
+i would like to compare how different communication structures influence how agents succeed at their work
+initial structures to compare:
+- all communication must pass thru the parent
+- all children of a specific parent can communicate 
+- all nodes can communicate in the same dedicated channel
+- all nodes can register/create channels of certain topics 
+
+Answer concisely and directly. try to keep related information to a minimum
