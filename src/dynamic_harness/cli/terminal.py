@@ -134,6 +134,30 @@ def _retire_task(t: asyncio.Task) -> None:
         t.cancel()
 
 
+async def _close_prompt_task(t: asyncio.Task) -> None:
+    """Cancel a live ``prompt_async`` task and wait for its teardown to finish.
+
+    Merely ``cancel()``-ing a pending prompt_toolkit prompt schedules the
+    cancellation but does not run the application's cleanup ``finally`` (which
+    restores the terminal, removes the event-loop reader for the fd, and
+    releases the renderer). If the next prompt (the ``>>>`` line back in the
+    REPL) starts before that teardown runs, the two applications race over the
+    same terminal input reader and the new prompt never receives keys — the
+    application "no longer answers to input" after a run completes. Awaiting
+    the cancelled task guarantees the cleanup completes first."""
+    if t.done():
+        try:
+            t.exception()
+        except (asyncio.CancelledError, Exception):
+            pass
+        return
+    t.cancel()
+    try:
+        await t
+    except (asyncio.CancelledError, Exception):
+        pass
+
+
 def _print_reply(agent_id: str, content: str) -> None:
     """Render one assistant reply above the live prompt.
 
@@ -272,7 +296,7 @@ async def _drive(
                 # An agent question arrived: switch the live prompt to ``[ask]``.
                 mode["qtext"] = q_task.result().strip()
                 if not mode["ask"] and not prompt_task.done():
-                    prompt_task.cancel()  # discard the partial draft
+                    await _close_prompt_task(prompt_task)  # drop the partial draft
                     prompt_task = asyncio.ensure_future(prompt_once())
                 mode["ask"] = True
                 q_task = asyncio.ensure_future(question_queue.get())
@@ -287,7 +311,7 @@ async def _drive(
             pending_prints.clear()
             for t in _stuck:
                 t.cancel()
-        _retire_task(prompt_task)
+        await _close_prompt_task(prompt_task)
         _retire_task(q_task)
     if interrupted:
         # Ctrl+C during a run: the run is already cancelled; clean it up and

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from dynamic_harness.cli.terminal import _run_command, _submit_input
+from dynamic_harness.cli.terminal import (
+    _close_prompt_task,
+    _prune_done_tasks,
+    _run_command,
+    _submit_input,
+)
 from dynamic_harness.core.task import Task
 
 
@@ -390,6 +395,41 @@ def test_prune_done_tasks_survives_inner_discard():
         assert waiting == set()
     finally:
         loop.close()
+
+
+def test_close_prompt_task_awaits_cancelled_prompt():
+    """``_close_prompt_task`` must let a cancelled prompt_async teardown fully
+    finish (terminal restored, loop reader removed) before the caller proceeds
+    to the next prompt. Regression for the REPL ceasing to answer input after a
+    run: the old code ``cancel()``-ed the live prompt and immediately started
+    the ``>>>`` read, letting the two prompt_toolkit applications race over the
+    shared terminal input."""
+    from dynamic_harness.cli.terminal import _close_prompt_task
+
+    async def scenario() -> tuple[bool, bool]:
+        cancelled = asyncio.Event()
+        torn_down = asyncio.Event()
+
+        async def fake_prompt_task() -> None:
+            try:
+                await asyncio.sleep(3600)
+            finally:
+                if cancelled.is_set():
+                    torn_down.set()
+
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(fake_prompt_task())
+        await asyncio.sleep(0)
+        task.cancel()  # what the old code stopped at
+        cancelled.set()
+        # The old bare-cancel path would return here BEFORE teardown ran.
+        await _close_prompt_task(task)
+        # Teardown ("finally") must have run by the time the await returns.
+        return task.done(), torn_down.is_set()
+
+    done, teardown = asyncio.run(scenario())
+    assert done
+    assert teardown
 
 
 def test_print_reply_treats_agent_text_as_data_not_markup(monkeypatch):
