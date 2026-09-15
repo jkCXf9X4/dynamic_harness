@@ -98,7 +98,7 @@ def test_drive_non_tty_answers_ask(runtime, monkeypatch):
             return ("done", object())
 
         task = asyncio.ensure_future(finish())
-        result = await _drive(runtime, task, qq, aq, {"label": ""})
+        result = await _drive(runtime, task, qq, aq, {"label": ""}, {})
         got: list[str] = []
         while not aq.empty():
             got.append(aq.get_nowait())
@@ -183,7 +183,7 @@ def test_drive_tty_ask_roundtrip(runtime, monkeypatch):
         return f"done-{ans}"
 
     async def run() -> str:
-        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""})
+        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""}, {})
 
     result = asyncio.run(run())
     t.join(timeout=5)
@@ -247,7 +247,7 @@ def test_drive_tty_prints_root_assistant_reply(runtime, monkeypatch):
     async def run():
         qq: asyncio.Queue[str] = asyncio.Queue()
         aq: asyncio.Queue[str] = asyncio.Queue()
-        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""})
+        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""}, {})
 
     captured: list[bytes] = []
 
@@ -341,7 +341,7 @@ def test_drive_tty_ignores_child_assistant_reply(runtime, monkeypatch):
     async def run():
         qq: asyncio.Queue[str] = asyncio.Queue()
         aq: asyncio.Queue[str] = asyncio.Queue()
-        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""})
+        return await _drive(runtime, asyncio.ensure_future(run_task()), qq, aq, {"label": ""}, {})
 
     captured: list[bytes] = []
 

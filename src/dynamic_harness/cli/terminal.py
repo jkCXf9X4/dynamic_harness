@@ -19,7 +19,7 @@ from ..core.task import ActivityEventType
 from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from .common import build_runtime
-from .present import build_agent_tree, build_stats, render_text_tree
+from .present import build_agent_tree, render_text_tree
 from .profile import RunProfiler, run_meta
 from .state import StateWriter, attach_events
 
@@ -205,6 +205,7 @@ async def _drive(
     question_queue: asyncio.Queue[str],
     answer_queue: asyncio.Queue[str],
     label_state: dict[str, str],
+    streamed_last: dict[str, str],
 ) -> Agent | None:
     """Run ``task`` to completion with an always-available input line.
 
@@ -251,6 +252,7 @@ async def _drive(
         content = (event.data.get("content") or "").strip()
         if not content:
             return
+        streamed_last["content"] = content
         task = run_in_terminal(lambda: _print_reply(root.id, content))
         pending_prints.add(task)
         task.add_done_callback(lambda _t: _prune_done_tasks(pending_prints))
@@ -337,7 +339,7 @@ async def _run(
     *,
     root_agent: Agent | None = None,
     resume_id: str | None = None,
-) -> tuple[Agent | None, StateWriter]:
+) -> tuple[Agent | None, StateWriter, dict[str, str]]:
     """Run a task to completion, streaming state/events to files and keeping a
     live single-line token counter + always-available input while it works."""
     writer = _make_writer(runtime)
@@ -365,11 +367,12 @@ async def _run(
         )
 
     task = asyncio.ensure_future(run_task())
+    streamed_last: dict[str, str] = {}
     try:
-        root = await _drive(runtime, task, question_queue, answer_queue, label_state)
+        root = await _drive(runtime, task, question_queue, answer_queue, label_state, streamed_last)
     finally:
         writer.snapshot(runtime, force=True)
-    return root, writer
+    return root, writer, streamed_last
 
 
 def _progress_label(event) -> str:
@@ -388,11 +391,19 @@ def _progress_label(event) -> str:
     return ""
 
 
-def _print_outcome(root: Agent | None) -> None:
+def _print_outcome(root: Agent | None, already_shown: str | None = None) -> None:
     if root is None:
         return
     if root.last_report:
         console.print(f"\n[bold green]\u2713 Agent {root.id[:8]}[/]")
+        # A pure-chat turn (no tool calls) auto-reports its reply, which the
+        # live stream already printed above the prompt — don't echo it twice.
+        if (
+            already_shown
+            and root.last_report.summary
+            and root.last_report.summary.strip() == already_shown.strip()
+        ):
+            return
         console.print(f"  {root.last_report.summary}\n")
     elif root.last_failure:
         console.print(f"\n[bold red]\u2717 Agent {root.id[:8]}[/] failed: {root.last_failure.error[:200]}\n")
@@ -444,25 +455,12 @@ def _write_provenance_index(runtime: Runtime) -> Path:
 
 
 def _run_batch(runtime: Runtime, prompt: str, *, resume_id: str | None = None) -> None:
-    root, writer = asyncio.run(_run(runtime, prompt, resume_id=resume_id))
-    _print_outcome(root)
-
-    usage = runtime.total_usage()
-    stats = build_stats(runtime)
-    cache = f" | Cache: {round(stats.cache_hit_rate * 100)}% ({stats.cached_tokens} of {stats.prompt_tokens}p)" if stats.prompt_tokens else ""
-    console.print(f"[dim]Agents: {runtime.agent_count()} | Commits: {runtime.repository.count()} | Tokens: {usage['total_tokens']}{cache}[/]")
-    _print_tree(runtime)
-    _print_state_files(writer)
+    root, _writer, shown = asyncio.run(_run(runtime, prompt, resume_id=resume_id))
+    _print_outcome(root, shown.get("content"))
 
     # Per-run provenance index: a flat, greppable artifact->agent map.
     if runtime.artifact_store.all():
-        _write_provenance_index(runtime)
-
-
-def _print_state_files(writer: StateWriter) -> None:
-    console.print(
-        f"[dim]State: {writer.agents_txt_path}, {writer.tree_path}, {writer.stats_path}, {writer.events_path}[/]"
-    )
+        runtime.write_provenance_index()
 
 
 def _print_tree(runtime: Runtime) -> None:
@@ -515,9 +513,8 @@ async def _run_command(
         elif not arg.strip():
             console.print("[yellow]Usage: /resume <agent_id>  (see /checkpoints)[/]")
         else:
-            root, writer = await _run(runtime, "", resume_id=arg.strip())
-            _print_outcome(root)
-            _print_state_files(writer)
+            root, _writer, shown = await _run(runtime, "", resume_id=arg.strip())
+            _print_outcome(root, shown.get("content"))
     elif cmd == "/tree":
         _print_tree(runtime)
     elif cmd == "/agents":
@@ -565,11 +562,10 @@ async def _run_interactive_async(runtime: Runtime) -> None:
             await _run_command(runtime, text)
             continue
 
-        root, writer = await _run(runtime, text, root_agent=root_agent)
+        root, _writer, shown = await _run(runtime, text, root_agent=root_agent)
         if root_agent is None:
             root_agent = root
-        _print_outcome(root)
-        _print_state_files(writer)
+        _print_outcome(root, shown.get("content"))
 
 
 def main() -> None:
