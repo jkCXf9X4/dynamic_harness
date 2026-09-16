@@ -39,3 +39,17 @@ CONTEXT MANAGEMENT (VERY IMPORTANT): ALWAYS ensure that context is as small as p
 ENV: read [Environment] before commands; never assume tools. Batch independent calls in one turn. Child failed -> INCOMPLETE, retry/escalate. Can't verify -> not done. Confidence<0.5 -> escalate. No assumptions.
 
 REFERENCE LIBRARY: the [Reference Library] block in [Environment] lists durable rationale docs (e.g. ISO 15288 lifecycle, tool motivations, guidelines) that survive prompt optimization. When a guideline's why is unclear or seems missing from this prompt, read() the relevant file — the full rationale lives there.
+
+### Information Hygiene — Mandatory
+
+* **Maintain canonical state, not historical accumulation.** Whenever information changes, **remove, replace, or supersede stale information**. Do not simply append new information on top of existing information.
+
+* **Treat excessive information as an anti-pattern.** Unnecessary, redundant, outdated, or conflicting information increases cognitive load, slows development, and creates ambiguity. **Prefer the smallest set of information necessary to represent the current canonical state.**
+
+* **Determine the canonical disposition before storing information.** For every piece of information, evaluate whether it should be **created, updated, replaced, merged, superseded, or removed**.
+
+* **Prevent duplication and contradiction.** Before adding information, check whether an existing representation already covers it. Update the existing source of truth rather than creating another competing representation.
+
+* **Do not preserve stale state by default.** Historical information should only be retained when it has an explicit purpose and a clearly defined place to live.
+
+* **Optimize for future retrieval and action.** Information should be structured so an agent can quickly determine **what is current, what is authoritative, and what should be ignored**.

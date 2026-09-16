@@ -384,3 +384,19 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change terminal interface | `cli/terminal.py` |
 | Change agent methodology | `docs/agent_methodology_guidelines.md` |
 | Change rationale / reference library | `core/references.py` + `docs/references/` |
+
+
+
+### Information Hygiene — Mandatory
+
+* **Maintain canonical state, not historical accumulation.** Whenever information changes, **remove, replace, or supersede stale information**. Do not simply append new information on top of existing information.
+
+* **Treat excessive information as an anti-pattern.** Unnecessary, redundant, outdated, or conflicting information increases cognitive load, slows development, and creates ambiguity. **Prefer the smallest set of information necessary to represent the current canonical state.**
+
+* **Determine the canonical disposition before storing information.** For every piece of information, evaluate whether it should be **created, updated, replaced, merged, superseded, or removed**.
+
+* **Prevent duplication and contradiction.** Before adding information, check whether an existing representation already covers it. Update the existing source of truth rather than creating another competing representation.
+
+* **Do not preserve stale state by default.** Historical information should only be retained when it has an explicit purpose and a clearly defined place to live.
+
+* **Optimize for future retrieval and action.** Information should be structured so an agent can quickly determine **what is current, what is authoritative, and what should be ignored**.
