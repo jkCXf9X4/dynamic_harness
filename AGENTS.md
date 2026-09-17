@@ -123,7 +123,8 @@ docs/
 ├── references/               → Durable rationale library that survives prompt optimization
 │   ├── 15288_rationale.md    → Why the lifecycle / V-model / artifact-driven design
 │   ├── tool_motivations.md   → Why each tool exists + how to choose between them
-│   └── guidelines.md         → Delegation / verification / stopping-conditions nuance
+│   ├── guidelines.md         → Delegation / verification / stopping-conditions nuance
+│   └── mission_command_rationale.md → Uppdragstaktik (mission command): why delegation briefs must carry intent, end state, constraints, and freedom of action
 ├── api/                      → Module-level API reference
 │   ├── config.md             → Every harness.json setting (defaults + 0/null "cap off" convention)
 ├── guides/                   → How-to guides for common workflows

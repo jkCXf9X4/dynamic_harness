@@ -75,6 +75,155 @@ async def test_delegate_tool_creates_and_runs_child(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delegate_carries_mission_command_intent_into_child(tmp_path: Path) -> None:
+    """The delegate tool's intent/end_state/constraints/authority fields reach the
+    child's task and render into its opening user message (uppdragstaktik brief)."""
+    from dynamic_harness.config import AgentConfig, HarnessConfig
+    from dynamic_harness.llm.provider import LLMProvider, ToolCallData, ToolCallResponse
+
+    class _ImmediateReportLLM(LLMProvider):
+        def __init__(self) -> None:
+            self.seen_system = ""
+
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            self.seen_system = str(messages[0].get("content", ""))
+            return ToolCallResponse(
+                content=None, model="mock",
+                tool_calls=[ToolCallData(
+                    id="c1", name="report",
+                    arguments={"summary": "child done", "files_written": ["audit.md"]},
+                )],
+            )
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    runtime = Runtime(
+        artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
+    )
+    llm = _ImmediateReportLLM()
+    runtime.set_llm(llm)
+    parent = runtime.delegate(Task(description="parent"))
+    result = await runtime.tool_registry.execute(
+        "delegate", "tc1", agent=parent, description="Audit auth",
+        intent="The release depends on auth being trustworthy",
+        end_state="A verdict per finding, written to audit.md",
+        constraints=["do not modify code", "ignore performance"],
+        authority="Adapt the checks if the codebase differs; report deviations",
+    )
+    import json
+    data = json.loads(result.content)
+    assert data["status"] == "completed"
+    child = runtime.get_agent(data["child_id"])
+    assert child is not None
+    assert child.task.intent == "The release depends on auth being trustworthy"
+    assert child.task.end_state == "A verdict per finding, written to audit.md"
+    assert child.task.constraints == ["do not modify code", "ignore performance"]
+    assert child.task.authority == "Adapt the checks if the codebase differs; report deviations"
+    joined = llm.seen_system
+    assert "Mission brief from your parent:" in joined
+    assert "[INTENT] The release depends on auth being trustworthy" in joined
+    assert "[END STATE] A verdict per finding, written to audit.md" in joined
+    assert "[CONSTRAINTS]\n- do not modify code\n- ignore performance" in joined
+    assert "[AUTHORITY] Adapt the checks if the codebase differs; report deviations" in joined
+
+
+@pytest.mark.asyncio
+async def test_delegate_result_surfaces_child_runtime_limits(tmp_path: Path) -> None:
+    """The delegate result tells the parent the child's ramar (token cap /
+    wall-clock), so it can brief real constraints instead of the child
+    discovering a cap only when it is hit."""
+    from dynamic_harness.config import AgentConfig, HarnessConfig
+    from dynamic_harness.llm.provider import LLMProvider, ToolCallData, ToolCallResponse
+
+    class _ImmediateReportLLM(LLMProvider):
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            return ToolCallResponse(
+                content=None, model="mock",
+                tool_calls=[ToolCallData(
+                    id="c1", name="report",
+                    arguments={"summary": "done", "files_written": ["x.md"]},
+                )],
+            )
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    runtime = Runtime(
+        artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
+    )
+    runtime._max_agent_tokens = 12345
+    runtime.set_llm(_ImmediateReportLLM())
+    parent = runtime.delegate(Task(description="parent"))
+    result = await runtime.tool_registry.execute("delegate", "tc1", agent=parent, description="sub")
+    import json
+    data = json.loads(result.content)
+    assert "token cap 12345" in data["limits"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_run_root_carries_mission_command_brief(tmp_path: Path) -> None:
+    """The programmatic root path (Runtime.run) accepts the mission-command
+    brief and renders it into the root agent's system prompt."""
+    from dynamic_harness.config import AgentConfig, HarnessConfig
+    from dynamic_harness.llm.provider import LLMProvider, ToolCallData, ToolCallResponse
+
+    class _RecordingLLM(LLMProvider):
+        def __init__(self) -> None:
+            self.seen_system = ""
+
+        async def generate(self, system, user, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            self.seen_system = str(messages[0].get("content", ""))
+            return ToolCallResponse(
+                content=None, model="mock",
+                tool_calls=[ToolCallData(
+                    id="c1", name="report",
+                    arguments={"summary": "root done", "files_written": ["root.md"]},
+                )],
+            )
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+    runtime = Runtime(
+        artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
+    )
+    llm = _RecordingLLM()
+    runtime.set_llm(llm)
+    root = await runtime.run(
+        "audit auth",
+        intent="the release depends on auth being trustworthy",
+        end_state="a verdict per finding in audit.md",
+        constraints=["do not modify code"],
+        authority="adapt the checks; report deviations",
+    )
+    assert root.task.intent == "the release depends on auth being trustworthy"
+    assert root.task.end_state == "a verdict per finding in audit.md"
+    assert root.task.constraints == ["do not modify code"]
+    assert root.task.authority == "adapt the checks; report deviations"
+    assert "Mission brief from your parent:" in llm.seen_system
+    assert "[INTENT] the release depends on auth being trustworthy" in llm.seen_system
+    assert "[END STATE] a verdict per finding in audit.md" in llm.seen_system
+    assert "[CONSTRAINTS]\n- do not modify code" in llm.seen_system
+    assert "[AUTHORITY] adapt the checks; report deviations" in llm.seen_system
+
+
+@pytest.mark.asyncio
 async def test_write_and_read_tool_roundtrip(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="test"))
     fname = "test.txt"

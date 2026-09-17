@@ -69,6 +69,27 @@ def test_role_tag_omitted_when_no_role() -> None:
     assert "[ROLE]" not in build_system_prompt(base, role="Security Auditor")
 
 
+def test_intent_block_rendered_only_when_set() -> None:
+    """Mission-command brief sections appear only when provided (minimal stays lean)."""
+    from dynamic_harness.core.prompts import build_brief_block
+
+    bare = build_brief_block()
+    assert bare == ""
+    for tag in ("[INTENT]", "[END STATE]", "[CONSTRAINTS]", "[AUTHORITY]"):
+        assert tag not in bare
+
+    briefed = build_brief_block(
+        intent="The release depends on auth being trustworthy",
+        end_state="A verdict per finding, written to audit.md",
+        constraints=["do not modify code", "ignore performance"],
+        authority="Adapt the checks if the codebase differs; report deviations",
+    )
+    assert "[INTENT] The release depends on auth being trustworthy" in briefed
+    assert "[END STATE] A verdict per finding, written to audit.md" in briefed
+    assert "[CONSTRAINTS]\n- do not modify code\n- ignore performance" in briefed
+    assert "[AUTHORITY] Adapt the checks if the codebase differs; report deviations" in briefed
+
+
 def test_base_prompt_has_no_dead_role_placeholder() -> None:
     """The static prompt must not contain an uninterpolated [ROLE] token."""
     assert "[ROLE]" not in AGENT_SYSTEM_PROMPT
@@ -107,6 +128,21 @@ def test_runtime_run_does_not_force_orchestrator(runtime: Runtime) -> None:
     """Low-level runtime.run() leaves the role explicit (CLI sets orchestrator)."""
     root = asyncio.run(runtime.run("work"))
     assert root.task.role is None
+
+
+def test_steerage_injects_wall_clock_budget(runtime: Runtime) -> None:
+    """The child's own wall-clock ramar is baked into its system prompt so it
+    can pace work, instead of discovering the cap when the run is stopped."""
+    agent = runtime.delegate(Task(description="T"))
+    agent._safety_timeout_seconds = 120.0
+    steer = agent._build_steerage()
+    assert "wall-clock" in steer
+    assert "120s" in steer
+
+    # No timeout configured -> no wall-clock line (a bare delegation stays lean).
+    agent._safety_timeout_seconds = None
+    steer = agent._build_steerage()
+    assert "wall-clock" not in steer
 
 
 def test_agent_context_estimates_live_prompt_tokens(runtime: Runtime) -> None:

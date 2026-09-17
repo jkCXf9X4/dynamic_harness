@@ -6,7 +6,7 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from .context import AgentContext
 from .policies.interface import (
@@ -32,7 +32,7 @@ from .policies.heal import ResumePlanner
 from .policies.nudge import NudgePolicy
 from .policies.permissions import ToolPermissionPolicy
 from .policies.spawn import SpawnWarningPolicy
-from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_system_prompt, build_user_message, render_focus
+from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_brief_block, build_system_prompt, build_user_message, render_focus
 from .result_store import ResultStore
 from .spawn_limits import DelegationLimit, delegate_target_signature
 from .telemetry import Telemetry
@@ -1001,6 +1001,10 @@ class Agent:
             if r.confidence is not None:
                 result["confidence"] = r.confidence
 
+        limits = self._limits_line(child)
+        if limits:
+            result["limits"] = limits
+
         if child.last_failure:
             failure = child.last_failure.error[:500]
             if getattr(child, "_timed_out", False):
@@ -1110,8 +1114,21 @@ class Agent:
         prefix byte-identical. That byte-identity is what lets the provider's
         prompt cache extend across the whole history — a per-turn observation
         message was empirically shown to zero out the cache entirely.
+
+        The mission-command brief (the parent's intent) also lives here, for
+        the same reason plus one more: ``context.compress`` keeps only the
+        system message, so the parent's intent — the child's decision
+        criterion — must not live in a prunable/compressible user message.
         """
         blocks: list[str] = []
+        brief = build_brief_block(
+            intent=self.task.intent,
+            end_state=self.task.end_state,
+            constraints=self.task.constraints,
+            authority=self.task.authority,
+        )
+        if brief:
+            blocks.append(f"Mission brief from your parent:\n{brief}")
         focus_text = render_focus(self._focus, iteration=1)
         if focus_text:
             blocks.append(focus_text)
@@ -1121,6 +1138,14 @@ class Agent:
             ).budget_guidance()
             if guidance:
                 blocks.append(guidance)
+        if self._safety_timeout_seconds:
+            blocks.append(
+                f"[Budget] This agent has a {self._safety_timeout_seconds:.0f}s "
+                f"wall-clock budget before the run is force-failed. The clock "
+                f"is not directly observable, so pace work: delegate "
+                f"independent units and checkpoint after each milestone instead "
+                f"of chaining long serial calls."
+            )
         if self.environment_info:
             blocks.append(self.environment_info)
         return "\n\n".join(blocks)
@@ -1650,6 +1675,10 @@ class Agent:
         agent_type: str | None = None,
         role: str | None = None,
         system_prompt: str | None = None,
+        intent: str | None = None,
+        end_state: str | None = None,
+        constraints: Sequence[str] | None = None,
+        authority: str | None = None,
         **metadata: Any,
     ) -> Agent:
         child_task = Task(
@@ -1657,6 +1686,10 @@ class Agent:
             role=role,
             system_prompt=system_prompt,
             parent_id=self.task.id,
+            intent=intent,
+            end_state=end_state,
+            constraints=list(constraints) if constraints else [],
+            authority=authority,
             metadata=metadata,
         )
         child = self._runtime.delegate(child_task, parent=self, agent_type=agent_type)
@@ -1807,6 +1840,7 @@ class Agent:
             "outcome": outcome,
             "killed": self._killed,
             "timed_out": self._timed_out,
+            "limits": self._limits_line(self),
             "heal": {
                 "diagnosis": self._runtime.heal_diagnosis(self),
                 "resumes": self._runtime.get_heal_count(self.id, "resume"),
@@ -1855,6 +1889,24 @@ class Agent:
             return ""
         return self._runtime.spawn_policy.budget_line(usage)
 
+    @staticmethod
+    def _limits_line(agent: Agent) -> str:
+        """Compact statement of an agent's configured runtime constraints (ramar).
+
+        Surfaces the child's own safety limits (``safety.max_agent_tokens``,
+        ``safety.timeout_seconds``) to the parent via the delegate result and
+        status snapshot, so the parent can brief real constraints and size the
+        delegation to fit — instead of the child discovering a cap only when it
+        is hit (uppdragstaktik: communicate the ramar up front).
+        """
+        parts: list[str] = []
+        if agent.max_agent_tokens:
+            parts.append(f"token cap {agent.max_agent_tokens}")
+        timeout = getattr(agent, "_safety_timeout_seconds", None)
+        if timeout:
+            parts.append(f"wall-clock {timeout:.0f}s")
+        return "; ".join(parts)
+
     async def run_delegate_tool(
         self,
         description: str,
@@ -1862,6 +1914,10 @@ class Agent:
         role: str | None = None,
         system_prompt: str | None = None,
         agent_type: str | None = None,
+        intent: str | None = None,
+        end_state: str | None = None,
+        constraints: Sequence[str] | None = None,
+        authority: str | None = None,
         tool_call_id: str = "",
     ) -> str:
         """Create + run a sub-agent on behalf of the ``delegate`` tool.
@@ -1883,7 +1939,9 @@ class Agent:
             }, indent=2)
         try:
             child = self.delegate(
-                description, agent_type=agent_type, role=role, system_prompt=system_prompt
+                description, agent_type=agent_type, role=role, system_prompt=system_prompt,
+                intent=intent, end_state=end_state,
+                constraints=constraints, authority=authority,
             )
         except DelegationLimit as exc:
             # A spawn cap refused the delegation: no agent was created. Surface

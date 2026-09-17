@@ -18,22 +18,47 @@ under-delegate. Two focused parallel elements outperform one overloaded one.
 
 ## Delegation briefs are minimal and complete
 
-A delegation's description + role is the sub-agent's *entire* requirement set. It knows
-nothing else. Therefore every brief must contain:
+A delegation's description + role (+ optional intent fields) is the sub-agent's *entire*
+requirement set. It knows nothing else. Therefore every brief must contain:
 
 - a **role** (single-sentence scope constraint),
 - **specific** paths / functions / expected behavior,
 - the **outcome**, not the process,
 - how to **verify** ("run `pytest tests/x.py` after changing"),
 - a **disk artifact** to write,
-- explicit **acceptance criteria**,
+- acceptance criteria — expressed as the `end_state` field (what "done" looks like),
 - **one task per delegation** — never mega-delegate ("do X then Y then Z").
+
+The brief must also carry the mission-command intent dimension
+(`docs/references/mission_command_rationale.md`): the child needs *why* to keep making
+correct decisions when the situation changes, not just *what*:
+
+- **intent** — why this task matters to the parent's objective (the decision criterion),
+- **end_state** — what "done" looks like from the parent's perspective (this *is* the
+  acceptance criteria),
+- **constraints** — task-level boundaries and interface rules with sibling agents. Do
+  NOT repeat the child's runtime token/time caps here — they are auto-injected into the
+  child's system prompt (and surfaced to you as the child's `limits` in the delegate
+  result / status),
+- **authority** — the explicit license to adapt the plan within the intent, plus the
+  obligation to report any deviation and why.
+
+Encapsulation protects the parent's context from the child; it must not deprive the
+child of the parent's direction. Pass these via the `delegate` tool's
+`intent`/`end_state`/`constraints`/`authority` fields (or `Task` fields
+programmatically). Keep them compact — a verbose intent becomes directive control by
+another name and defeats the fresh-context economy.
+
+The child operates under mission command regardless of how complete its brief is: it
+honors the intent, adapts within it when conditions change, and reports deviations in
+`report()`/`escalate()`. A bare task still implies intent — achieve the outcome, never
+grind on a dead plan.
 
 ## Verification is non-negotiable
 
 `VERIFY EVERY CHILD` by progressive disclosure: read its artifact **summary**
-(headline/summary_200), not the whole body. Confirm it is non-empty and matches the
-requirement. Present:
+(headline/summary_200), not the whole body. Confirm it is non-empty and **satisfies the
+`end_state` you briefed** — the requirement is the outcome, not the plan. Present:
 
 - missing/empty → `converse(child)` and demand better;
 - failed → read the reason; a *clearable* issue → re-delegate; a *structural* issue →

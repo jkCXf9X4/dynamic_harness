@@ -18,7 +18,13 @@ TOOL_DELEGATE_DEF = ToolDef(
     name="delegate",
     description="Delegate a task to a sub-agent that handles it autonomously. "
                 "The sub-agent sees ONLY your description, role, and optional "
-                "system_prompt — nothing from your parent. "
+                "system_prompt/intent fields — nothing from your parent. "
+                "Brief the child as a mission-command order (uppdragstaktik): "
+                "description is WHAT to achieve; intent is WHY it matters (the "
+                "child's decision criterion when the plan changes); end_state is "
+                "the desired final condition; constraints are the boundaries and "
+                "limits; authority grants the child freedom of action to deviate "
+                "within the intent and obliges it to report deviations. "
                 "Use system_prompt to override the sub-agent's default behavior. "
                 "Set role to 'orchestrator' to force deeper decomposition: the "
                 "sub-agent becomes a sub-orchestrator that must split and delegate "
@@ -27,7 +33,9 @@ TOOL_DELEGATE_DEF = ToolDef(
                 "name to instantiate a specialist sub-agent; unknown names are "
                 "rejected. Returns the child's status, ID, report summary, "
                 "artifact IDs, and confidence (if set). For failed children, "
-                "returns the failure reason.",
+                "returns the failure reason. The result also carries the child's "
+                "runtime limits (token cap / wall-clock) so you know the ramar it "
+                "was working under.",
     input_schema={
         "type": "object",
         "properties": {
@@ -35,6 +43,10 @@ TOOL_DELEGATE_DEF = ToolDef(
             "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.'). Set role to 'orchestrator' to create a sub-orchestrator that must further decompose and delegate its own sub-tree — use when a delegated task is itself large enough to be split."},
             "system_prompt": {"type": "string", "description": "Optional custom system prompt for the sub-agent. Overrides the default agent behavior. Use for A/B testing different prompt strategies."},
             "agent_type": {"type": "string", "description": "Optional registered custom agent class name (via Runtime.register_agent_class) to instantiate for the sub-agent. Unknown names are rejected — the base Agent is never used as a silent fallback."},
+            "intent": {"type": "string", "description": "Why this task matters to your larger objective (syfte/avsikt). The child's decision criterion: when the original plan becomes infeasible, it adapts to honor this intent."},
+            "end_state": {"type": "string", "description": "Desired final condition — what 'done' looks like from your perspective (målbild). The child steers toward this when the path changes."},
+            "constraints": {"type": "array", "items": {"type": "string"}, "description": "Boundaries and limits (ramar): what the child must NOT do, resource/scope limits, interface rules with sibling agents, deadlines."},
+            "authority": {"type": "string", "description": "Freedom of action (handlingsfrihet): explicit license to deviate from the stated plan when the situation changes, provided the intent is honored — and the obligation to report the deviation and why in report()/escalate()."},
         },
         "required": ["description"],
     },
@@ -157,7 +169,8 @@ TOOL_STATUS_DEF = ToolDef(
     description="Read the live status of this agent's delegated children "
                 "(or one direct child, by id). Children that are running, "
                 "completed, failed, or were killed are each returned with their "
-                "summary/failure reason, artifact id, done+pending plan steps, "
+                "summary/failure reason, artifact id, runtime limits (token "
+                "cap / wall-clock), done+pending plan steps, "
                 "checkpoint notes, and a salvage of recent in-context progress "
                 "(partial_data). Each snapshot also carries a 'heal' block: the "
                 "runtime's blunt-vs-rot diagnosis (the same signal self-heal "
@@ -260,11 +273,16 @@ def _resolve_artifact(ctx: ToolContext, artifact_id: str):
 async def delegate(
     *, ctx: ToolContext, description: str,
     role: str | None = None, system_prompt: str | None = None,
-    agent_type: str | None = None, _tool_call_id: str = "",
+    agent_type: str | None = None,
+    intent: str | None = None, end_state: str | None = None,
+    constraints: list[str] | None = None, authority: str | None = None,
+    _tool_call_id: str = "",
 ) -> str:
     return await ctx.run_delegate_tool(
         description, role=role, system_prompt=system_prompt,
-        agent_type=agent_type, tool_call_id=_tool_call_id,
+        agent_type=agent_type, intent=intent, end_state=end_state,
+        constraints=constraints, authority=authority,
+        tool_call_id=_tool_call_id,
     )
 
 

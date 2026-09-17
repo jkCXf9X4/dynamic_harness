@@ -399,3 +399,24 @@ async def test_timeout_parent_faces_resume_directions(tmp: Path) -> None:
     assert hint is not None
     assert f'agent_id="{child.id}"' in hint
     assert 'strategy="resume"' in hint
+
+
+def test_fresh_restart_carries_mission_command_brief(runtime: Runtime) -> None:
+    """A fresh self-heal worker is a replacement for the SAME mission: it must
+    keep the parent's intent/end_state/constraints/authority, not restart cold."""
+    task = Task(
+        description="audit auth",
+        intent="the release depends on auth being trustworthy",
+        end_state="a verdict per finding in audit.md",
+        constraints=["do not modify code"],
+        authority="adapt the checks; report deviations",
+    )
+    agent = runtime.delegate(task)
+    agent.fail("first attempt exploded")
+    fresh = runtime._fresh_restart(agent)
+    assert fresh is not None
+    assert fresh.task.intent == task.intent
+    assert fresh.task.end_state == task.end_state
+    assert fresh.task.constraints == task.constraints
+    assert fresh.task.authority == task.authority
+    assert task.description in fresh.task.description

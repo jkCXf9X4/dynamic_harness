@@ -147,6 +147,47 @@ async def test_resume_aborted_task_from_fresh_runtime(tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_checkpoint_roundtrip_preserves_mission_command_brief(tmp: Path) -> None:
+    """The parent's brief survives checkpointing and a disk rebuild via
+    Runtime.resume — a resumed child must not lose its intent/ramar."""
+    ckpt = tmp / "ckpt"
+    rt1 = _make_runtime(tmp / "rt1", ckpt)
+    out = tmp / "rt1" / "out.txt"
+    rt1.set_llm(ScriptedProvider([
+        _tool("c0", "write", {"path": str(out), "content": "data"}),
+        _tool("c1", "fail", {"error": "aborted"}),
+    ]))
+
+    root = rt1.delegate(Task(
+        description="audit auth",
+        intent="the release depends on auth being trustworthy",
+        end_state="a verdict per finding in audit.md",
+        constraints=["do not modify code"],
+        authority="adapt the checks; report deviations",
+    ))
+    await root.run()
+    agent_id = root.id
+    assert root.last_failure is not None
+
+    cp = rt1.checkpoint_store.load(agent_id)
+    assert cp is not None
+    assert cp.task.intent == "the release depends on auth being trustworthy"
+    assert cp.task.end_state == "a verdict per finding in audit.md"
+    assert cp.task.constraints == ["do not modify code"]
+    assert cp.task.authority == "adapt the checks; report deviations"
+
+    # Fresh process: the disk rebuild must reconstruct the brief with the task.
+    rt2 = _make_runtime(tmp / "rt2", ckpt)
+    rt2.set_llm(ScriptedProvider([_tool("cx", "report", {"summary": "resumed and done"})]))
+    recovered = await rt2.resume(agent_id)
+
+    assert recovered.task.intent == "the release depends on auth being trustworthy"
+    assert recovered.task.end_state == "a verdict per finding in audit.md"
+    assert recovered.task.constraints == ["do not modify code"]
+    assert recovered.task.authority == "adapt the checks; report deviations"
+
+
+@pytest.mark.asyncio
 async def test_checkpoint_dir_removed_midrun_is_nonfatal_and_self_heals(tmp: Path) -> None:
     """Deleting the checkpoints dir mid-run mimics the trace.jsonl failure: a
     FileNotFoundError from the checkpoint write must NEVER fail the run (even a

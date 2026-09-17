@@ -11,6 +11,7 @@ related:
   - api/tools.md
   - concepts/agent-lifecycle.md
   - concepts/artifact-system.md
+  - references/mission_command_rationale.md
 ---
 
 # Delegation Model
@@ -68,6 +69,12 @@ Turn 1: delegate(A), delegate(B)  ← Both in parallel
 What the child sees:
 - The delegation description (its entire world)
 - The assigned role (scope constraint)
+- The mission-command intent block, if the parent set it (intent / end state /
+  constraints / authority) — baked into the child's system prompt so it survives
+  compression and prune (the framework's context-management workflow erases the
+  user message, not the system message)
+- The baseline mission-command clause (honor intent, adapt, report deviations)
+  from its own system prompt — always present, even on bare delegations
 - Nothing from the grandparent or siblings
 
 ### Step 4: VERIFY
@@ -76,7 +83,8 @@ What the child sees:
 
 1. Check the child's status — must be `completed`
 2. Read the child's artifact file(s) — confirm they exist and are non-empty
-3. Confirm the content matches the delegation description
+3. Confirm the content satisfies the `end_state` you briefed — the requirement is the
+   outcome, not the plan
 4. If verification fails: re-delegate or escalate
 
 **Never synthesize from assumed results.** Blind synthesis — reporting what you asked for instead of what the child found — is the most harmful failure mode.
@@ -142,8 +150,22 @@ Independent sub-tasks are delegated in the same tool-calling turn. The delegate 
 The parent provides:
 - A specific, focused task description
 - A role that scopes what the child cares about
-- Acceptance criteria (what "done" looks like)
 - Any necessary context (file paths, conventions)
+- A mission-command intent block (see `references/mission_command_rationale.md`):
+  `intent` (why it matters — the child's decision criterion), `end_state` (the desired
+  final condition — *this is* the acceptance criteria), `constraints` (task boundaries
+  and interface rules; the child's runtime token/time caps are auto-injected into its
+  system prompt, so do not repeat them here), and `authority` (the license to adapt the
+  plan within the intent + report deviations). Passed via the
+  `delegate` tool's `intent`/`end_state`/`constraints`/`authority` fields; rendered into
+  the child's system prompt (compression-safe) as `[INTENT]` / `[END STATE]` /
+  `[CONSTRAINTS]` / `[AUTHORITY]` blocks.
+
+Every child also operates under a baseline mission-command clause (from the system
+prompt): honor the intent, adapt within it when the situation changes, and report any
+deviation and why in `report()`/`escalate()` — even when the parent supplied only a bare
+description. The parent reads the child's `limits` (token cap / wall-clock) from the
+delegate result and `status` to size re-delegations.
 
 ### Child to Parent
 

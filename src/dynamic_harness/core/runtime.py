@@ -513,6 +513,10 @@ class Runtime:
         agent_type: str | None = None,
         root_agent: Agent | None = None,
         expected_outputs: list[str] | None = None,
+        intent: str | None = None,
+        end_state: str | None = None,
+        constraints: list[str] | None = None,
+        authority: str | None = None,
     ) -> Agent:
         """The single path to run an agent task.
 
@@ -534,6 +538,10 @@ class Runtime:
             description=description,
             role=role,
             system_prompt=system_prompt,
+            intent=intent,
+            end_state=end_state,
+            constraints=list(constraints) if constraints else [],
+            authority=authority,
         )
         root = self.delegate(task, agent_type=agent_type)
         root._expected_outputs = list(expected_outputs) if expected_outputs else None
@@ -596,6 +604,10 @@ class Runtime:
             parent_id=cp.task.parent_id,
             created_at=cp.task.created_at,
             metadata=dict(cp.task.metadata or {}),
+            intent=cp.task.intent,
+            end_state=cp.task.end_state,
+            constraints=list(cp.task.constraints or []),
+            authority=cp.task.authority,
         )
         agent = self.delegate(task, agent_type=cp.agent_type, parent=parent)
         agent._has_run = True
@@ -766,6 +778,10 @@ class Runtime:
             system_prompt=task.system_prompt,
             metadata=dict(task.metadata),
             parent_id=task.parent_id,
+            intent=task.intent,
+            end_state=task.end_state,
+            constraints=list(task.constraints or []),
+            authority=task.authority,
         )
         try:
             fresh = self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)

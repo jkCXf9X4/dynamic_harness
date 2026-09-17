@@ -66,6 +66,36 @@ def build_user_message(description: str, role: str | None = None) -> str:
     return description
 
 
+def build_brief_block(
+    *,
+    intent: str | None = None,
+    end_state: str | None = None,
+    constraints: Sequence[str] | None = None,
+    authority: str | None = None,
+) -> str:
+    """Render the mission-command brief block (syfte/avsikt + målbild + ramar +
+    handlingsfrihet) from a delegation brief.
+
+    Deliberately rendered into the *system prompt steerage*, not the user
+    message: compression keeps only the system message (``context.compress``
+    replaces everything after ``messages[0]`` with a summary), so the parent's
+    intent — the child's decision criterion — must live where the framework's
+    own context-management workflow cannot erase it. Only non-empty sections
+    are emitted.
+    """
+    parts: list[str] = []
+    if intent:
+        parts.append(f"[INTENT] {intent}")
+    if end_state:
+        parts.append(f"[END STATE] {end_state}")
+    if constraints:
+        bullets = "\n".join(f"- {c}" for c in constraints)
+        parts.append(f"[CONSTRAINTS]\n{bullets}")
+    if authority:
+        parts.append(f"[AUTHORITY] {authority}")
+    return "\n".join(parts)
+
+
 @dataclass
 class FocusLedger:
     """Mutable, runtime-held focus state re-stated to the agent each turn.

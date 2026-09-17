@@ -9,7 +9,7 @@ state because none of it is exposed here.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from .policies.context import ContextMetricPolicy
 from .task import ActivityEvent, ReportPayload
@@ -131,11 +131,17 @@ class ToolContext:
         role: str | None = None,
         system_prompt: str | None = None,
         agent_type: str | None = None,
+        intent: str | None = None,
+        end_state: str | None = None,
+        constraints: Sequence[str] | None = None,
+        authority: str | None = None,
         tool_call_id: str = "",
     ) -> str:
         return await self._agent.run_delegate_tool(
             description, role=role, system_prompt=system_prompt,
-            agent_type=agent_type, tool_call_id=tool_call_id,
+            agent_type=agent_type, intent=intent, end_state=end_state,
+            constraints=constraints, authority=authority,
+            tool_call_id=tool_call_id,
         )
 
     def report(self, payload: ReportPayload) -> None:
