@@ -58,6 +58,7 @@ class AgentPolicy:
         iteration_warning_attempts: int = 1,
         delegate_nudge_threshold: int = 8,
         delegate_nudge_attempts: int = 1,
+        brief_nudge_attempts: int = 1,
         # -- loop-guard (near-identical) --
         near_identical_threshold: int = 3,
         near_identical_window: int = 6,
@@ -92,6 +93,7 @@ class AgentPolicy:
         self.iteration_warning_attempts = int(iteration_warning_attempts)
         self.delegate_nudge_threshold = int(delegate_nudge_threshold)
         self.delegate_nudge_attempts = int(delegate_nudge_attempts)
+        self.brief_nudge_attempts = int(brief_nudge_attempts)
         self.near_identical_threshold = int(near_identical_threshold)
         self.near_identical_window = int(near_identical_window)
         self.near_identical_similarity = float(near_identical_similarity)
@@ -131,6 +133,7 @@ class AgentPolicy:
             stream_children=a.stream_children,
             iteration_warning_margin=s.iteration_warning_margin,
             iteration_warning_attempts=s.iteration_warning_attempts,
+            brief_nudge_attempts=s.brief_nudge_attempts,
             near_identical_threshold=s.near_identical_threshold,
             near_identical_window=s.near_identical_window,
             near_identical_similarity=s.near_identical_similarity,
@@ -171,6 +174,7 @@ class AgentPolicy:
             "iteration_warning_attempts": self.iteration_warning_attempts,
             "delegate_nudge_threshold": self.delegate_nudge_threshold,
             "delegate_nudge_attempts": self.delegate_nudge_attempts,
+            "brief_nudge_attempts": self.brief_nudge_attempts,
         }
 
     def post_construct(self, agent: "object") -> None:
@@ -186,3 +190,26 @@ class AgentPolicy:
         agent.retry_jitter_seconds = self.retry_jitter_seconds
         agent.rate_limit_backoff_multiplier = self.rate_limit_backoff_multiplier
         agent.fallback_on_rate_limit = self.fallback_on_rate_limit
+
+    # -- ramar rendering ---------------------------------------------------
+
+    def limits_line(
+        self, *, max_agent_tokens: int | None, timeout: float | None
+    ) -> str:
+        """Compact statement of an agent's configured runtime constraints (ramar).
+
+        Surfaces an agent's own safety limits (``safety.max_agent_tokens``,
+        ``safety.timeout_seconds``) to its parent via the delegate result and
+        status snapshot, so the parent can brief real constraints and size the
+        delegation to fit — instead of the child discovering a cap only when it
+        is hit (uppdragstaktik: communicate the ramar up front). The agent
+        passes the *per-agent* values (which may be overridden at runtime) so
+        the policy stays a pure renderer; a host may subclass to rephrase or
+        restrict the subset shown.
+        """
+        parts: list[str] = []
+        if max_agent_tokens:
+            parts.append(f"token cap {max_agent_tokens}")
+        if timeout:
+            parts.append(f"wall-clock {timeout:.0f}s")
+        return "; ".join(parts)

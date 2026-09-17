@@ -167,6 +167,13 @@ class SafetyConfig(BaseModel):
         description="How many times the low-iteration wrap-up notice may be injected "
                     "over the whole run. 0 disables the feature entirely.",
     )
+    brief_nudge_attempts: int = Field(
+        default=1, ge=0,
+        description="How many times a non-fatal notice may be injected telling a "
+                    "parent that a delegate() call is missing the mission-command "
+                    "intent dimension (intent/end_state — the child's decision "
+                    "criterion). 0 disables the feature entirely.",
+    )
     timeout_seconds: float | None = Field(
         default=7200.0, gt=0,
         description="Wall-clock budget for a single agent's ENTIRE run (its whole "

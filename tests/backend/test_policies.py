@@ -416,6 +416,23 @@ def test_agent_policy_root_timeout_exemption() -> None:
     assert b.root_timeout() == 60.5
 
 
+def test_agent_policy_limits_line_renders_ramar() -> None:
+    """The parent-facing ramar line is policy-renderable (host-overridable)."""
+    pol = AgentPolicy()
+    assert pol.limits_line(max_agent_tokens=1000, timeout=120.0) == "token cap 1000; wall-clock 120s"
+    assert pol.limits_line(max_agent_tokens=None, timeout=None) == ""
+    assert pol.limits_line(max_agent_tokens=None, timeout=7200.0) == "wall-clock 7200s"
+    assert pol.limits_line(max_agent_tokens=5, timeout=None) == "token cap 5"
+
+
+def test_agent_policy_brief_nudge_attempts_default_and_config() -> None:
+    from dynamic_harness.config import HarnessConfig, SafetyConfig
+
+    assert AgentPolicy().brief_nudge_attempts == 1
+    cfg = HarnessConfig(safety=SafetyConfig(brief_nudge_attempts=0))
+    assert AgentPolicy.from_config(cfg).brief_nudge_attempts == 0
+
+
 # -- CostPolicy (G9) ------------------------------------------------------
 
 
@@ -498,6 +515,16 @@ def test_token_budget_policy() -> None:
     assert "1001 > 1000" in pol.exceed_message(1001)
     assert pol.budget_guidance() and "at most 1000 total tokens" in pol.budget_guidance()
     assert TokenBudgetPolicy(max_agent_tokens=None).budget_guidance() is None
+
+
+def test_token_budget_policy_timeout_guidance() -> None:
+    """The wall-clock ramar block is policy-renderable (host-overridable)."""
+    pol = TokenBudgetPolicy()
+    guidance = pol.timeout_guidance(120.0)
+    assert guidance is not None
+    assert "120s wall-clock" in guidance
+    assert TokenBudgetPolicy().timeout_guidance(None) is None
+    assert TokenBudgetPolicy().timeout_guidance(0) is None
 
 
 # -- ToolPermissionPolicy ---------------------------------------------------

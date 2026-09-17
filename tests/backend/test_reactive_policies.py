@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from dynamic_harness.core.policies.brief import BriefPolicy
 from dynamic_harness.core.policies.interface import (
     Observation,
     PromptInjection,
@@ -162,6 +163,66 @@ def test_loop_guard_evaluate_notice_for_near_identical() -> None:
     assert any(i.warning_type == "near_identical_calls" and not i.stop for i in out)
 
 
+# ── BriefPolicy as a reactive policy -------------------------------------
+
+
+def test_brief_policy_fires_on_delegate_without_intent_dimension() -> None:
+    """A delegate() call that omits intent/end_state triggers a notice naming
+    the missing dimension(s); a fully briefed delegation stays silent."""
+    pol = BriefPolicy(brief_nudge_attempts=1)
+    tc = ToolCallData(id="d1", name="delegate", arguments={"description": "audit auth"})
+    out = pol.evaluate(_obs(iteration=1, tool_calls=[tc]))
+    assert len(out) == 1
+    assert out[0].warning_type == "mission_brief"
+    assert "intent, end_state" in out[0].message
+    assert pol.brief_nudge_left == 0
+    # Budget consumed: silent on a later turn even if it keeps under-briefing.
+    assert pol.evaluate(_obs(iteration=2, tool_calls=[tc])) == []
+
+
+def test_brief_policy_silent_when_intent_and_end_state_present() -> None:
+    pol = BriefPolicy()
+    tc = ToolCallData(
+        id="d1", name="delegate",
+        arguments={
+            "description": "audit auth",
+            "intent": "the release depends on auth",
+            "end_state": "a verdict per finding in audit.md",
+        },
+    )
+    assert pol.evaluate(_obs(iteration=1, tool_calls=[tc])) == []
+
+
+def test_brief_policy_names_only_missing_dimension() -> None:
+    pol = BriefPolicy()
+    tc = ToolCallData(
+        id="d1", name="delegate",
+        arguments={"description": "audit auth", "end_state": "done.md"},
+    )
+    out = pol.evaluate(_obs(iteration=1, tool_calls=[tc]))
+    assert len(out) == 1
+    assert out[0].data is not None
+    assert out[0].data["missing"] == ["intent"]
+
+
+def test_brief_policy_ignores_non_delegate_calls_and_resets() -> None:
+    pol = BriefPolicy(brief_nudge_attempts=1)
+    usage_tc = ToolCallData(id="u1", name="usage", arguments={})
+    assert pol.evaluate(_obs(iteration=1, tool_calls=[usage_tc])) == []
+    # One notice per turn regardless of how many under-briefed children spawn.
+    tc = ToolCallData(id="d1", name="delegate", arguments={"description": "x"})
+    assert len(pol.evaluate(_obs(iteration=2, tool_calls=[tc, tc]))) == 1
+    # reset() restores the budget (fresh run).
+    pol.reset()
+    assert len(pol.evaluate(_obs(iteration=3, tool_calls=[tc]))) == 1
+
+
+def test_brief_policy_disabled_at_zero_attempts() -> None:
+    pol = BriefPolicy(brief_nudge_attempts=0)
+    tc = ToolCallData(id="d1", name="delegate", arguments={"description": "x"})
+    assert pol.evaluate(_obs(iteration=1, tool_calls=[tc])) == []
+
+
 # ── SpawnWarningPolicy as a reactive policy -------------------------------
 
 
@@ -266,6 +327,42 @@ async def test_agent_warning_injection_lands_then_reports(runtime: Runtime) -> N
 
 
 @pytest.mark.asyncio
+async def test_agent_brief_notice_injected_on_bare_delegation(tmp_path: Path) -> None:
+    """A parent that delegates without intent/end_state gets one mission-brief
+    notice appended to its context (tail-append-only), and the run continues."""
+    from dynamic_harness.config import AgentConfig, HarnessConfig
+
+    runtime = Runtime(
+        artifact_root=tmp_path / "artifacts", repo_root=tmp_path / "repo",
+        generated_root=tmp_path,
+        config=HarnessConfig(agent=AgentConfig(stream_children=False)),
+    )
+    runtime.set_llm(_ScriptedLLM([
+        # 1: parent delegates a bare task (no intent/end_state).
+        ToolCallResponse(content=None, model="mock", tool_calls=[ToolCallData(
+            id="p0", name="delegate", arguments={"description": "audit auth"})]),
+        # 2: the child reports (synchronous gather, non-streaming).
+        ToolCallResponse(content=None, model="mock", tool_calls=[ToolCallData(
+            id="c0", name="report",
+            arguments={"summary": "child done", "files_written": ["audit.md"]})]),
+        # 3: the parent reports.
+        ToolCallResponse(content=None, model="mock", tool_calls=[ToolCallData(
+            id="p1", name="report",
+            arguments={"summary": "all done", "files_written": ["out.md"]})]),
+    ]))
+
+    root = runtime.delegate(Task(description="parent"))
+    await root.run()
+
+    assert root.task.status.value == "completed"
+    assert any(
+        m.get("role") == "user" and "[brief]" in str(m.get("content", ""))
+        and "mission-command intent dimension" in str(m.get("content", ""))
+        for m in root.context.messages
+    )
+
+
+@pytest.mark.asyncio
 async def test_runtime_policy_installed_fresh_per_agent(runtime: Runtime) -> None:
     """Every spawned agent gets its OWN instance of a host-registered policy."""
     instances: list[_Fires] = []
@@ -288,6 +385,7 @@ async def test_runtime_policy_installed_fresh_per_agent(runtime: Runtime) -> Non
 def test_agent_reactive_registry_listed_names(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="x"))
     assert "nudges" in agent.reactive_policies.names()
+    assert "mission_brief" in agent.reactive_policies.names()
     assert "spawn_warning" in agent.reactive_policies.names()
     # LoopGuard is driven at commit time, not via the post-turn registry.
     assert "loop_guard" not in agent.reactive_policies.names()

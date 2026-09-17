@@ -141,7 +141,16 @@ Implemented status is noted per item (see `core/task.py`, `core/prompts.py`,
 5. **Verify against intent, not plan-adherence.** The parent's VERIFY step
    checks the artifact "matches the requirement"; the requirement should be the
    *end state*, not whether the child followed the original plan.
-   **[not yet implemented]** — prompt-level guidance only (see the BRIEF rule).
+   **[implemented]** — prompt-level guidance (see the VERIFY rule): non-empty +
+   satisfies the `end_state` you briefed.
+6. **Observe brief completeness, don't just hope for it.** Prompt guidance
+   alone lets a parent delegate WHAT without WHY. **[implemented]** —
+   `core/policies/brief.py` (`BriefPolicy`) is a `ReactivePolicy` registered on
+   every agent (default `safety.brief_nudge_attempts: 1`): it watches
+   `delegate` calls in the post-turn observation and injects a budgeted notice
+   naming the missing `intent`/`end_state` dimension(s). Host-agnostic — a
+   plugin host can register/replace/rephrase it through the reactive-policy
+   seam without touching the run loop.
 
 The discipline stays "minimal **and complete**": the brief must contain the
 mission, the intent, the constraints, and the acceptance — and nothing else.

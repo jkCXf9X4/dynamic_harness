@@ -145,3 +145,20 @@ class TokenBudgetPolicy:
             f"live spend and messages with the usage tool; to stay lean, "
             f"delegate or prune stale turns instead of chaining calls in-context."
         )
+
+    def timeout_guidance(self, timeout_seconds: float | None) -> str | None:
+        """The static ``[Budget]`` wall-clock block folded into the system prompt.
+
+        Communicates the agent's own wall-clock ramar up front (uppdragstaktik:
+        the subordinate should know its limits, not discover them when the run
+        is force-failed). ``None``/``0`` means no cap — no block is emitted.
+        """
+        if not timeout_seconds:
+            return None
+        return (
+            f"[Budget] This agent has a {timeout_seconds:.0f}s wall-clock budget "
+            f"before the run is force-failed. The clock is not directly "
+            f"observable, so pace work: delegate independent units and "
+            f"checkpoint after each milestone instead of chaining long serial "
+            f"calls."
+        )

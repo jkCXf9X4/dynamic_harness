@@ -246,7 +246,7 @@ ReportPayload(
 ### Policy layer (`core/policies/`)
 Config-sourced decision logic is extracted into host-agnostic policy objects
 (`SpawnPolicy`, `HealPolicy`, `AgentPolicy`, `RetryPolicy`, `LoopGuard`,
-`DisclosurePolicy`, `TimeoutPolicy`, `BashSafetyPolicy`, …). Each policy imports
+`DisclosurePolicy`, `TimeoutPolicy`, `BashSafetyPolicy`, `BriefPolicy`, …). Each policy imports
 neither an agent nor a runtime; **Runtime** / **Agent** / **ToolRegistry** now
 delegate to them. This keeps the decision half reusable as a plugin surface
 (e.g. an MCP server / extension boundary) — see `docs/platform-evaluation.md`.

@@ -30,6 +30,7 @@ from .policies.retry import RetryPolicy
 from .policies.budget import TimeoutPolicy, TokenBudgetPolicy
 from .policies.heal import ResumePlanner
 from .policies.nudge import NudgePolicy
+from .policies.brief import BriefPolicy
 from .policies.permissions import ToolPermissionPolicy
 from .policies.spawn import SpawnWarningPolicy
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_brief_block, build_system_prompt, build_user_message, render_focus
@@ -127,6 +128,11 @@ class Agent:
         # stays contiguous. _delegate_nudge_attempts caps how many nudges fire.
         delegate_nudge_threshold: int = 8,
         delegate_nudge_attempts: int = 1,
+        # One-off notice when a delegate() call omits the mission-command intent
+        # dimension (intent/end_state) — the parent should brief the WHY, not
+        # just the WHAT. Tail-append-only and rare (budgeted) so the prompt
+        # prefix (and provider cache) stays contiguous.
+        brief_nudge_attempts: int = 1,
         # Soft, non-fatal warning for *near*-identical calls (e.g. re-running a
         # path listing with slightly different head/tail/sed modifiers). Unlike
         # repeated-call detection this never fails the run — it only injects a
@@ -183,6 +189,7 @@ class Agent:
             iteration_warning_attempts=iteration_warning_attempts,
             safety_max_iterations=safety_max_iterations,
         )
+        self._brief_policy = BriefPolicy(brief_nudge_attempts=brief_nudge_attempts)
         # Per-agent near-cap warning budget; the shared SpawnPolicy wordings
         # come from the runtime. Runtime.delegate() sets the starting budget.
         self._spawn_warning_policy = SpawnWarningPolicy(
@@ -193,6 +200,7 @@ class Agent:
         # fires on stream-harvest iterations that `continue` past the tail.
         self.reactive_policies = ReactivePolicyRegistry(
             self._nudge_policy,
+            self._brief_policy,
             self._spawn_warning_policy,
         )
         self._safety_timeout_seconds = safety_timeout_seconds
@@ -773,6 +781,7 @@ class Agent:
         self.result_store.clear()
         self._has_delegated = False
         self._nudge_policy.reset()
+        self._brief_policy.reset()
         # A fresh run is a fresh wall-clock budget: clear any prior safety-stop
         # markers so a resumed/re-run agent that finishes cleanly is not still
         # tagged timed-out / safety-stopped.
@@ -820,6 +829,7 @@ class Agent:
             self._started_at = time.monotonic()
             self._has_delegated = False
             self._nudge_policy.reset()
+            self._brief_policy.reset()
             self._terminated_by_safety = False
             self._timed_out = False
             self.context.messages.append({"role": "user", "content": user_message})
@@ -1001,7 +1011,10 @@ class Agent:
             if r.confidence is not None:
                 result["confidence"] = r.confidence
 
-        limits = self._limits_line(child)
+        limits = self._runtime.agent_policy.limits_line(
+            max_agent_tokens=child.max_agent_tokens,
+            timeout=child._safety_timeout_seconds,
+        )
         if limits:
             result["limits"] = limits
 
@@ -1132,20 +1145,13 @@ class Agent:
         focus_text = render_focus(self._focus, iteration=1)
         if focus_text:
             blocks.append(focus_text)
-        if self.max_agent_tokens:
-            guidance = TokenBudgetPolicy(
-                max_agent_tokens=self.max_agent_tokens
-            ).budget_guidance()
-            if guidance:
-                blocks.append(guidance)
-        if self._safety_timeout_seconds:
-            blocks.append(
-                f"[Budget] This agent has a {self._safety_timeout_seconds:.0f}s "
-                f"wall-clock budget before the run is force-failed. The clock "
-                f"is not directly observable, so pace work: delegate "
-                f"independent units and checkpoint after each milestone instead "
-                f"of chaining long serial calls."
-            )
+        budget_policy = TokenBudgetPolicy(max_agent_tokens=self.max_agent_tokens)
+        guidance = budget_policy.budget_guidance()
+        if guidance:
+            blocks.append(guidance)
+        timeout_guidance = budget_policy.timeout_guidance(self._safety_timeout_seconds)
+        if timeout_guidance:
+            blocks.append(timeout_guidance)
         if self.environment_info:
             blocks.append(self.environment_info)
         return "\n\n".join(blocks)
@@ -1840,7 +1846,10 @@ class Agent:
             "outcome": outcome,
             "killed": self._killed,
             "timed_out": self._timed_out,
-            "limits": self._limits_line(self),
+            "limits": self._runtime.agent_policy.limits_line(
+                max_agent_tokens=self.max_agent_tokens,
+                timeout=self._safety_timeout_seconds,
+            ),
             "heal": {
                 "diagnosis": self._runtime.heal_diagnosis(self),
                 "resumes": self._runtime.get_heal_count(self.id, "resume"),
@@ -1888,24 +1897,6 @@ class Agent:
         except Exception:
             return ""
         return self._runtime.spawn_policy.budget_line(usage)
-
-    @staticmethod
-    def _limits_line(agent: Agent) -> str:
-        """Compact statement of an agent's configured runtime constraints (ramar).
-
-        Surfaces the child's own safety limits (``safety.max_agent_tokens``,
-        ``safety.timeout_seconds``) to the parent via the delegate result and
-        status snapshot, so the parent can brief real constraints and size the
-        delegation to fit — instead of the child discovering a cap only when it
-        is hit (uppdragstaktik: communicate the ramar up front).
-        """
-        parts: list[str] = []
-        if agent.max_agent_tokens:
-            parts.append(f"token cap {agent.max_agent_tokens}")
-        timeout = getattr(agent, "_safety_timeout_seconds", None)
-        if timeout:
-            parts.append(f"wall-clock {timeout:.0f}s")
-        return "; ".join(parts)
 
     async def run_delegate_tool(
         self,
