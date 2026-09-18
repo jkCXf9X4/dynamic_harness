@@ -156,6 +156,32 @@ class ToolContext:
     def get_other_agent(self, agent_id: str) -> Any:
         return self._agent.get_other_agent(agent_id)
 
+    # -- communication layer ----------------------------------------------
+
+    @property
+    def comms(self) -> Any:
+        """The runtime's comms backend, or None when the layer is disabled."""
+        return self._agent.comms
+
+    @property
+    def sender_ref(self) -> Any:
+        """Minimal sender identity the comms backends route on."""
+        return self._agent.comms_ref()
+
+    async def deliver_comms_message(self, agent_id: str, envelope: str) -> None:
+        """Blocking delivery of a routed comms envelope (converse path):
+        resumes the target with the envelope as a fresh user message."""
+        target = self._agent.get_other_agent(agent_id)
+        if target is not None:
+            await target.continue_with_input(envelope)
+
+    def queue_comms_message(self, agent_id: str, envelope: str) -> None:
+        """Fire-and-forget delivery (message path): queues the envelope in the
+        target's inject queue; it is picked up on the target's next turn."""
+        target = self._agent.get_other_agent(agent_id)
+        if target is not None:
+            target.submit_input(envelope)
+
     async def kill(
         self,
         agent_id: str,

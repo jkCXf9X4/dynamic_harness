@@ -1308,6 +1308,7 @@ class Agent:
             assistant_content=(response.content if response is not None else None),
             tree_depth=self._depth,
             spawn_usage=self._runtime.spawn_usage(self) if self._runtime is not None else None,
+            agent_id=self.id,
         )
 
     def _apply_prompt_injection(self, injection: PromptInjection) -> bool:
@@ -1707,6 +1708,21 @@ class Agent:
 
     def get_other_agent(self, agent_id: str) -> Agent | None:
         return self._runtime.get_agent(agent_id)
+
+    @property
+    def comms(self):
+        """The runtime's communication backend, or None when the layer is off."""
+        return self._runtime.comms if self._runtime is not None else None
+
+    def comms_ref(self):
+        """Minimal sender identity handed to the comms routing backends."""
+        from .comms import AgentRef
+
+        return AgentRef(
+            agent_id=self.id,
+            parent_id=self.parent.id if self.parent is not None else None,
+            role=self.task.role,
+        )
 
     async def kill(
         self,

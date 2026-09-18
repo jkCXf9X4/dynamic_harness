@@ -21,7 +21,7 @@
     "max_iterations": 400,
     "repeated_call_limit": 5,
     "repeated_recovery_attempts": 2,
-    "repeated_call_exempt_tools": ["status", "usage", "result_read", "result_bash"],
+    "repeated_call_exempt_tools": ["status", "usage", "result_read", "result_bash", "channels", "channel_info", "channel_read"],
     "near_identical_threshold": 3,
     "near_identical_window": 6,
     "near_identical_similarity": 0.6,
@@ -47,5 +47,14 @@
     "references_dir": "docs/references",
     "active_turn_window": 50,
     "stream_children": true
+  },
+  "communication": {
+    "topology": "off",
+    "registration": "parent",
+    "shared_topic": "shared",
+    "channels": [],
+    "digest_mode": "pull",
+    "digest_max_items": 5,
+    "digest_max_tokens": 400
   }
 }

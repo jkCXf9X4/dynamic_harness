@@ -100,7 +100,10 @@ class SafetyConfig(BaseModel):
                     "immediately on first detection.",
     )
     repeated_call_exempt_tools: list[str] = Field(
-        default_factory=lambda: ["status", "usage", "result_read", "result_bash"],
+        default_factory=lambda: [
+            "status", "usage", "result_read", "result_bash",
+            "channels", "channel_info", "channel_read",
+        ],
         description="Tool names that repeated-call loop detection treats as pure "
                     "monitoring and ignores entirely. These are cheap read-only "
                     "observations whose outputs change as live state changes (a "
@@ -252,6 +255,68 @@ class SelfHealConfig(BaseModel):
     max_fresh_retries: int = Field(default=1, ge=0)
 
 
+class CommsConfig(BaseModel):
+    """Swappable communication layer for topology experiments.
+
+    ``topology`` selects the routing backend; ``off`` disables the layer
+    entirely (``converse`` keeps today's global by-ID behavior). The four
+    experiment cells from the investigation map directly:
+
+    - ``relay`` (cell 1) — parent-mediated: a peer message is routed to the
+      common parent, who relays it.
+    - ``siblings`` (cell 2) — same-parent scope: direct peer messaging is
+      allowed only between children of the same parent (plus parent/child).
+    - ``shared`` (cell 3) — one shared channel: every post lands in a single
+      topic with per-agent delta reads; subscription is universal.
+    - ``topics`` (cell 4) — named topic channels with join/subscribe and
+      per-agent watermarks; creation is a boundary decision.
+
+    Everything under this section is a *construction* switch — the tool surface
+    (post / channel_read / channels / channel_info / subscribe / unsubscribe /
+    converse / message) is identical across topologies.
+    """
+
+    topology: str = Field(
+        default="off",
+        description="'off' (default — no comms layer, converse works as today) | "
+                    "'relay' | 'siblings' | 'shared' | 'topics'.",
+    )
+    registration: str = Field(
+        default="parent",
+        description="Topic creation authority for 'topics': 'parent' (only the "
+                    "root, or a topic pre-declared in `channels`, may be created) "
+                    "or 'anarchic' (any agent may create any topic).",
+    )
+    shared_topic: str = Field(
+        default="shared",
+        description="Topic name used by the 'shared' topology.",
+    )
+    channels: list[str] = Field(
+        default_factory=list,
+        description="Topics the root parent pre-declares/authorizes in 'parent' "
+                    "registration mode (the delegation-boundary channel set).",
+    )
+    digest_mode: str = Field(
+        default="pull",
+        description="How subscribed-topic traffic reaches an agent: 'pull' "
+                    "(default — agents read via channel_read on demand, zero "
+                    "push-multiplier) or 'push' (a CommsDigestPolicy folds new "
+                    "deltas into a tail-appended user message each turn, "
+                    "newest-first and capped). Push is the experiment's second "
+                    "variable: it measures the context-health cost of injecting "
+                    "communication.",
+    )
+    digest_max_items: int = Field(
+        default=5, ge=1,
+        description="Push-digest cap: at most this many newest envelopes per turn.",
+    )
+    digest_max_tokens: int = Field(
+        default=400, ge=1,
+        description="Push-digest cap: at most this many tokens of envelopes per "
+                    "turn (1 token ≈ 4 chars).",
+    )
+
+
 class AgentConfig(BaseModel):
     environment_notes: list[str] = Field(
         default_factory=list,
@@ -289,6 +354,7 @@ class HarnessConfig(BaseModel):
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     self_heal: SelfHealConfig = Field(default_factory=SelfHealConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    communication: CommsConfig = Field(default_factory=CommsConfig)
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:

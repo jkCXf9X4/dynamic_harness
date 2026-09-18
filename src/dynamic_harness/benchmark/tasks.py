@@ -418,6 +418,107 @@ class SynthesisTask(BenchmarkTask):
         return True, f"synthesis covers all {len(truth)} source tokens"
 
 
+class CollaborationTask(BenchmarkTask):
+    """Communication-probe: findings must flow between agents.
+
+    ``resources/_collab`` holds ``part1.txt..partN.txt``, each with one integer
+    on its first line. The root must delegate one child per part and produce a
+    report listing ``yN`` per part:
+
+    - ``mode="independent"``: ``yN = 2 * xN`` — no cross-agent information.
+    - ``mode="interdependent"``: ``yN = xN + x(N+1)`` (wrapping) — a child
+      cannot compute its own value without a NEIGHBOR's integer, so findings
+      MUST flow between agents through the communication tools. This is the
+      bed's interdependent cell: the topology that makes sharing easiest should
+      complete more reliably and cheaply.
+
+    The verifier is mechanical (no prompt discipline): it recomputes the
+    ground truth from the part files and checks every ``yN`` line. Intentionally
+    NOT in ``ALL_TASKS`` — it is the communication comparison bed's task, kept
+    as an opt-in pipeline (see ``benchmark/comms.py``).
+    """
+
+    def __init__(self, mode: str = "interdependent") -> None:
+        if mode not in ("independent", "interdependent"):
+            raise ValueError(f"unknown collaboration mode: {mode}")
+        self.mode = mode
+        sharing = (
+            "Because each value needs the NEXT part's integer, the children "
+            "MUST share their extracted integers with each other — use the "
+            "communication tools (post/channel_read for channels, or "
+            "converse/message for direct messaging) so findings flow between "
+            "agents."
+            if mode == "interdependent"
+            else "No sharing is needed: each value is computed from that "
+            "part's own integer alone."
+        )
+        super().__init__(
+            id=f"collab_{mode}",
+            description=(
+                "resources/_collab contains part1.txt..part4.txt, each holding "
+                "one integer on its first line. DELEGATE one child per part so "
+                "the four files are read in parallel; each child extracts its "
+                "part's integer. The final report must contain, for each part "
+                f"N, the value yN = xN + x(N+1) with part5 wrapping to part1 "
+                f"(e.g. y1 = x1 + x2, y4 = x4 + x1). {sharing} "
+                "Then write .optimize_benchmarks/collab.txt with one 'yN=value' "
+                "per line (any order) and report with that artifact. "
+                ".optimize_benchmarks/ exists."
+            ),
+            artifact_paths=[".optimize_benchmarks/collab.txt"],
+        )
+
+    def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
+        base = scan_root / "resources" / "_collab"
+        if not base.is_dir():
+            return False, "_collab directory missing from workspace (resources/_collab)"
+
+        xs: dict[int, int] = {}
+        for p in sorted(base.glob("part*.txt")):
+            m = re.match(r"part(\d+)\.txt", p.name)
+            if not m:
+                continue
+            first = p.read_text().splitlines()
+            if first and first[0].strip():
+                try:
+                    xs[int(m.group(1))] = int(first[0].strip())
+                except ValueError:
+                    continue
+        if not xs:
+            return True, "no parts found; empty collab is correct"
+
+        n = max(xs)
+        truth: dict[int, int] = {}
+        for i in xs:
+            if self.mode == "interdependent":
+                nxt = i + 1 if i < n else 1
+                truth[i] = xs[i] + xs.get(nxt, 0)
+            else:
+                truth[i] = xs[i] * 2
+
+        out = output_dir / "collab.txt"
+        if not out.exists():
+            return False, "collab.txt missing"
+        text = out.read_text()
+
+        produced: dict[int, int] = {}
+        for i in truth:
+            m = re.search(rf"\by{i}\s*=\s*(-?\d+)", text)
+            if m:
+                produced[i] = int(m.group(1))
+
+        missing = [i for i in truth if i not in produced]
+        if missing:
+            return False, f"missing y values for parts {sorted(missing)}"
+        wrong = {i: (produced[i], truth[i]) for i in truth if produced[i] != truth[i]}
+        if wrong:
+            return False, (
+                f"wrong values for parts {sorted(wrong)}: "
+                + ", ".join(f"y{i}={got} want {want}" for i, (got, want) in sorted(wrong.items()))
+            )
+        return True, f"collab ({self.mode}) matches all {len(truth)} parts"
+
+
 ALL_TASKS: list[BenchmarkTask] = [
     LargestFilesTask(),
     FibonacciTask(),

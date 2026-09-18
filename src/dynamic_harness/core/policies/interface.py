@@ -113,6 +113,7 @@ class Observation:
     assistant_content: str | None = None
     tree_depth: int = 0
     spawn_usage: dict[str, Any] | None = None
+    agent_id: str | None = None
 
 
 @runtime_checkable

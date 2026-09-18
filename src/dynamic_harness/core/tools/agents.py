@@ -333,6 +333,32 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
             f"resume(agent_id, note=...) instead of converse."
         )
 
+    backend = ctx.comms
+    if backend is not None:
+        # Communication layer enabled: route through the backend. The envelope
+        # (sender/kind/recipients) is injected so the effective recipient knows
+        # WHO routed WHAT — load-bearing for the relay topology's parent.
+        from ..comms import CommsMessage, render_incoming
+
+        msg = CommsMessage(
+            id=ctx.agent_id[:4], topic="", kind="instruction", stage="final",
+            sender_id=ctx.agent_id, recipients=[agent_id], content=message,
+        )
+        verdict = backend.route_message(ctx.sender_ref, msg)
+        if not verdict.allowed:
+            return f"Error: {verdict.refusal}"
+        recipient = verdict.recipients[0]
+        await ctx.deliver_comms_message(recipient, render_incoming(msg))
+        summary = ctx.latest_assistant_message(recipient)
+        responder = ctx.get_other_agent(recipient)
+        status = (
+            responder.task.status.value
+            if responder is not None
+            else target.task.status.value
+        )
+        return f"[Agent {recipient[:8]}] {summary}\n(Status: {status})"
+
+    # Layer off: today's behavior, byte-for-byte.
     await ctx.continue_with_input(agent_id, message)
 
     summary = ctx.latest_assistant_message(agent_id)

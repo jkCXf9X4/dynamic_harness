@@ -251,7 +251,8 @@ class LoopGuard(ReactivePolicy):
         self.exempt_tools: tuple[str, ...] = tuple(
             repeated_call_exempt_tools
             if repeated_call_exempt_tools is not None
-            else ("status", "usage", "result_read", "result_bash")
+            else ("status", "usage", "result_read", "result_bash",
+                  "channels", "channel_info", "channel_read")
         )
         # Remaining chances to nudge a looping agent out of its rut before
         # repeated-call detection force-fails it (0 = fail on first detection).

@@ -37,6 +37,9 @@ class ToolPermissionPolicy:
         "compress", "prune", "restore",
         "plan", "checkpoint",
         "result_read",
+        # Communication layer: coordination, not hands-on work.
+        "post", "channel_read", "channels", "channel_info",
+        "subscribe", "unsubscribe", "message",
     })
 
     ROLE_TOOL_OVERRIDES: dict[str, frozenset[str]] = {

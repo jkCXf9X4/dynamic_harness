@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from . import agents as _agents
 from . import artifacts as _artifacts
+from . import comms as _comms
 from . import context as _context
 from . import filesystem as _filesystem
 from . import network as _network
@@ -39,3 +40,11 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_artifacts.TOOL_ARCHIVE_DEF, _artifacts.archive)
     registry.register(_result_read.TOOL_RESULT_READ_DEF, _result_read.result_read)
     registry.register(_result_bash.TOOL_RESULT_BASH_DEF, _result_bash.result_bash)
+    # Communication layer (all topology cells share this surface).
+    registry.register(_comms.TOOL_POST_DEF, _comms.post)
+    registry.register(_comms.TOOL_CHANNEL_READ_DEF, _comms.channel_read)
+    registry.register(_comms.TOOL_CHANNELS_DEF, _comms.channels)
+    registry.register(_comms.TOOL_CHANNEL_INFO_DEF, _comms.channel_info)
+    registry.register(_comms.TOOL_SUBSCRIBE_DEF, _comms.subscribe)
+    registry.register(_comms.TOOL_UNSUBSCRIBE_DEF, _comms.unsubscribe)
+    registry.register(_comms.TOOL_MESSAGE_DEF, _comms.message)

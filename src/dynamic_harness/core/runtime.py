@@ -10,6 +10,7 @@ from uuid import uuid4
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..config import HarnessConfig
 from ..memory.repository import Commit, Repository
+from .comms import build_backend
 from .agent import Agent, progress_summary_block
 from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
@@ -68,6 +69,7 @@ class Runtime:
         # config is the only default provider, so there is no second hardcoded
         # fallback dictionary to drift (the old ``if config else <n>`` ladder).
         config = config or HarnessConfig()
+        self._config = config
         self.artifact_store = ArtifactStore(artifact_root)
         self.repository = Repository(repo_root)
         self.trace_store = TraceStore(trace_root) if trace_root else None
@@ -95,6 +97,10 @@ class Runtime:
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
         self._llm: LLMProvider | None = None
+        # Communication layer: None = disabled (topology "off" — `converse` keeps
+        # today's global by-ID behavior). Any other topology constructs the
+        # routing backend, which the comms tools delegate to.
+        self.comms = build_backend(config.communication, self)
         self._gitignore_filter: Callable[[str], bool] | None = None
         self._gitignore_mtime: float | None = None
         # Single source of per-agent construction knobs: built from config (with
@@ -139,6 +145,18 @@ class Runtime:
                 self._repo_root,
             )
         )
+        # Tell agents which communication topology is active and how to use it.
+        # Injected once (index-not-body): a channel directory / behavior rule,
+        # never live content. Only added when the layer is enabled.
+        if self.comms is not None:
+            notes.append(
+                "[Communication] topology=" + self.comms.name + ". "
+                "List channels with `channels`/`channel_info`, publish with "
+                "`post`, consume with `channel_read`, declare ongoing interest "
+                "with `subscribe`/`unsubscribe`. Direct peer messaging "
+                "(converse/message) follows this topology's routing rules — "
+                "read the tool result for refusals."
+            )
         self._environment_info: EnvironmentInfo = build_environment_info(notes=notes)
 
         self.event_bus = EventBus()
@@ -155,6 +173,23 @@ class Runtime:
         # subsequently-spawned agent gets one wired into its post-turn reactive
         # pass. Factories (not instances) so per-agent state never shares.
         self._reactive_policy_factories: list[Callable[[], "ReactivePolicy"]] = []
+        # Push-digest mode: every agent gets a CommsDigestPolicy that folds new
+        # subscribed-topic traffic into its context each turn. The closure reads
+        # self.comms live, so a reset() (which rebuilds the backend) still binds
+        # freshly-spawned agents to the current store.
+        if (
+            config.communication.digest_mode == "push"
+            and self.comms is not None
+        ):
+            from .comms import CommsDigestPolicy
+
+            self._reactive_policy_factories.append(
+                lambda: CommsDigestPolicy(
+                    self.comms,
+                    max_items=config.communication.digest_max_items,
+                    max_tokens=config.communication.digest_max_tokens,
+                )
+            )
 
         self._path_locks: dict[str, asyncio.Lock] = {}
         self._lock_guard = asyncio.Lock()
@@ -1043,6 +1078,21 @@ class Runtime:
     def get_agent(self, agent_id: str) -> Agent | None:
         return self._agents.get(agent_id)
 
+    # -- TopologyView (comms routing view) --------------------------------
+    # The comms backends route on these three facts. Live reads (not snapshots),
+    # so the routing decision always reflects the current tree.
+
+    def agent_parent_id(self, agent_id: str) -> str | None:
+        agent = self._agents.get(agent_id)
+        return agent.parent.id if agent is not None and agent.parent is not None else None
+
+    def agent_children_ids(self, agent_id: str) -> list[str]:
+        return list(self._task_graph.get(agent_id, []))
+
+    def agent_role(self, agent_id: str) -> str | None:
+        agent = self._agents.get(agent_id)
+        return agent.task.role if agent is not None else None
+
     def all_agents(self) -> dict[str, Agent]:
         return dict(self._agents)
 
@@ -1328,5 +1378,8 @@ class Runtime:
         self._agent_retries.clear()
         self._heal_counts.clear()
         self._agent_run_tasks_by_agent.clear()
+        # Fresh run, fresh channel store: a rebuilt backend drops stale topics /
+        # messages / watermarks keyed by dead agent ids. None keeps "off" off.
+        self.comms = build_backend(self._config.communication, self)
         if clear_handlers:
             self.event_bus.clear()

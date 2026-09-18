@@ -41,22 +41,24 @@ These four are not arbitrary modes — they form a recognisable lattice:
 So the real question is: **where is the routing decision made** (parent,
 sibling-scope, global, or topic-tagged) and what does that cost or earn?
 
-## What already exists (concrete hooks in this codebase)
+## What already exists (concrete hooks in this codebase) — verified 2026-09-17
 
-Every topology maps onto existing machinery — no new primitive is needed to
-*experiment*:
+Ground-truth audit of the current seams (correcting an earlier draft that
+assumed a ``_links`` spine and a sibling gate already existed — they do not):
 
-| Structure | Existing realization | Moving part to change |
-|-----------|----------------------|----------------------|
-| 1 Parent-mediated | `stream_children` + `converse` + `[child settled]` events (`core/agent.py:1374/1410/1461`); parent relays via `converse`/`read_artifact` | None — today's default. Rejected in the dev investigation for scale, but it is the baseline to measure against |
-| 2 Same-parent siblings | The `_links` spine: runtime `set[tuple[agent_id, agent_id]]`; eligibility `caller.parent is a.parent and caller.parent is b.parent` in the `converse` gate (`core/policies/permissions.py:51`; lookup `get_other_agent` `core/agent.py:1500`) | Open all-pairs links among a parent's children, or `delegate(..., ...)` group label expands links |
-| 3 One shared channel | A single runtime mailbox every agent subscribes to; the delivery path `submit_input`/`_inject_event` (`core/agent.py:1246`) and the broadcast-shaped `EventBus` (`core/events.py`) already exist | One runtime-side queue; every agent reads the same feed |
-| 4 Topic channels | `ArtifactStore` directories + `read_artifact` + `result_store` handles are already named, shared, immutable topic stores; `converse` is the push overlay | A registry mapping `topic → channel`; `join(topic)` / `post(content) → artifact` |
+| # | Structure | Current reality | Real moving part to change |
+|---|-----------|-----------------|----------------------------|
+| 1 | Parent-mediated | **Not the default.** `converse` is a global by-ID RPC (`runtime.get_agent` lookup, `core/agent.py:1708` → `runtime.py:1043`), gated only by target status (`ToolPermissionPolicy.conversable`, `core/policies/permissions.py:51`). A parent only "relays" if the model happens to forward a message. The pieces for a relay exist (`stream_children` + `[child settled]` folding, `_format_delegate_result` `core/agent.py:985`) | Add a backend that routes any non-parent-peer message to the common parent instead of the named peer |
+| 2 | Same-parent siblings | **Gate does not exist.** `converse` currently reaches *any* agent, including across unrelated subtrees; nothing enforces `caller.parent is a.parent and caller.parent is b.parent` | Add a backend that restricts the by-ID `message`/`converse` target to same-parent peers |
+| 3 | One shared channel | **Partial.** There is no runtime mailbox, but the delivery primitives exist: `submit_input`/`_inject_event` mid-run injection (`core/agent.py:1428/246`), tail-append via `_drain_inject_input` (`core/agent.py:1440`), and the broadcast-shaped `EventBus` (`core/events.py`) | One append-only log (per-subscriber watermark) in the runtime; read via a new cacheable tool, push via the digest policy |
+| 4 | Topic channels | **De facto shape, but implicit.** Agents emulate channels by writing scoped artifacts + `converse` pushes; nothing *routes* — there is no topic registry, no subscription, no per-agent delta | A `topic → {subscribers, artifact area}` registry + `join`/`post`/`read` tools; routing authority via a `ChannelPolicy` |
 
-Note: **4 is the codebase's current de facto shape** — agents "register channels
-of certain topics" by writing scoped artifacts and pushing `converse` messages.
-The open question is whether making the channel *explicit and routable* changes
-outcomes.
+**The corrected baseline:** today there is exactly *one* router — any-agent
+by-ID, blocking request/response. That is cell 2/3-ish reachability with none
+of the containment. The experiment therefore cannot run by toggling existing
+gates (there are none); it needs a thin, *explicit* routing layer whose only
+job is to make "who routes what" a swappable decision. The plan for that layer
+is in `PLAN.md` in this directory.
 
 ## What "agents succeed at their work" means — measurable
 
@@ -109,6 +111,9 @@ same budgets, N replicates per cell.
    untestable, that is itself a result.
 
 ## Investigation next steps
+
+> Implementation plan and tool-surface design: see `PLAN.md` in this directory.
+> The first three steps below are the plan's P0–P3 phases.
 
 - [ ] Write the success-battery definition (5 axes above, operationalized)
 - [ ] Define the task gradient (independent → interdependent → adversarial)

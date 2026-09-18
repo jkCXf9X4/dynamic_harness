@@ -140,7 +140,7 @@ Example:
 | `max_iterations` | `400` | Hard cap on agent loop iterations. Exceeding it force-fails the agent. |
 | `repeated_call_limit` | `5` | Hard cap on *identical* consecutive tool-call batches before the agent force-fails (prevents LLM loops). |
 | `repeated_recovery_attempts` | `2` | How many times a looping agent is nudged ("you are repeating yourself, change strategy") before repeated-call detection force-fails it. `0` fails immediately on first detection. |
-| `repeated_call_exempt_tools` | `["status", "usage", "result_read", "result_bash"]` | Tool names ignored for pure monitoring: status/usage are cheap live observations; `result_read`/`result_bash` are read-only paging/filtering of already-cached result snapshots (never re-execute work). A turn made up solely of these is not counted toward loop detection (genuinely stuck agents are still bounded by `max_iterations` / `max_agent_tokens` / `timeout_seconds`). |
+| `repeated_call_exempt_tools` | `["status", "usage", "result_read", "result_bash", "channels", "channel_info", "channel_read"]` | Tool names ignored for pure monitoring: status/usage are cheap live observations; `result_read`/`result_bash` are read-only paging/filtering of already-cached result snapshots (never re-execute work); `channels`/`channel_info`/`channel_read` are cheap channel-directory/delta reads (communication layer). A turn made up solely of these is not counted toward loop detection (genuinely stuck agents are still bounded by `max_iterations` / `max_agent_tokens` / `timeout_seconds`). |
 | `near_identical_threshold` | `3` | Soft-warning threshold: how many near-identical tool calls must appear in the sliding window before a notice is injected. Must be `>= 1`. A notice is non-fatal on its own. |
 | `near_identical_window` | `6` | Sliding-window size over which near-identical calls are counted; older calls are forgotten. Must be `>= 2`. |
 | `near_identical_similarity` | `0.6` | Minimum `difflib.SequenceMatcher` ratio (`0.0`–`1.0`) between two normalized calls to count as near-identical. Pagination knobs (`token_offset`/`token_limit`) are excluded from the signature so paged reads never look duplicated. Must be in `(0.0, 1.0]`. |
@@ -247,6 +247,37 @@ Example:
   }
 }
 ```
+
+---
+
+## `communication` — swappable routing layer (topology experiments)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `topology` | `"off"` | Routing backend for the communication layer. `off` disables the layer — `converse` keeps today's global by-ID behavior. `relay` (cell 1: parent-mediated — a peer message is routed to the common parent, who relays it), `siblings` (cell 2: direct peer messaging limited to same-parent siblings + parent/child), `shared` (cell 3: one shared channel — every post lands in one topic, per-agent delta reads, universal subscription), `topics` (cell 4: named topic channels with join/subscribe + per-agent watermarks). The tool surface is identical across topologies; only routing differs. |
+| `registration` | `"parent"` | Topic creation authority for `topics`. `parent` (default): only the root, or a topic pre-declared in `channels`, may be created — a boundary decision. `anarchic`: any agent may create any topic (the experiment's second cell-4 variant; expect sprawl). |
+| `shared_topic` | `"shared"` | Topic name used by the `shared` topology. |
+| `channels` | `[]` | Topics the root parent pre-declares/authorizes in `parent` registration mode (the delegation-boundary channel set). |
+| `digest_mode` | `"pull"` | How subscribed-topic traffic reaches an agent. `pull` (default): agents read via `channel_read` on demand — zero push cost. `push`: a `CommsDigestPolicy` folds each agent's new subscribed-topic deltas into a tail-appended user message every turn (newest-first, capped). This is the experiment's second variable — it prices injecting communication into context. |
+| `digest_max_items` | `5` | Push-digest cap: at most this many newest envelopes per turn. Must be `>= 1`. |
+| `digest_max_tokens` | `400` | Push-digest cap: at most this many tokens of envelopes per turn (`1 token ≈ 4 chars`). Must be `>= 1`. |
+
+Example — run the experiment's cell 4 (topic channels, parent-authorized):
+
+```json
+{
+  "communication": {
+    "topology": "topics",
+    "registration": "parent",
+    "channels": ["findings", "qa"]
+  }
+}
+```
+
+Tools added by the layer (all topologies): `post`, `channel_read`, `channels`,
+`channel_info`, `subscribe`, `unsubscribe`, `message`. `converse` routes
+through the backend when a topology is active. See
+`breakdown/verification/communication-structures/PLAN.md`.
 
 ---
 
