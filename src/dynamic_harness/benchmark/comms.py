@@ -48,12 +48,14 @@ COLLAB_TASKS: list[BenchmarkTask] = [
 
 
 def runtime_factory_for(
-    cell: str, llm: object | None = None
+    cell: str, llm: object | None = None, trace_root: Path | None = None
 ) -> Callable[[], Runtime]:
     """Build a fresh Runtime for ``cell`` (a fresh backend + empty channel store).
 
     ``llm``, when given, is injected via ``set_llm``; the provider is reused
     across runs (it is a stateless API client — callers own ``aclose``).
+    ``trace_root``, when given, is used as the runtime's JSONL trace store root
+    (per-agent trace files aid diagnosis of slow/flaky real-LLM runs).
     """
     if cell not in CELLS:
         raise ValueError(
@@ -81,6 +83,7 @@ def runtime_factory_for(
         rt = Runtime(
             artifact_root=base / "artifacts",
             repo_root=base / "repo",
+            trace_root=trace_root,
             generated_root=base / "gen",
             config=config,
         )

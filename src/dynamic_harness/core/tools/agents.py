@@ -338,10 +338,12 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
         # Communication layer enabled: route through the backend. The envelope
         # (sender/kind/recipients) is injected so the effective recipient knows
         # WHO routed WHAT — load-bearing for the relay topology's parent.
+        from uuid import uuid4
+
         from ..comms import CommsMessage, render_incoming
 
         msg = CommsMessage(
-            id=ctx.agent_id[:4], topic="", kind="instruction", stage="final",
+            id=uuid4().hex[:8], topic="", kind="instruction", stage="final",
             sender_id=ctx.agent_id, recipients=[agent_id], content=message,
         )
         verdict = backend.route_message(ctx.sender_ref, msg)
@@ -349,6 +351,7 @@ async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:
             return f"Error: {verdict.refusal}"
         recipient = verdict.recipients[0]
         await ctx.deliver_comms_message(recipient, render_incoming(msg))
+        backend.log_delivery(msg, [recipient], mode="blocking")
         summary = ctx.latest_assistant_message(recipient)
         responder = ctx.get_other_agent(recipient)
         status = (

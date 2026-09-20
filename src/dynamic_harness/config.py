@@ -315,6 +315,14 @@ class CommsConfig(BaseModel):
         description="Push-digest cap: at most this many tokens of envelopes per "
                     "turn (1 token ≈ 4 chars).",
     )
+    trace: bool = Field(
+        default=True,
+        description="Persist a machine-readable audit trail of all communication "
+                    "(route verdicts, posts, delta reads, subscription changes, "
+                    "deliveries) as 'comms.jsonl' under the trace root. True by "
+                    "default whenever a topology is active; set false to disable. "
+                    "Zero effect when topology is 'off' (no layer, no log).",
+    )
 
 
 class AgentConfig(BaseModel):

@@ -149,10 +149,12 @@ TOOL_MESSAGE_DEF = ToolDef(
 
 
 def _new_message(ctx: "ToolContext", topic: str, kind: str, stage: str, content: str, recipients: list[str]):
+    from uuid import uuid4
+
     from ..comms import CommsMessage
 
     return CommsMessage(
-        id=ctx.agent_id[:4], topic=topic, kind=kind, stage=stage,
+        id=uuid4().hex[:8], topic=topic, kind=kind, stage=stage,
         sender_id=ctx.agent_id, recipients=recipients, content=content,
     )
 
@@ -240,5 +242,6 @@ async def message(*, ctx: "ToolContext", agent_id: str, content: str, kind: str 
         return f"Error: {verdict.refusal}"
     for recipient in verdict.recipients:
         ctx.queue_comms_message(recipient, render_incoming(msg))
+    backend.log_delivery(msg, verdict.recipients, mode="queued")
     shown = ", ".join(f"{r[:8]}" for r in verdict.recipients)
     return f"Message routed to: {shown}."

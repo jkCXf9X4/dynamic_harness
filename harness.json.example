@@ -55,6 +55,7 @@
     "channels": [],
     "digest_mode": "pull",
     "digest_max_items": 5,
-    "digest_max_tokens": 400
+    "digest_max_tokens": 400,
+    "trace": true
   }
 }

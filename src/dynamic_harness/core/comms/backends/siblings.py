@@ -15,7 +15,7 @@ class SiblingsBackend(CommsBackend):
     name = "siblings"
     channels_enabled = False
 
-    def route_message(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
+    def _decide(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
         target = msg.recipients[0] if msg.recipients else None
         if target is None or target == sender.agent_id:
             return SendVerdict.refuse("no valid recipient")

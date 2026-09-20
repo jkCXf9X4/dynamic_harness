@@ -261,6 +261,7 @@ Example:
 | `digest_mode` | `"pull"` | How subscribed-topic traffic reaches an agent. `pull` (default): agents read via `channel_read` on demand — zero push cost. `push`: a `CommsDigestPolicy` folds each agent's new subscribed-topic deltas into a tail-appended user message every turn (newest-first, capped). This is the experiment's second variable — it prices injecting communication into context. |
 | `digest_max_items` | `5` | Push-digest cap: at most this many newest envelopes per turn. Must be `>= 1`. |
 | `digest_max_tokens` | `400` | Push-digest cap: at most this many tokens of envelopes per turn (`1 token ≈ 4 chars`). Must be `>= 1`. |
+| `trace` | `true` | Persist a machine-readable audit trail of all communication (route verdicts with requested-vs-effective recipients, posts, delta reads, subscription changes, deliveries) as `comms.jsonl` under the trace root, next to the per-agent traces. `true` by default whenever a topology is active; set `false` to disable. Zero effect when `topology` is `"off"`. Follow live with `tail -f` or replay post-run. |
 
 Example — run the experiment's cell 4 (topic channels, parent-authorized):
 

@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .channel import ChannelPolicy
+from .log import CommsLog
 from .message import AgentRef, CommsMessage, TopicInfo
 
 
@@ -75,13 +76,43 @@ class CommsBackend:
         "use the channel tools (post/channel_read) instead"
     )
 
-    def __init__(self, view: TopologyView, policy: ChannelPolicy) -> None:
+    def __init__(
+        self, view: TopologyView, policy: ChannelPolicy, log: CommsLog | None = None
+    ) -> None:
         self._view = view
         self._policy = policy
+        self._log = log
         self._topics: dict[str, TopicInfo] = {}
         self._messages: dict[str, list[CommsMessage]] = {}
         # (agent_id, topic) -> last seen seq (per-subscriber delta read).
         self._watermarks: dict[tuple[str, str], int] = {}
+
+    # -- audit trail --------------------------------------------------------
+
+    def _record(self, type_: str, **fields: Any) -> None:
+        """Best-effort one-line audit entry (never fails or slows the run)."""
+        log = self._log
+        if log is None:
+            return
+        log.record(type=type_, topology=self.name, **fields)
+
+    def log_delivery(
+        self, msg: CommsMessage, recipients: list[str], *, mode: str = "queued"
+    ) -> None:
+        """Host-side hook: record that routed envelopes entered target inboxes.
+
+        ``mode`` distinguishes the blocking ``converse`` wait from the
+        fire-and-forget ``message`` queue — the two delivery paths.
+        """
+        self._record(
+            "deliver",
+            msg_id=msg.id,
+            kind=msg.kind,
+            topic=msg.topic,
+            sender=msg.sender_id,
+            to=list(recipients),
+            mode=mode,
+        )
 
     # -- identity helpers -------------------------------------------------
 
@@ -117,6 +148,27 @@ class CommsBackend:
     # -- routing: by-ID messaging (converse / message) ---------------------
 
     def route_message(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
+        """Audited routing: decide, then record the verdict.
+
+        ``_decide`` is the swappable routing decision (subclasses override it);
+        this wrapper guarantees every verdict — allowed or refused, original or
+        rewritten recipients — lands in the audit log exactly once.
+        """
+        verdict = self._decide(sender, msg)
+        self._record(
+            "route",
+            msg_id=msg.id,
+            kind=msg.kind,
+            topic=msg.topic,
+            sender=sender.agent_id,
+            requested=list(msg.recipients),
+            effective=list(verdict.recipients),
+            allowed=verdict.allowed,
+            refusal=verdict.refusal,
+        )
+        return verdict
+
+    def _decide(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
         """Default: direct along the parent-child hierarchy; peers refused.
 
         Subclasses relax (siblings: same-parent peers) or re-route (relay:
@@ -154,11 +206,20 @@ class CommsBackend:
     ) -> str | None:
         """Append a message to a topic. Returns a refusal reason or None."""
         if not self.channels_enabled:
+            self._record(
+                "post", topic=topic, sender=sender.agent_id,
+                refusal=self._no_channels_refusal(),
+            )
             return self._no_channels_refusal()
         topic = self._normalize_topic(topic)
+        created = topic not in self._topics
         if topic not in self._topics:
             allowed, why = self._policy.may_create(sender, topic, self._registry_snapshot())
             if not allowed:
+                self._record(
+                    "post", topic=topic, sender=sender.agent_id,
+                    refusal=f"cannot create topic '{topic}': {why}",
+                )
                 return f"cannot create topic '{topic}': {why}"
             self._topics[topic] = TopicInfo(name=topic, owner=sender.agent_id)
         info = self._topics[topic]
@@ -176,50 +237,103 @@ class CommsBackend:
         info.last_activity = msg.created_at
         # The sender auto-subscribes so its own posts show up in channel_read.
         info.subscribers.add(sender.agent_id)
+        self._record(
+            "post",
+            msg_id=msg.id,
+            topic=topic,
+            seq=msg.seq,
+            sender=sender.agent_id,
+            kind=kind,
+            stage=stage,
+            created=created,
+            headline=msg.headline(),
+        )
         return None
 
     def subscribe(self, agent: AgentRef, topic: str) -> str | None:
         if not self.channels_enabled:
+            self._record(
+                "subscribe", topic=topic, agent=agent.agent_id,
+                refusal=self._no_channels_refusal(),
+            )
             return self._no_channels_refusal()
         topic = self._normalize_topic(topic)
+        created = topic not in self._topics
         if topic not in self._topics:
             allowed, why = self._policy.may_create(agent, topic, self._registry_snapshot())
             if not allowed:
+                self._record(
+                    "subscribe", topic=topic, agent=agent.agent_id,
+                    refusal=f"cannot join unknown topic '{topic}': {why}",
+                )
                 return f"cannot join unknown topic '{topic}': {why}"
             self._topics[topic] = TopicInfo(name=topic, owner=agent.agent_id)
         else:
             allowed, why = self._policy.may_join(agent, topic, self._registry_snapshot())
             if not allowed:
+                self._record(
+                    "subscribe", topic=topic, agent=agent.agent_id,
+                    refusal=f"cannot subscribe to '{topic}': {why}",
+                )
                 return f"cannot subscribe to '{topic}': {why}"
         self._topics[topic].subscribers.add(agent.agent_id)
+        self._record(
+            "subscribe", topic=topic, agent=agent.agent_id, created=created,
+        )
         return None
 
     def unsubscribe(self, agent: AgentRef, topic: str) -> str | None:
         if not self.channels_enabled:
+            self._record(
+                "unsubscribe", topic=topic, agent=agent.agent_id,
+                refusal=self._no_channels_refusal(),
+            )
             return self._no_channels_refusal()
         topic = self._normalize_topic(topic)
         info = self._topics.get(topic)
         if info is None:
+            self._record(
+                "unsubscribe", topic=topic, agent=agent.agent_id,
+                refusal=f"unknown topic '{topic}'",
+            )
             return f"unknown topic '{topic}'"
         info.subscribers.discard(agent.agent_id)
+        self._record("unsubscribe", topic=topic, agent=agent.agent_id)
         return None
 
     def read(self, agent: AgentRef, topic: str) -> ReadOutcome:
         """Delta read: only messages newer than the agent's watermark for this
         topic, then advance the watermark. Pull-only and cache-safe."""
         if not self.channels_enabled:
-            return ReadOutcome(topic=topic, refusal=self._no_channels_refusal())
+            refusal = self._no_channels_refusal()
+            self._record(
+                "read", topic=topic, agent=agent.agent_id,
+                count=0, refusal=refusal,
+            )
+            return ReadOutcome(topic=topic, refusal=refusal)
         topic = self._normalize_topic(topic)
         if topic not in self._topics:
-            return ReadOutcome(
-                topic=topic,
-                refusal=f"unknown topic '{topic}' (see `channels` for known topics)",
+            refusal = f"unknown topic '{topic}' (see `channels` for known topics)"
+            self._record(
+                "read", topic=topic, agent=agent.agent_id,
+                count=0, refusal=refusal,
             )
+            return ReadOutcome(topic=topic, refusal=refusal)
         msgs = self._messages.get(topic, [])
         wm = self._watermarks.get((agent.agent_id, topic), 0)
         new = [m for m in msgs if m.seq > wm]
+        to_seq = wm
         if new:
-            self._watermarks[(agent.agent_id, topic)] = new[-1].seq
+            to_seq = new[-1].seq
+            self._watermarks[(agent.agent_id, topic)] = to_seq
+        self._record(
+            "read",
+            topic=topic,
+            agent=agent.agent_id,
+            from_seq=wm,
+            to_seq=to_seq,
+            count=len(new),
+        )
         return ReadOutcome(topic=topic, messages=new)
 
     def channels(self, agent: AgentRef) -> list[dict[str, Any]]:

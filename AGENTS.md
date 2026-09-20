@@ -353,8 +353,13 @@ enabled. Read-only tools are repeated-call-exempt; mutators are never cached.
 `communication.digest_mode: "push"` additionally wires a `CommsDigestPolicy`
 per agent that folds new subscribed-topic traffic into context each turn
 (capped by `digest_max_items`/`digest_max_tokens`; empty digest = no-op).
-The backend is host-agnostic (routes on `AgentRef` + the `TopologyView`
-interface the runtime implements) — see
+When a topology is active, every communication act is audited to
+`<trace_root>/comms.jsonl` (`communication.trace`, default true): route
+verdicts with requested-vs-effective recipients and refusals, posts, delta
+reads (watermark from→to), subscription changes, and deliveries (blocking
+`converse` vs queued `message`) — one cross-agent file, followable live with
+`tail -f` or replayable post-run. The backend is host-agnostic (routes on
+`AgentRef` + the `TopologyView` interface the runtime implements) — see
 `breakdown/verification/communication-structures/PLAN.md`.
 
 ## Safety Invariants

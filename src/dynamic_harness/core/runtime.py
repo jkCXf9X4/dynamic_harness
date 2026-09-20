@@ -10,7 +10,7 @@ from uuid import uuid4
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
 from ..config import HarnessConfig
 from ..memory.repository import Commit, Repository
-from .comms import build_backend
+from .comms import CommsLog, build_backend
 from .agent import Agent, progress_summary_block
 from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
@@ -99,8 +99,13 @@ class Runtime:
         self._llm: LLMProvider | None = None
         # Communication layer: None = disabled (topology "off" — `converse` keeps
         # today's global by-ID behavior). Any other topology constructs the
-        # routing backend, which the comms tools delegate to.
-        self.comms = build_backend(config.communication, self)
+        # routing backend, which the comms tools delegate to. The audit trail
+        # (`comms.jsonl`) lives under the trace root next to per-agent traces;
+        # it is best-effort (never fails the run) and reused across reset().
+        self._comms_log: CommsLog | None = None
+        if config.communication.trace and trace_root is not None:
+            self._comms_log = CommsLog(trace_root / "comms.jsonl")
+        self.comms = build_backend(config.communication, self, log=self._comms_log)
         self._gitignore_filter: Callable[[str], bool] | None = None
         self._gitignore_mtime: float | None = None
         # Single source of per-agent construction knobs: built from config (with
@@ -1380,6 +1385,9 @@ class Runtime:
         self._agent_run_tasks_by_agent.clear()
         # Fresh run, fresh channel store: a rebuilt backend drops stale topics /
         # messages / watermarks keyed by dead agent ids. None keeps "off" off.
-        self.comms = build_backend(self._config.communication, self)
+        # The comms audit log follows the same lifecycle as traces (both live
+        # under the trace root, wiped by clear() above); the reused CommsLog
+        # object simply keeps writing to the path going forward.
+        self.comms = build_backend(self._config.communication, self, log=self._comms_log)
         if clear_handlers:
             self.event_bus.clear()

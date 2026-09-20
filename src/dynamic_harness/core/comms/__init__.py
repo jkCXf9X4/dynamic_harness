@@ -11,6 +11,7 @@ from .backend import CommsBackend, ReadOutcome, SendVerdict, TopologyView
 from .channel import ChannelPolicy
 from .digest import CommsDigestPolicy, render_digest
 from .factory import build_backend
+from .log import CommsLog
 from .message import (
     AgentRef,
     CommsMessage,
@@ -28,6 +29,7 @@ __all__ = [
     "CommsDigestPolicy",
     "render_digest",
     "build_backend",
+    "CommsLog",
     "AgentRef",
     "CommsMessage",
     "TopicInfo",

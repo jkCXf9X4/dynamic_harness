@@ -18,8 +18,8 @@ class SharedBackend(CommsBackend):
     name = "shared"
     channels_enabled = True
 
-    def __init__(self, view, policy, *, shared_topic: str = "shared") -> None:
-        super().__init__(view, policy)
+    def __init__(self, view, policy, *, shared_topic: str = "shared", log=None) -> None:
+        super().__init__(view, policy, log=log)
         self._shared_topic = shared_topic
         self._topics[shared_topic] = TopicInfo(name=shared_topic, owner=None)
 
@@ -34,14 +34,16 @@ class SharedBackend(CommsBackend):
     def subscribe(self, agent: AgentRef, topic: str) -> str | None:
         # Universal subscription: trivially satisfied, never a failure.
         self._topics[self._shared_topic].subscribers.add(agent.agent_id)
+        self._record("subscribe", topic=self._shared_topic, agent=agent.agent_id)
         return None
 
     def unsubscribe(self, agent: AgentRef, topic: str) -> str | None:
         self._topics[self._shared_topic].subscribers.discard(agent.agent_id)
+        self._record("unsubscribe", topic=self._shared_topic, agent=agent.agent_id)
         return None
 
-    def route_message(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
-        verdict = super().route_message(sender, msg)
+    def _decide(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
+        verdict = super()._decide(sender, msg)
         if verdict.allowed:
             return verdict
         return SendVerdict.refuse(

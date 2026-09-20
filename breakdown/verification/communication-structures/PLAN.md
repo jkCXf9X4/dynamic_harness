@@ -338,9 +338,13 @@ variance budget agreed before calling a loser on noise.
   `run_cells(tasks, llm, cells, replicates, workspace)` reusing `run_one` +
   `MetricsCollector`. Reproducibility proven by a deterministic stub-LLM test
   (two replicates → identical metrics). Tests: `test_comms_benchmark.py`.
-- **P4 — the run.** ⏳ Real-LLM probes via `run_cells` (N replicates per cell
-  and per cell-4 registration variant), report per cell on the five axes —
-  needs an LLM + replicate budget; that is an operational run, not more code.
+- **P4 — the run.** ✅ First real-LLM probe (2026-09-18, deepseek-v4-flash via
+  OpenRouter): `off` deadlocks on circular `converse` (see `FINDINGS.md`),
+  `shared` completes correctly in 40 turns / 389s, `topics_parent` also
+  completes but with ~6× churn (232 turns, 5.2M tokens) — n=1 per cell;
+  `RESULTS.md` / `metrics-cells.json` / per-run traces in this directory.
+  Repeat with replicates + the remaining cells (relay, siblings,
+  topics_anarchic) when budget allows.
 
 ## 9. Risks and decisions to confirm
 

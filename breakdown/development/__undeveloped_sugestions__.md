@@ -264,3 +264,10 @@ initial structures to compare:
 - all nodes can register/create channels of certain topics 
 
 Answer concisely and directly. try to keep related information to a minimum
+
+
+---
+
+
+Lets make the communication visible and auditable, evaluate how this could be done. File based traces are enabling post exit and during execution audits and reviews
+

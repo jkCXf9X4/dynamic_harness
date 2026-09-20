@@ -16,8 +16,8 @@ class TopicsBackend(CommsBackend):
     name = "topics"
     channels_enabled = True
 
-    def route_message(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
-        verdict = super().route_message(sender, msg)
+    def _decide(self, sender: AgentRef, msg: CommsMessage) -> SendVerdict:
+        verdict = super()._decide(sender, msg)
         if verdict.allowed:
             return verdict
         return SendVerdict.refuse(

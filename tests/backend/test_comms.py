@@ -15,6 +15,7 @@ Two layers of coverage:
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,7 @@ from dynamic_harness.core.comms import (
     AgentRef,
     ChannelPolicy,
     CommsDigestPolicy,
+    CommsLog,
     build_backend,
     render_digest,
 )
@@ -318,6 +320,121 @@ async def test_converse_refusal_surface_when_comms_on(tmp: Path):
     # Peer converse in a topics topology is refused without touching the target.
     out = await converse(ctx=ToolContext(a), agent_id=b.id, message="hi")
     assert out.startswith("Error:") and "peer" in out
+
+
+# -- audit trail (comms.jsonl) ----------------------------------------------
+
+
+def _log_lines(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+
+
+def test_comms_log_records_channel_lifecycle(tmp: Path):
+    path = tmp / "comms.jsonl"
+    b = TopicsBackend(FakeView(), ChannelPolicy(registration="anarchic"), log=CommsLog(path))
+    a, c = _ref("a", "r"), _ref("c", "b")
+    b.post(a, "findings", "parser bug in line 12", kind="notification")
+    b.subscribe(c, "findings")
+    out = b.read(c, "findings")
+    assert out.refusal is None and len(out.messages) == 1
+
+    lines = _log_lines(path)
+    assert [l["type"] for l in lines] == ["post", "subscribe", "read"]
+    post = lines[0]
+    assert post["topic"] == "findings" and post["sender"] == "a"
+    assert post["seq"] == 1 and post["kind"] == "notification"
+    assert post["created"] is True and "parser bug" in post["headline"]
+    assert lines[1]["agent"] == "c" and lines[1]["created"] is False
+    read = lines[2]
+    assert read["agent"] == "c" and read["count"] == 1
+    assert read["from_seq"] == 0 and read["to_seq"] == 1
+    # Second read records an empty delta with the advanced watermark.
+    b.read(c, "findings")
+    assert _log_lines(path)[-1]["count"] == 0 and _log_lines(path)[-1]["from_seq"] == 1
+
+
+def test_comms_log_records_route_verdicts_and_deliveries(tmp: Path):
+    path = tmp / "comms.jsonl"
+    b = SiblingsBackend(FakeView(), None, log=CommsLog(path))
+    verdict = b.route_message(_ref("a", "r"), _msg("a", "b"))
+    assert verdict.allowed
+    b.log_delivery(_msg("a", "b", "hi b"), verdict.recipients, mode="queued")
+
+    refused = b.route_message(_ref("c", "b"), _msg("c", "a"))
+    assert not refused.allowed
+
+    allowed_line, deliver, refused_line = _log_lines(path)
+    assert allowed_line["type"] == "route" and allowed_line["allowed"] is True
+    assert allowed_line["requested"] == ["b"] and allowed_line["effective"] == ["b"]
+    assert refused_line["allowed"] is False and refused_line["refusal"]
+    assert deliver["type"] == "deliver" and deliver["mode"] == "queued"
+    assert deliver["to"] == ["b"]
+
+
+def test_comms_log_relay_records_rewritten_recipients(tmp: Path):
+    path = tmp / "comms.jsonl"
+    b = RelayBackend(FakeView(), None, log=CommsLog(path))
+    verdict = b.route_message(_ref("a", "r"), _msg("a", "b"))
+    assert verdict.allowed and verdict.recipients == ["r"]
+    line = _log_lines(path)[0]
+    assert line["requested"] == ["b"] and line["effective"] == ["r"]
+
+
+def test_comms_log_refusals_when_channels_disabled(tmp: Path):
+    path = tmp / "comms.jsonl"
+    b = SiblingsBackend(FakeView(), None, log=CommsLog(path))
+    b.post(_ref("a", "r"), "x", "hi")
+    b.read(_ref("a", "r"), "x")
+    lines = _log_lines(path)
+    assert lines[0]["type"] == "post" and lines[0]["refusal"]
+    assert lines[1]["type"] == "read" and lines[1]["refusal"]
+
+
+def test_runtime_wires_comms_log(tmp: Path):
+    rt = Runtime(
+        artifact_root=tmp / "artifacts",
+        repo_root=tmp / "repo",
+        trace_root=tmp / "traces",
+        config=TOPICS_CFG,
+    )
+    log_path = tmp / "traces" / "comms.jsonl"
+    assert rt.comms is not None
+    root, a, b, c = _tree(rt)
+    asyncio.run(comms_tools.post(ctx=ToolContext(a), topic="findings", content="hi"))
+    assert any(
+        l["type"] == "post" and l["topic"] == "findings" for l in _log_lines(log_path)
+    )
+    # reset() wipes the channel store + trace root (fresh-run semantics); the
+    # same CommsLog object keeps writing to the path going forward.
+    rt.reset()
+    assert rt.comms is not None
+    assert not log_path.exists()  # wiped with the trace root
+    root, a, b, c = _tree(rt)
+    asyncio.run(comms_tools.post(ctx=ToolContext(a), topic="findings", content="hi again"))
+    assert any(
+        l["type"] == "post" and l["topic"] == "findings" for l in _log_lines(log_path)
+    )
+
+
+def test_runtime_comms_log_disabled_by_config(tmp: Path):
+    cfg = HarnessConfig(
+        communication=CommsConfig(
+            topology="topics", registration="parent", channels=["findings"], trace=False
+        )
+    )
+    rt = Runtime(
+        artifact_root=tmp / "artifacts",
+        repo_root=tmp / "repo",
+        trace_root=tmp / "traces",
+        config=cfg,
+    )
+    log_path = tmp / "traces" / "comms.jsonl"
+    assert not log_path.exists()
+    root, a, b, c = _tree(rt)
+    asyncio.run(comms_tools.post(ctx=ToolContext(a), topic="findings", content="hi"))
+    assert not log_path.exists()
 
 
 # -- P2: push-digest policy -------------------------------------------------
