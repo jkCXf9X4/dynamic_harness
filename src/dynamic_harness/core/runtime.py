@@ -1213,6 +1213,7 @@ class Runtime:
         completion_tokens: int = 0,
         cached_tokens: int = 0,
         message_count: int = 0,
+        cost: float | None = None,
     ) -> None:
         await self.usage_tracker.record_usage(
             agent_id,
@@ -1220,6 +1221,7 @@ class Runtime:
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
             message_count=message_count,
+            cost=cost,
         )
 
     def get_usage(self, agent_id: str) -> dict:

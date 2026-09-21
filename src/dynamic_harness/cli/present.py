@@ -36,6 +36,15 @@ def cache_hit_rate(prompt_tokens: int, cached_tokens: int) -> float:
     return min(1.0, cached_tokens / prompt_tokens)
 
 
+def fmt_usd(cost: float) -> str:
+    """Compact USD formatting: whole dollars → 2dp, cents → 4dp, else 6dp."""
+    if cost >= 1:
+        return f"{cost:.2f}"
+    if cost >= 0.01:
+        return f"{cost:.4f}"
+    return f"{cost:.6f}"
+
+
 @dataclass
 class AgentNode:
     """Tree node view-model: engine-agnostic representation of one agent."""
@@ -49,6 +58,7 @@ class AgentNode:
     completion_tokens: int = 0
     cached_tokens: int = 0
     cost_usd: float = 0.0
+    cum_cost_usd: float = 0.0
     artifact_ids: list[str] = field(default_factory=list)
     trace_path: str | None = None
     children: list[AgentNode] = field(default_factory=list)
@@ -67,14 +77,15 @@ class AgentNode:
 
     @property
     def usage(self) -> str:
-        if not (self.tokens or self.messages):
+        if not (self.tokens or self.messages or self.cost_usd or self.cum_cost_usd):
             return ""
         # Show the provider-billed breakdown so a cache-heavy prompt isn't
         # hidden behind a single inflated total: `prompt` is the FULL prompt
         # (cached portion included, billed alongside as `cached`). `messages`
         # is the cumulative count sent to the LLM (persists past completion,
-        # unlike live context length). `cost` is the USD estimate from the
-        # configured per-1M-token prices (hidden when unknown/zero).
+        # unlike live context length). `$` is this agent's own USD cost
+        # (provider-reported when available, else a configured-price estimate);
+        # `Σ$` adds all descendants so a delegator shows its sub-tree total.
         parts = []
         if self.prompt_tokens or self.completion_tokens:
             parts.append(f"{self.prompt_tokens}p")
@@ -88,7 +99,9 @@ class AgentNode:
         if self.messages:
             parts.append(f"{self.messages}msgs")
         if self.cost_usd:
-            parts.append(f"${self.cost_usd:.4f}")
+            parts.append(f"${fmt_usd(self.cost_usd)}")
+        if self.cum_cost_usd and self.cum_cost_usd != self.cost_usd:
+            parts.append(f"Σ${fmt_usd(self.cum_cost_usd)}")
         return f" ({', '.join(parts)})"
 
 
@@ -130,6 +143,15 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
         agent = agents[aid]
         usage = runtime.get_usage(aid)
         p = prov.get(aid, {})
+        children = [build(cid) for cid in g.get(aid, []) if cid in agents]
+        # Prefer the provider-reported cost (OpenRouter bills per request at the
+        # routed provider's price, so a preset per-1M-token price would be wrong);
+        # fall back to the configured-price estimate only when none was reported.
+        provider_cost = usage.get("cost", 0.0)
+        cost_usd = provider_cost or runtime.cost_policy.cost(
+            tokens_in=usage.get("prompt_tokens", 0),
+            tokens_out=usage.get("completion_tokens", 0),
+        )
         return AgentNode(
             agent_id=agent.id,
             description=agent.task.description,
@@ -142,15 +164,11 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             # live context length it survives `_free_context()` after the agent
             # completes, so a finished agent keeps its msg counter in the tree.
             messages=usage.get("message_count", 0),
-            cost_usd=runtime.cost_policy.cost(
-                tokens_in=usage.get("prompt_tokens", 0),
-                tokens_out=usage.get("completion_tokens", 0),
-            ),
+            cost_usd=cost_usd,
+            cum_cost_usd=cost_usd + sum(c.cum_cost_usd for c in children),
             artifact_ids=p.get("artifact_ids", []),
             trace_path=trace_path(agent.id),
-            children=[
-                build(cid) for cid in g.get(aid, []) if cid in agents
-            ],
+            children=children,
         )
 
     return [build(aid) for aid in roots]
@@ -167,7 +185,7 @@ def build_stats(runtime: Runtime) -> Stats:
         prompt_tokens=prompt,
         cached_tokens=cached,
         cache_hit_rate=cache_hit_rate(prompt, cached),
-        cost_usd=runtime.cost_policy.cost(
+        cost_usd=total.get("cost", 0.0) or runtime.cost_policy.cost(
             tokens_in=prompt,
             tokens_out=total.get("completion_tokens", 0),
         ),
@@ -178,10 +196,11 @@ def render_text_tree(nodes: list[AgentNode]) -> str:
     """Plain-text agent tree for quick operator evaluation.
 
     One line per agent showing id, status, description, cumulative messages,
-    a compact token breakdown, and a USD cost marker (when prices are
-    configured) — enough to spot a stuck/looping agent without a live
-    dashboard. Engine-agnostic (no terminal-library markup) so it can be
-    persisted to disk.
+    a compact token breakdown, and USD cost markers — own cost (``$``) and
+    subtree cost including all descendants (``Σ$``), when the provider reports
+    cost or prices are configured — enough to spot a stuck/looping agent
+    without a live dashboard. Engine-agnostic (no terminal-library markup) so
+    it can be persisted to disk.
     """
     if not nodes:
         return "(no agents)\n"

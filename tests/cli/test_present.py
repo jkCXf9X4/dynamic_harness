@@ -137,16 +137,59 @@ class TestBuildAgentTree:
         node = build_agent_tree(runtime)[0]
         assert node.cost_usd == pytest.approx(0.4)
 
+    def test_provider_cost_preferred_over_estimate(self, runtime) -> None:
+        runtime.cost_policy.price_input_per_mtok = 10.0  # absurd; ignored when provider reports
+        aid = _seed(runtime, n=1)[0]
+        asyncio.run(runtime.record_usage(aid, prompt_tokens=1000, cost=0.05))
+        assert build_agent_tree(runtime)[0].cost_usd == pytest.approx(0.05)
+
+    def test_cum_cost_includes_children(self, runtime) -> None:
+        root_id = _seed(runtime, n=1)[0]
+        root = runtime.get_agent(root_id)
+        child = runtime.delegate(Task(description="child"), parent=root)
+        grand = runtime.delegate(Task(description="grand"), parent=child)
+        asyncio.run(runtime.record_usage(root_id, cost=0.01))
+        asyncio.run(runtime.record_usage(child.id, cost=0.02))
+        asyncio.run(runtime.record_usage(grand.id, cost=0.03))
+        nodes = build_agent_tree(runtime)
+        assert nodes[0].cost_usd == pytest.approx(0.01)
+        assert nodes[0].cum_cost_usd == pytest.approx(0.06)
+        assert nodes[0].children[0].cum_cost_usd == pytest.approx(0.05)
+        assert nodes[0].children[0].children[0].cum_cost_usd == pytest.approx(0.03)
+
+    def test_delegator_parent_shows_subtree_marker(self, runtime) -> None:
+        root_id = _seed(runtime, n=1)[0]
+        root = runtime.get_agent(root_id)
+        child = runtime.delegate(Task(description="child"), parent=root)
+        asyncio.run(runtime.record_usage(child.id, cost=0.04))
+        node = build_agent_tree(runtime)[0]
+        assert node.cost_usd == 0.0
+        assert node.usage == " (Σ$0.0400)"
+
     def test_usage_renders_cost_marker(self) -> None:
         node = AgentNode(
             agent_id="id", description="d", status="running",
-            tokens=1000, messages=1, cost_usd=0.0041,
+            tokens=1000, messages=1, cost_usd=0.05,
         )
-        assert node.usage == " (1000t, 1msgs, $0.0041)"
+        assert node.usage == " (1000t, 1msgs, $0.0500)"
 
     def test_usage_omits_zero_cost(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", tokens=1000)
         assert node.usage == " (1000t)"
+
+    def test_usage_shows_cumulative_subtree_cost(self) -> None:
+        node = AgentNode(agent_id="id", description="d", status="running", cum_cost_usd=0.05)
+        assert node.usage == " (Σ$0.0500)"
+
+    def test_usage_omits_dup_cumulative_when_no_children(self) -> None:
+        node = AgentNode(
+            agent_id="id", description="d", status="running",
+            tokens=100, cost_usd=0.05, cum_cost_usd=0.05,
+        )
+        assert node.usage == " (100t, $0.0500)"
+
+    def test_fmt_usd_subcent_six_decimals(self) -> None:
+        assert present.fmt_usd(0.00014) == "0.000140"
 
     def test_cache_hit_rate_property(self) -> None:
         node = AgentNode(
@@ -205,6 +248,12 @@ class TestBuildStats:
         a = _seed(runtime, n=1)[0]
         asyncio.run(runtime.record_usage(a, prompt_tokens=1_000_000))
         assert build_stats(runtime).cost_usd == pytest.approx(0.5)
+
+    def test_stats_cost_prefers_provider_reported(self, runtime) -> None:
+        runtime.cost_policy.price_input_per_mtok = 10.0
+        a = _seed(runtime, n=1)[0]
+        asyncio.run(runtime.record_usage(a, prompt_tokens=1000, cost=0.07))
+        assert build_stats(runtime).cost_usd == pytest.approx(0.07)
 
 
 def test_present_has_no_textual_dependency() -> None:

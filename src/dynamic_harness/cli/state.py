@@ -30,6 +30,7 @@ def _node_dict(node: AgentNode) -> dict[str, Any]:
         "cached_tokens": node.cached_tokens,
         "cache_hit_rate": node.cache_hit_rate,
         "cost_usd": node.cost_usd,
+        "cum_cost_usd": node.cum_cost_usd,
         "artifact_ids": node.artifact_ids,
         "trace_path": node.trace_path,
         "children": [_node_dict(c) for c in node.children],

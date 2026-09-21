@@ -8,6 +8,11 @@ benchmark uses is available to the runtime, the CLI, and a plugin host.
 Prices are USD per 1M tokens (``_per_mtok``); ``0``/``None`` price means
 "unknown price" → cost 0 (uncounted, not free — the caller decides how to
 report an unknown-price run).
+
+This is a *fallback estimate*: providers that route dynamically (e.g.
+OpenRouter, which picks the cheapest provider per request) return the actual
+billed ``usage.cost`` in each response, and the CLI prefers that accumulated
+value over this formula whenever it was reported.
 """
 
 from __future__ import annotations

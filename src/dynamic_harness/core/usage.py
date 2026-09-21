@@ -17,6 +17,7 @@ class UsageTracker:
         completion_tokens: int = 0,
         cached_tokens: int = 0,
         message_count: int = 0,
+        cost: float | None = None,
     ) -> None:
         lock = self._usage_locks.setdefault(agent_id, asyncio.Lock())
         async with lock:
@@ -28,6 +29,7 @@ class UsageTracker:
                     "total_tokens": 0,
                     "cached_tokens": 0,
                     "message_count": 0,
+                    "cost": 0.0,
                 },
             )
             prev["prompt_tokens"] += prompt_tokens
@@ -35,6 +37,12 @@ class UsageTracker:
             prev["total_tokens"] += prompt_tokens + completion_tokens
             prev["cached_tokens"] += cached_tokens
             prev["message_count"] = prev.get("message_count", 0) + message_count
+            # ``cost`` is the provider-reported USD cost of the request (e.g.
+            # OpenRouter's ``usage.cost``). ``None`` means the provider did not
+            # report one — leave the accumulated total untouched so callers can
+            # fall back to a configured-price estimate.
+            if cost is not None:
+                prev["cost"] = prev.get("cost", 0.0) + cost
             self._agent_usage[agent_id] = prev
         self._total_cache = None
 
@@ -47,6 +55,7 @@ class UsageTracker:
                 "total_tokens": 0,
                 "cached_tokens": 0,
                 "message_count": 0,
+                "cost": 0.0,
             },
         )
 
@@ -58,12 +67,14 @@ class UsageTracker:
             "completion_tokens": 0,
             "total_tokens": 0,
             "cached_tokens": 0,
+            "cost": 0.0,
         }
         for u in self._agent_usage.values():
             total["prompt_tokens"] += u.get("prompt_tokens", 0)
             total["completion_tokens"] += u.get("completion_tokens", 0)
             total["total_tokens"] += u.get("total_tokens", 0)
             total["cached_tokens"] += u.get("cached_tokens", 0)
+            total["cost"] += u.get("cost", 0.0)
         self._total_cache = total
         return total
 

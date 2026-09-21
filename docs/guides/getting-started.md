@@ -200,7 +200,7 @@ parent of `artifacts/`, `repo/`, and `traces/`):
 
 | File | Content |
 |------|---------|
-| `agents.txt` | Plain-text agent tree: id, `[status]`, description, cumulative messages, token usage, USD cost marker (when prices configured) — one line per agent. Rewritten on every terminal event, so you can tail it while a run is live. |
+| `agents.txt` | Plain-text agent tree: id, `[status]`, description, cumulative messages, token usage, USD cost markers — own cost (`$`) and subtree cost including all descendants (`Σ$`), from the provider's per-request cost when reported (e.g. OpenRouter) or configured prices as a fallback. Rewritten on every terminal event, so you can tail it while a run is live. |
 | `agent_tree.json` | Same tree as structured JSON (for machine parsing). |
 | `stats.json` | Aggregate counts (agents, commits, tokens). |
 | `events.jsonl` | Append-only structured event stream (report/failure/escalation/activity). |

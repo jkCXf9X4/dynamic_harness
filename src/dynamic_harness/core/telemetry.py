@@ -84,6 +84,7 @@ class Telemetry:
                 completion_tokens=usage.get("completion_tokens", 0),
                 cached_tokens=usage.get("cached_tokens", 0),
                 message_count=len(sent),
+                cost=usage.get("cost"),
             )
         names = [tc.name for tc in (response.tool_calls or [])]
         self._event_bus.emit_activity(ActivityEvent(

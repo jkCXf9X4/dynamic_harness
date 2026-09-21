@@ -18,12 +18,14 @@ def _extract_json(text: str) -> object:
 
 
 def _extract_usage(usage: object | None) -> dict | None:
-    """Surface provider prompt-cache info (``cached_tokens``) alongside raw counts.
+    """Surface provider cost + prompt-cache info alongside raw token counts.
 
     The OpenAI-compatible usage object exposes ``prompt_tokens_details`` on
-    providers that report it (OpenAI automatic caching, OpenRouter, Ollama, ...).
-    Without this the cache hit count is silently dropped and we can't see whether
-    the design is actually reusing the conversation prefix across turns.
+    providers that report it (OpenAI automatic caching, OpenRouter, Ollama, ...)
+    and, on OpenRouter, a ``cost`` field — the actual USD/credit cost of the
+    request as billed (OpenRouter routes across providers by best price, so a
+    preset per-1M-token price would be wrong). Without these the cache hit count
+    and the real cost are silently dropped.
     """
     if usage is None:
         return None
@@ -36,6 +38,9 @@ def _extract_usage(usage: object | None) -> dict | None:
         cached = getattr(details, "cached_tokens", None)
         if cached is not None:
             out["cached_tokens"] = int(cached)
+    cost = getattr(usage, "cost", None)
+    if cost is not None:
+        out["cost"] = float(cost)
     return out
 
 

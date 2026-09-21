@@ -61,8 +61,13 @@ def test_node_dict_includes_cache_hit_rate():
 
 
 def test_node_dict_includes_cost_usd():
-    node = AgentNode(agent_id="id", description="desc", status="running", cost_usd=0.0012)
-    assert _node_dict(node)["cost_usd"] == 0.0012
+    node = AgentNode(
+        agent_id="id", description="desc", status="running",
+        cost_usd=0.0012, cum_cost_usd=0.0034,
+    )
+    d = _node_dict(node)
+    assert d["cost_usd"] == 0.0012
+    assert d["cum_cost_usd"] == 0.0034
 
 
 def test_snapshot_stats_includes_cache_fields(runtime, tmp_path):
