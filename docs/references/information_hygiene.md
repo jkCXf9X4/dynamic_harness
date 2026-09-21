@@ -1,3 +1,8 @@
+---
+name: information-hygiene
+description: Why the runtime insists on lean canonical state over accumulation — decide create/update/replace/merge/supersede/remove before storing; minimum sufficient representation. Read when deciding what to store or when state has drifted.
+---
+
 # Information Hygiene: Canonical State over Accumulated History
 
 Why the runtime insists on lean, canonical state instead of accumulation — and how to

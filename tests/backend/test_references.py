@@ -39,6 +39,36 @@ def test_discover_references_missing_dir_returns_empty() -> None:
     assert discover_references("/nonexistent/references/dir") == []
 
 
+def test_discover_references_uses_frontmatter_description(tmp_path: Path) -> None:
+    p = _make_doc(
+        tmp_path,
+        "product_breakdown_skill.md",
+        "---\n"
+        "name: product-breakdown\n"
+        "description: Use when working in product-breakdown/ decision records.\n"
+        "---\n\n"
+        "# Product Breakdown Structure\n\n"
+        "Seven-layer product-definition flow with per-layer decision records.\n",
+    )
+    docs = discover_references(tmp_path)
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc.title == "Product Breakdown Structure"
+    assert doc.summary == "Use when working in product-breakdown/ decision records."
+    assert doc.path == str(p)
+
+
+def test_discover_references_truncates_long_frontmatter_description(tmp_path: Path) -> None:
+    long = "d" * 500
+    _make_doc(
+        tmp_path,
+        "s.md",
+        f"---\ndescription: {long}\n---\n\n# S\n\nbody\n",
+    )
+    (doc,) = discover_references(tmp_path)
+    assert len(doc.summary) <= 200
+
+
 def test_discover_references_ignores_non_doc_files(tmp_path: Path) -> None:
     (tmp_path / "notes.json").write_text("{}")
     (tmp_path / "cache.pyc").write_bytes(b"x")

@@ -1,3 +1,8 @@
+---
+name: iso-15288-lifecycle
+description: Why the agent lifecycle is modeled on ISO/IEC 15288 (analyze→decompose→delegate→verify→synthesize→terminate; V-model; context encapsulation; evidence on disk). Read when a lifecycle principle or term seems missing from the optimized prompt.
+---
+
 # Rationale: ISO/IEC 15288 Lifecycle
 
 This is the durable, canonical statement of *why* the agent lifecycle is the way it

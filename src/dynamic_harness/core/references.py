@@ -33,6 +33,26 @@ class ReferenceDoc:
         return f"- {self.title} [{self.path}] ({self.filename}){tail}"
 
 
+def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    """Split a leading ``---``-delimited YAML frontmatter block from the body.
+
+    Returns ``({}, text)`` unchanged when no frontmatter block is present, so
+    plain markdown files are untouched. Keys are read line-wise (``key: value``)
+    until the closing ``---``; the first line of the body must not be ``---``.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+    meta: dict[str, str] = {}
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return meta, "\n".join(lines[i + 1:])
+        key, sep, value = line.partition(":")
+        if sep:
+            meta[key.strip()] = value.strip()
+    return {}, text
+
+
 def _first_heading(text: str) -> str:
     for line in text.splitlines():
         stripped = line.strip()
@@ -66,12 +86,13 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        frontmatter, body = _split_frontmatter(text)
         docs.append(ReferenceDoc(
             id=p.stem,
             filename=p.name,
             path=str(p),
-            title=_first_heading(text) or p.stem,
-            summary=_first_paragraph(text),
+            title=_first_heading(body) or frontmatter.get("name") or p.stem,
+            summary=(frontmatter.get("description") or _first_paragraph(body))[:200],
         ))
     return docs
 

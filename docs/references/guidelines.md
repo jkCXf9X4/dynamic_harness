@@ -1,3 +1,8 @@
+---
+name: delegation-guidelines
+description: Behavioral guidelines — when to delegate, verify, and stop; brief composition with intent/end_state/constraints/authority; salvage-and-retry; stopping conditions; cross-run continuity. Read when a guideline's nuance has been optimized away from the prompt.
+---
+
 # Guidelines: When to Delegate, Verify, and Stop
 
 Durable, canonical statement of the behavioral guidelines the system prompt is optimized

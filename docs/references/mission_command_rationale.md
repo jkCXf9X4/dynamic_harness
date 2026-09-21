@@ -1,3 +1,8 @@
+---
+name: mission-command
+description: Why parent agents brief children with intent, end state, constraints, and freedom of action (uppdragstaktik / mission command). Read when a brief's why has been optimized away from the prompt.
+---
+
 # Rationale: Mission Command (Uppdragstaktik) for Delegation Briefs
 
 Durable statement of *why* parent agents should brief delegated children the way

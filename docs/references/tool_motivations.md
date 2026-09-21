@@ -1,3 +1,8 @@
+---
+name: tool-motivations
+description: What each tool is for and why, and how to choose between them. Read when a tool's motivation or choice guidance has been optimized away from the prompt.
+---
+
 # Tool Use-Cases and Motivation
 
 Durable statement of *what each tool is for and why*. The optimized prompt lists tools
