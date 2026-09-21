@@ -82,10 +82,11 @@ class AgentNode:
         # Show the provider-billed breakdown so a cache-heavy prompt isn't
         # hidden behind a single inflated total: `prompt` is the FULL prompt
         # (cached portion included, billed alongside as `cached`). `messages`
-        # is the cumulative count sent to the LLM (persists past completion,
-        # unlike live context length). `$` is this agent's own USD cost
-        # (provider-reported when available, else a configured-price estimate);
-        # `Σ$` adds all descendants so a delegator shows its sub-tree total.
+        # is the agent's live context length — how many messages it is working
+        # with right now (retained final count after completion). `$` is this
+        # agent's own USD cost (provider-reported when available, else a
+        # configured-price estimate); `Σ$` adds all descendants so a delegator
+        # shows its sub-tree total.
         parts = []
         if self.prompt_tokens or self.completion_tokens:
             parts.append(f"{self.prompt_tokens}p")
@@ -160,10 +161,11 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
             cached_tokens=usage.get("cached_tokens", 0),
-            # Cumulative messages sent to the LLM (usage tracker): unlike the
-            # live context length it survives `_free_context()` after the agent
-            # completes, so a finished agent keeps its msg counter in the tree.
-            messages=usage.get("message_count", 0),
+            # Live context length (number of messages the agent is currently
+            # working with), not the cumulative sum of context sizes across
+            # LLM calls — so a long-running agent reads ~10² not ~10⁵. Survives
+            # `_free_context()` via the agent's retained final count.
+            messages=agent.live_context_messages,
             cost_usd=cost_usd,
             cum_cost_usd=cost_usd + sum(c.cum_cost_usd for c in children),
             artifact_ids=p.get("artifact_ids", []),
@@ -195,12 +197,12 @@ def build_stats(runtime: Runtime) -> Stats:
 def render_text_tree(nodes: list[AgentNode]) -> str:
     """Plain-text agent tree for quick operator evaluation.
 
-    One line per agent showing id, status, description, cumulative messages,
-    a compact token breakdown, and USD cost markers — own cost (``$``) and
-    subtree cost including all descendants (``Σ$``), when the provider reports
-    cost or prices are configured — enough to spot a stuck/looping agent
-    without a live dashboard. Engine-agnostic (no terminal-library markup) so
-    it can be persisted to disk.
+    One line per agent showing id, status, description, live context message
+    count, a compact token breakdown, and USD cost markers — own cost (``$``)
+    and subtree cost including all descendants (``Σ$``), when the provider
+    reports cost or prices are configured — enough to spot a stuck/looping
+    agent without a live dashboard. Engine-agnostic (no terminal-library
+    markup) so it can be persisted to disk.
     """
     if not nodes:
         return "(no agents)\n"

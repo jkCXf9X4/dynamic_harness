@@ -330,6 +330,10 @@ class Agent:
         # by ``collect_garbage()``. Guards repeated collection and lets a parent
         # know its child is already just a lightweight outcome stub.
         self._context_freed: bool = False
+        # Final live-context message count, captured when the context is
+        # reclaimed so overviews can still show what a completed agent was
+        # working with instead of dropping to 0.
+        self._final_context_messages: int | None = None
 
     # -- outcome accessors ----------------------------------------------------
 
@@ -348,6 +352,18 @@ class Agent:
     @property
     def message_count(self) -> int:
         """Number of messages currently held in this agent's context."""
+        return len(self.context.messages)
+
+    @property
+    def live_context_messages(self) -> int:
+        """Live context message count for overviews.
+
+        Reports ``len(context.messages)`` while the agent holds its context,
+        and the retained final count once ``collect_garbage()`` has reclaimed
+        it — so a completed agent keeps its message figure instead of 0.
+        """
+        if self._context_freed:
+            return self._final_context_messages or 0
         return len(self.context.messages)
 
     @property
@@ -426,6 +442,7 @@ class Agent:
         for child in self.children:
             if not child._context_freed:
                 return False
+        self._final_context_messages = len(self.context.messages)
         self._context_freed = True
 
         self.context.messages = []

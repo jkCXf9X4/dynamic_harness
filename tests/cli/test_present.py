@@ -108,12 +108,12 @@ class TestBuildAgentTree:
         runtime.get_agent(aid).task.status = TaskStatus.completed
         assert build_agent_tree(runtime)[0].status == "completed"
 
-    def test_tokens_and_messages_come_from_tracker(self, runtime) -> None:
+    def test_tokens_and_messages_reflect_live_context(self, runtime) -> None:
         aid = _seed(runtime, n=1)[0]
         asyncio.run(runtime.record_usage(aid, prompt_tokens=50, completion_tokens=50, message_count=4))
         agent = runtime.get_agent(aid)
-        # Live context is separate and may be freed after completion; the
-        # cumulative tracker count persists either way.
+        # Tokens come from the usage tracker; `messages` is the live context
+        # length (3 held messages), not the cumulative tracker counter (4).
         agent.context.messages = [
             {"role": "user", "content": "start"},
             {"role": "assistant", "content": "ok"},
@@ -121,13 +121,20 @@ class TestBuildAgentTree:
         ]
         node = build_agent_tree(runtime)[0]
         assert node.tokens == 100
-        assert node.messages == 4
+        assert node.messages == 3
 
     def test_messages_persist_after_context_freed(self, runtime) -> None:
         aid = _seed(runtime, n=1)[0]
-        asyncio.run(runtime.record_usage(aid, message_count=7))
-        runtime.get_agent(aid).context.messages = []  # simulated _free_context()
-        assert build_agent_tree(runtime)[0].messages == 7
+        agent = runtime.get_agent(aid)
+        agent.context.messages = [
+            {"role": "user", "content": "a"},
+            {"role": "assistant", "content": "b"},
+            {"role": "user", "content": "c"},
+        ]
+        agent.task.status = TaskStatus.completed
+        assert agent.collect_garbage()
+        # Reclaimed context reports the retained final live length, not 0.
+        assert build_agent_tree(runtime)[0].messages == 3
 
     def test_cost_usd_from_prices(self, runtime) -> None:
         runtime.cost_policy.price_input_per_mtok = 0.1
