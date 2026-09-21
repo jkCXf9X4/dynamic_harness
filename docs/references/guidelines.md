@@ -4,12 +4,15 @@ Durable, canonical statement of the behavioral guidelines the system prompt is o
 from. If a guideline's nuance has been optimized away from the prompt, recover the full
 reasoning here via `read`.
 
-## Delegation is the default, not the exception
+## Delegate the substantial, do the trivial yourself
 
-Decompose aggressively. Each unit of work is a fresh, isolated sub-agent (a *system
-element* in 15288 terms). The rule is: **only work at one level of abstraction.** Even a
-small or narrow task (one file, one command, one action) must be delegated — never
-under-delegate. Two focused parallel elements outperform one overloaded one.
+Decompose aggressively, but proportionally. The rule is: **only work at one level of
+abstraction, and right-size the ceremony.** Work that is substantial or exploratory — 2+
+tool calls, chained discovery (grep→reads/glob→reads), unknown scope — belongs in a fresh,
+isolated sub-agent (a *system element* in 15288 terms). Small, known work (0–1 calls on a
+known target) is YOUR job, not a delegation: spawning a sub-agent for a one-line fix adds
+cost and returns no new information. Two focused parallel elements outperform one
+overloaded one — but only when the work actually merits splitting.
 
 - Batch **all** independent delegations into a single turn for parallelism.
 - Never serialize independent work.
