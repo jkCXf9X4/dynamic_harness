@@ -87,18 +87,33 @@ def is_hidden(path: str | Path) -> bool:
 
 def sandbox_root(ctx: ToolContext) -> Path:
     """The workspace an agent is allowed to operate in (read/glob/grep)."""
-    return SandboxPolicy.for_context(ctx.generated_root).root
+    return SandboxPolicy.for_context(
+        ctx.generated_root, read_only_roots=_reference_roots(ctx)
+    ).root
 
 
-def resolve_safe_path(path: str, ctx: ToolContext) -> Path:
+def _reference_roots(ctx: ToolContext) -> tuple[Path, ...]:
+    """The harness's bundled reference library root(s), if any.
+
+    Exposed so the sandbox can grant *read-only* access to the durable
+    reference docs regardless of the project workspace (they live with the
+    harness package, not in the cwd project).
+    """
+    root = getattr(ctx, "reference_root", None)
+    return (root,) if root is not None else ()
+
+
+def resolve_safe_path(path: str, ctx: ToolContext, *, write: bool = True) -> Path:
     # Path-traversal containment lives in the host-agnostic SandboxPolicy (an
     # MCP filesystem wrapper reuses the same boundary).
-    return SandboxPolicy.for_context(ctx.generated_root).resolve_safe_path(path)
+    return SandboxPolicy.for_context(
+        ctx.generated_root, read_only_roots=_reference_roots(ctx)
+    ).resolve_safe_path(path, write=write)
 
 
 async def read(*, ctx: ToolContext, path: str) -> str:
     try:
-        safe = resolve_safe_path(path, ctx)
+        safe = resolve_safe_path(path, ctx, write=False)
     except ValueError as e:
         return f"Error: {e}"
     return safe.read_text()

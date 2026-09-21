@@ -15,7 +15,7 @@ from .agent import Agent, progress_summary_block
 from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
-from .references import discover_references, render_reference_index
+from .references import discover_references, render_reference_index, resolve_references_root
 from .policies.agent import AgentPolicy
 from .policies.disclosure import DisclosurePolicy
 from .policies.heal import HealBudget, HealPolicy
@@ -35,6 +35,22 @@ from .usage import UsageTracker
 if TYPE_CHECKING:
     from ..llm.provider import LLMProvider
     from .policies.interface import ReactivePolicy
+
+
+def _resolve_reference_root(config: HarnessConfig | None) -> Path | None:
+    """Resolve the durable-reference library root for sandbox read access.
+
+    Mirrors ``_build_reference_index`` so the root the sandbox grants read
+    access to is exactly the root the index was discovered from.
+    """
+    if config is None:
+        root = None
+    else:
+        root = config.agent.references_dir
+    try:
+        return resolve_references_root(root)
+    except Exception:
+        return None
 
 
 def _build_reference_index(config: HarnessConfig | None) -> str:
@@ -132,6 +148,7 @@ class Runtime:
             max_same_target=config.safety.max_same_target_delegations or None,
             warning_attempts=config.safety.spawn_limit_warning_attempts,
         )
+        self._reference_root = _resolve_reference_root(config)
         refs_index = _build_reference_index(config)
         notes = list(config.agent.environment_notes if config else [])
         if refs_index:
@@ -203,6 +220,16 @@ class Runtime:
     @property
     def generated_root(self) -> Path | None:
         return self._generated_root
+
+    @property
+    def reference_root(self) -> Path | None:
+        """The resolved durable-reference library root, or None.
+
+        May live outside the project workspace (the harness bundles its own
+        ``docs/references``); the sandbox grants read-only access to it so the
+        normal file tools can reach the docs from any working directory.
+        """
+        return self._reference_root
 
     # -- policy back-compat shims ---------------------------------------
     # Config values migrated into the composable policies (SpawnPolicy /

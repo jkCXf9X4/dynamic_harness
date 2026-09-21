@@ -38,6 +38,15 @@ class ToolContext:
     def generated_root(self) -> Any:
         return self._agent.generated_root
 
+    @property
+    def reference_root(self) -> Any:
+        """The harness's bundled durable-reference library root (or None).
+
+        Exposed so the sandbox can grant read-only access to these docs when
+        they live outside the project workspace.
+        """
+        return self._agent.reference_root
+
     def gitignore_filter(self):
         return self._agent.get_gitignore_filter()
 

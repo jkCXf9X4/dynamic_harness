@@ -337,8 +337,11 @@ class AgentConfig(BaseModel):
         description="Directory of durable, git-tracked reference docs (rationale, "
                     "tool motivations, guidelines) that survive prompt optimization. "
                     "A compact index is injected into every agent's environment; the "
-                    "agent reads full bodies on demand. Defaults to 'docs/references' "
-                    "relative to the working directory.",
+                    "agent reads full bodies on demand. Defaults to the harness "
+                    "package's own 'docs/references' (resolved relative to the "
+                    "package, not the cwd, so it works from any project folder); "
+                    "falls back to a cwd-relative 'docs/references' when the project "
+                    "carries its own library.",
     )
     active_turn_window: int = Field(
         default=50, ge=1,

@@ -17,6 +17,28 @@ DEFAULT_REFERENCES_DIR = "docs/references"
 
 _REFERENCE_EXTENSIONS = (".md", ".txt", ".markdown")
 
+#: The harness's own bundled reference library, resolved relative to this module
+#: (``src/dynamic_harness/core/references.py`` → repo root ``docs/references``)
+#: so it stays reachable when the harness runs from a separate project folder.
+_PACKAGE_REFERENCES_DIR = Path(__file__).resolve().parents[3] / DEFAULT_REFERENCES_DIR
+
+
+def resolve_references_root(root: str | Path | None) -> Path | None:
+    """Effective references root: explicit override, else the bundled library.
+
+    An explicit ``root`` is used as given. With ``None`` the default is the
+    harness package's own ``docs/references`` (independent of the process cwd);
+    a cwd-relative ``docs/references`` is kept as a fallback so projects that
+    carry their own library still resolve it. Returns ``None`` when no library
+    exists — the library is purely additive.
+    """
+    if root is not None:
+        return Path(root)
+    if _PACKAGE_REFERENCES_DIR.is_dir():
+        return _PACKAGE_REFERENCES_DIR
+    cwd_refs = Path(DEFAULT_REFERENCES_DIR)
+    return cwd_refs if cwd_refs.is_dir() else None
+
 
 @dataclass(frozen=True)
 class ReferenceDoc:
@@ -75,8 +97,8 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
     Returns a sorted list of docs detected on disk. A missing or empty directory
     yields ``[]`` — never an error, so the library is purely additive.
     """
-    base = Path(root) if root is not None else Path(DEFAULT_REFERENCES_DIR)
-    if not base.is_dir():
+    base = resolve_references_root(root)
+    if base is None or not base.is_dir():
         return []
     docs: list[ReferenceDoc] = []
     for p in sorted(base.iterdir()):

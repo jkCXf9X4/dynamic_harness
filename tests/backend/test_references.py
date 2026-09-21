@@ -9,6 +9,7 @@ from dynamic_harness.core.references import (
     ReferenceDoc,
     discover_references,
     render_reference_index,
+    resolve_references_root,
 )
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task
@@ -129,3 +130,63 @@ def test_runtime_without_references_dir_is_unchanged(tmp_path: Path) -> None:
     rendered = agent.environment_info
     # Environment notes still render even when no library exists.
     assert "[Environment]" in rendered
+
+
+async def test_reference_docs_readable_via_normal_tools_from_any_cwd(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The baked-in library is reachable with the plain file tools even when the
+    harness runs from a separate project folder (reference root lives with the
+    package, not the cwd; sandbox grants read-only access to it)."""
+    monkeypatch.chdir(tmp_path)
+    cfg = HarnessConfig()
+    rt = Runtime(
+        artifact_root=tmp_path / "a",
+        repo_root=tmp_path / "r",
+        generated_root=tmp_path,
+        config=cfg,
+    )
+    assert rt.reference_root is not None
+    agent = rt.delegate(Task(description="T"))
+
+    target = rt.reference_root / "guidelines.md"
+    res = await rt.tool_registry.execute("read", "tc1", agent, path=str(target))
+    assert "outside the workspace" not in res.content
+    assert "Delegate" in res.content
+
+    glob_res = await rt.tool_registry.execute(
+        "glob", "tc2", agent, pattern=str(rt.reference_root / "*.md")
+    )
+    assert "guidelines.md" in glob_res.content
+
+    write_res = await rt.tool_registry.execute(
+        "write", "tc3", agent,
+        path=str(rt.reference_root / "pwned.md"), content="x",
+    )
+    assert "outside the workspace" in write_res.content
+
+
+def test_default_references_dir_resolves_package_relative(tmp_path: Path, monkeypatch) -> None:
+    """The default library is the harness package's docs, not the cwd project's.
+
+    Running from a separate project folder must still discover the baked-in
+    library (the product-breakdown skill etc.), so it resolves relative to the
+    package rather than the process working directory.
+    """
+    monkeypatch.chdir(tmp_path)  # a random "target project" folder
+    root = resolve_references_root(None)
+    assert root is not None
+    assert root.name == "references" or root.name == "docs"
+    docs = discover_references(None)
+    assert docs  # the bundled library is found from any cwd
+    assert all(d.path.startswith(str(root)) for d in docs)
+
+
+def test_explicit_references_dir_override(tmp_path: Path) -> None:
+    refs = tmp_path / "my_refs"
+    refs.mkdir()
+    _make_doc(refs, "local.md", "# Local\n\nlocal body\n")
+    root = resolve_references_root(refs)
+    assert root == refs
+    docs = discover_references(refs)
+    assert [d.filename for d in docs] == ["local.md"]
