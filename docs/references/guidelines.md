@@ -132,6 +132,17 @@ space, not re-opening it.
   tracks progress against the explicit readiness bar, updated each turn as facts land.
   It is the state handoff between runs: what is done, what remains, and what the finish
   line looks like.
+- **Keep a running evaluation ledger when the work is complex enough to need one.** A
+  single markdown file (e.g. `progress_report.md` under the scratch root) that accrues
+  material claims as they are produced — never hold critical findings only in memory.
+  Each entry records the **claim**, its **evidence/source**, and a **status verdict**
+  (verified / refuted / open), so a resuming run can tell what is known and what is still
+  open. Entries stay concise: the ledger is a working record of what is known, not a
+  narrative report of what was done.
+- **Persist proportionally to task complexity.** Small tasks stay small — a one-shot
+  question needs no eval log, roadmap, or checkpoint ceremony. The durability machinery
+  (ledger, roadmap, checkpoints, artifacts) exists to make complex and resumable work
+  safe, not to make simple work heavier.
 
 ## Baseline guard before new capability
 
