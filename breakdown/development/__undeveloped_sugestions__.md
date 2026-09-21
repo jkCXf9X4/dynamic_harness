@@ -271,3 +271,7 @@ Answer concisely and directly. try to keep related information to a minimum
 
 Lets make the communication visible and auditable, evaluate how this could be done. File based traces are enabling post exit and during execution audits and reviews
 
+---
+
+can you do a critical review if the breakdown structure and fill in the missing aspects to better allow the rational behind the development
+ to be clear

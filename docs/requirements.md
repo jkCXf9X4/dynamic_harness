@@ -130,7 +130,8 @@ the terminal output; the agent `ask` interaction swaps that same prompt to
 - Running `dynamic-harness "task"` prints only: the outcome line, an aggregate,
   and the state-file paths — no tree/dashboard.
 - During a run, `tail -f <run>/agents.txt` shows agents appearing and status /
-  message / token counts progressing.
+  message / token counts progressing (messages are the cumulative count sent
+  to the LLM, so they persist after an agent completes).
 - `/tree` in the interactive terminal prints a box-drawn tree of
   id/status/messages/tokens matching `agent_tree.json`.
 - During a run, typing a message either queues it (busy) or interrupts the

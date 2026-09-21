@@ -48,6 +48,7 @@ class AgentNode:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_tokens: int = 0
+    cost_usd: float = 0.0
     artifact_ids: list[str] = field(default_factory=list)
     trace_path: str | None = None
     children: list[AgentNode] = field(default_factory=list)
@@ -70,7 +71,10 @@ class AgentNode:
             return ""
         # Show the provider-billed breakdown so a cache-heavy prompt isn't
         # hidden behind a single inflated total: `prompt` is the FULL prompt
-        # (cached portion included, billed alongside as `cached`).
+        # (cached portion included, billed alongside as `cached`). `messages`
+        # is the cumulative count sent to the LLM (persists past completion,
+        # unlike live context length). `cost` is the USD estimate from the
+        # configured per-1M-token prices (hidden when unknown/zero).
         parts = []
         if self.prompt_tokens or self.completion_tokens:
             parts.append(f"{self.prompt_tokens}p")
@@ -83,6 +87,8 @@ class AgentNode:
             parts.append(f"{self.tokens}t")
         if self.messages:
             parts.append(f"{self.messages}msgs")
+        if self.cost_usd:
+            parts.append(f"${self.cost_usd:.4f}")
         return f" ({', '.join(parts)})"
 
 
@@ -94,6 +100,7 @@ class Stats:
     prompt_tokens: int = 0
     cached_tokens: int = 0
     cache_hit_rate: float = 0.0
+    cost_usd: float = 0.0
 
 
 def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
@@ -131,7 +138,14 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
             cached_tokens=usage.get("cached_tokens", 0),
-            messages=agent.message_count,
+            # Cumulative messages sent to the LLM (usage tracker): unlike the
+            # live context length it survives `_free_context()` after the agent
+            # completes, so a finished agent keeps its msg counter in the tree.
+            messages=usage.get("message_count", 0),
+            cost_usd=runtime.cost_policy.cost(
+                tokens_in=usage.get("prompt_tokens", 0),
+                tokens_out=usage.get("completion_tokens", 0),
+            ),
             artifact_ids=p.get("artifact_ids", []),
             trace_path=trace_path(agent.id),
             children=[
@@ -153,15 +167,20 @@ def build_stats(runtime: Runtime) -> Stats:
         prompt_tokens=prompt,
         cached_tokens=cached,
         cache_hit_rate=cache_hit_rate(prompt, cached),
+        cost_usd=runtime.cost_policy.cost(
+            tokens_in=prompt,
+            tokens_out=total.get("completion_tokens", 0),
+        ),
     )
 
 
 def render_text_tree(nodes: list[AgentNode]) -> str:
     """Plain-text agent tree for quick operator evaluation.
 
-    One line per agent showing id, status, description, messages, and a
-    compact token breakdown — enough to spot a stuck/looping agent without a
-    live dashboard. Engine-agnostic (no terminal-library markup) so it can be
+    One line per agent showing id, status, description, cumulative messages,
+    a compact token breakdown, and a USD cost marker (when prices are
+    configured) — enough to spot a stuck/looping agent without a live
+    dashboard. Engine-agnostic (no terminal-library markup) so it can be
     persisted to disk.
     """
     if not nodes:

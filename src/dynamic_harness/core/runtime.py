@@ -17,6 +17,7 @@ from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
 from .references import discover_references, render_reference_index, resolve_references_root
 from .policies.agent import AgentPolicy
+from .policies.cost import CostPolicy
 from .policies.disclosure import DisclosurePolicy
 from .policies.heal import HealBudget, HealPolicy
 from .policies.permissions import ToolPermissionPolicy
@@ -129,6 +130,12 @@ class Runtime:
         # exactly like a default ``HarnessConfig()``, no second fallback dict).
         # All knobs below are forwarding properties into this bundle.
         self.agent_policy = AgentPolicy.from_config(config)
+        # USD cost conversion from configured per-1M-token prices (0/None price
+        # = "unknown price" → cost 0; the caller decides how to report it).
+        self.cost_policy = CostPolicy(
+            price_input_per_mtok=config.llm.price_input_per_mtok,
+            price_output_per_mtok=config.llm.price_output_per_mtok,
+        )
         self._self_heal_mode = config.self_heal.mode
         # Recovery limits live on the HealPolicy (the shared *per-child* used
         # counters are HealBudget instances keyed by agent id, so parent-driven

@@ -27,6 +27,7 @@ def test_snapshot_writes_tree_and_stats_empty(runtime, tmp_path):
     assert json.loads(w.stats_path.read_text()) == {
         "agents": 0, "commits": 0, "tokens": 0,
         "prompt_tokens": 0, "cached_tokens": 0, "cache_hit_rate": 0.0,
+        "cost_usd": 0.0,
     }
 
 
@@ -57,6 +58,11 @@ def test_node_dict_includes_cache_hit_rate():
     assert d["prompt_tokens"] == 4000
     assert d["cached_tokens"] == 3000
     assert d["cache_hit_rate"] == 0.75
+
+
+def test_node_dict_includes_cost_usd():
+    node = AgentNode(agent_id="id", description="desc", status="running", cost_usd=0.0012)
+    assert _node_dict(node)["cost_usd"] == 0.0012
 
 
 def test_snapshot_stats_includes_cache_fields(runtime, tmp_path):

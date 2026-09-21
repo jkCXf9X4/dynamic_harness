@@ -108,10 +108,12 @@ class TestBuildAgentTree:
         runtime.get_agent(aid).task.status = TaskStatus.completed
         assert build_agent_tree(runtime)[0].status == "completed"
 
-    def test_tokens_come_from_tracker_messages_from_live_context(self, runtime) -> None:
+    def test_tokens_and_messages_come_from_tracker(self, runtime) -> None:
         aid = _seed(runtime, n=1)[0]
         asyncio.run(runtime.record_usage(aid, prompt_tokens=50, completion_tokens=50, message_count=4))
         agent = runtime.get_agent(aid)
+        # Live context is separate and may be freed after completion; the
+        # cumulative tracker count persists either way.
         agent.context.messages = [
             {"role": "user", "content": "start"},
             {"role": "assistant", "content": "ok"},
@@ -119,7 +121,32 @@ class TestBuildAgentTree:
         ]
         node = build_agent_tree(runtime)[0]
         assert node.tokens == 100
-        assert node.messages == 3
+        assert node.messages == 4
+
+    def test_messages_persist_after_context_freed(self, runtime) -> None:
+        aid = _seed(runtime, n=1)[0]
+        asyncio.run(runtime.record_usage(aid, message_count=7))
+        runtime.get_agent(aid).context.messages = []  # simulated _free_context()
+        assert build_agent_tree(runtime)[0].messages == 7
+
+    def test_cost_usd_from_prices(self, runtime) -> None:
+        runtime.cost_policy.price_input_per_mtok = 0.1
+        runtime.cost_policy.price_output_per_mtok = 0.3
+        aid = _seed(runtime, n=1)[0]
+        asyncio.run(runtime.record_usage(aid, prompt_tokens=1_000_000, completion_tokens=1_000_000))
+        node = build_agent_tree(runtime)[0]
+        assert node.cost_usd == pytest.approx(0.4)
+
+    def test_usage_renders_cost_marker(self) -> None:
+        node = AgentNode(
+            agent_id="id", description="d", status="running",
+            tokens=1000, messages=1, cost_usd=0.0041,
+        )
+        assert node.usage == " (1000t, 1msgs, $0.0041)"
+
+    def test_usage_omits_zero_cost(self) -> None:
+        node = AgentNode(agent_id="id", description="d", status="running", tokens=1000)
+        assert node.usage == " (1000t)"
 
     def test_cache_hit_rate_property(self) -> None:
         node = AgentNode(
@@ -138,6 +165,7 @@ class TestBuildStats:
         assert s.prompt_tokens == 0
         assert s.cached_tokens == 0
         assert s.cache_hit_rate == 0.0
+        assert s.cost_usd == 0.0
 
     def test_aggregates(self, runtime) -> None:
         _seed(runtime, n=3)
@@ -171,6 +199,12 @@ class TestBuildStats:
         assert s.prompt_tokens == 5000
         assert s.cached_tokens == 4000
         assert s.cache_hit_rate == 0.8
+
+    def test_cost_usd_aggregates(self, runtime) -> None:
+        runtime.cost_policy.price_input_per_mtok = 0.5
+        a = _seed(runtime, n=1)[0]
+        asyncio.run(runtime.record_usage(a, prompt_tokens=1_000_000))
+        assert build_stats(runtime).cost_usd == pytest.approx(0.5)
 
 
 def test_present_has_no_textual_dependency() -> None:
