@@ -8,7 +8,7 @@ from dynamic_harness.cli.terminal import (
     _run_command,
     _submit_input,
 )
-from dynamic_harness.core.task import Task
+from dynamic_harness.core.task import Task, TaskStatus
 
 
 def test_run_command_returns_false_for_plain_text(runtime):
@@ -46,6 +46,46 @@ def test_submit_input_routes_message_to_active_root(runtime):
 
 def test_submit_input_routes_command_ignores_no_root(runtime):
     assert asyncio.run(_submit_input(runtime, "/agents")) is None
+
+
+def test_submit_input_buffers_input_to_terminal_root(runtime):
+    """A line typed against a completion/failed root must be queued, not dropped,
+    and injected on the next continuation of that root."""
+    from dynamic_harness.cli.terminal import _deferred_input, _deliver_deferred_input
+
+    agent = runtime.delegate(Task(description="root"))
+    agent.task.status = TaskStatus.completed
+    runtime._active_root = agent
+    try:
+        assert agent._inject_queue.qsize() == 0
+        asyncio.run(_submit_input(runtime, "redo properly, no tables"))
+        # Not injected while the root is terminal...
+        assert agent._inject_queue.qsize() == 0
+        assert _deferred_input.get(agent.id) == ["redo properly, no tables"]
+
+        # ...but delivered on the next continuation of that same root.
+        _deliver_deferred_input(agent)
+        assert agent._inject_queue.qsize() == 1
+        assert agent.id not in _deferred_input
+    finally:
+        _deferred_input.clear()
+
+
+def test_submit_input_buffers_multiple_lines_and_clears_on_delivery(runtime):
+    from dynamic_harness.cli.terminal import _deferred_input, _deliver_deferred_input
+
+    agent = runtime.delegate(Task(description="root"))
+    agent.task.status = TaskStatus.failed
+    runtime._active_root = agent
+    try:
+        asyncio.run(_submit_input(runtime, "one"))
+        asyncio.run(_submit_input(runtime, "two"))
+        assert _deferred_input.get(agent.id) == ["one", "two"]
+        _deliver_deferred_input(agent)
+        assert agent._inject_queue.qsize() == 2
+        assert agent.id not in _deferred_input
+    finally:
+        _deferred_input.clear()
 
 
 def test_ask_handoff_returns_answer_not_question(runtime):

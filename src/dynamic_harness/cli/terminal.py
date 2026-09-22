@@ -27,6 +27,11 @@ console = Console()
 
 _history: InMemoryHistory | None = None
 
+# Lines typed against a run whose root has already reached a terminal state
+# (completed/failed/escalated). They are held back and auto-injected into that
+# root on the next continuation, instead of being silently dropped.
+_deferred_input: dict[str, list[str]] = {}
+
 
 def _make_session() -> PromptSession[str]:
     """A fresh prompt_toolkit session for the input line.
@@ -201,11 +206,17 @@ async def _submit_input(runtime: Runtime, line: str) -> None:
         "completed", "failed", "escalated",
     ):
         root.submit_input(line)
-    else:
-        status = root.task.status.value if root is not None else "none"
+    elif root is not None:
+        # The root already reached a terminal state (the run is just tearing
+        # down). Don't drop the operator's words: buffer them and deliver them
+        # to this root on the next continuation in the REPL.
+        _deferred_input.setdefault(root.id, []).append(line)
         console.print(
-            f"[yellow]No active agent to receive input (root is {status}).[/yellow]"
+            f"[yellow]No live agent (root is {root.task.status.value}): your line "
+            f"is queued and will be delivered on the next run continuation.[/yellow]"
         )
+    else:
+        console.print("[yellow]No active agents — describe a task first.[/yellow]")
 
 
 async def _drive(
@@ -550,11 +561,30 @@ async def _run_command(
         if not allow_run_commands:
             console.print("[yellow]/reset is not allowed while a run is active.[/]")
         else:
+            _deferred_input.clear()
             runtime.reset()
             console.print("Runtime reset.")
     else:
         console.print(f"Unknown: {cmd}. Try /help")
     return True
+
+
+def _deliver_deferred_input(agent: Agent) -> None:
+    """Inject lines buffered while the root was terminal into ``agent``.
+
+    Called on the next REPL continuation of the same root, so feedback typed
+    against a just-completed run is never lost: the lines land as fresh user
+    turns on the continuation's first loop iteration (after the new task line).
+    """
+    pending = _deferred_input.pop(agent.id, None)
+    if not pending:
+        return
+    for msg in pending:
+        agent.submit_input(msg)
+    if len(pending) == 1:
+        console.print("[dim]Delivered 1 queued line to the running agent.[/dim]")
+    else:
+        console.print(f"[dim]Delivered {len(pending)} queued lines to the running agent.[/dim]")
 
 
 async def _run_interactive_async(runtime: Runtime) -> None:
@@ -579,6 +609,8 @@ async def _run_interactive_async(runtime: Runtime) -> None:
             await _run_command(runtime, text)
             continue
 
+        if root_agent is not None:
+            _deliver_deferred_input(root_agent)
         root, _writer, shown = await _run(runtime, text, root_agent=root_agent)
         if root_agent is None:
             root_agent = root
