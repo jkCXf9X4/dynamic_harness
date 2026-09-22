@@ -10,8 +10,8 @@ summary: >
   summary, artifact references, and parent/child links. Persisted as sharded
   JSON files on disk.
 related:
-  - api/runtime.md
-  - api/artifacts.md
+  - runtime.md
+  - artifacts.md
 ---
 
 # Repository & Commit

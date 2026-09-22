@@ -8,10 +8,10 @@ summary: >
   disabled-by-`0`/`None` convention, and how each setting maps to runtime /
   agent behavior.
 related:
-  - api/runtime.md
-  - api/llm.md
-  - guides/getting-started.md
-  - concepts/self-healing.md
+  - runtime.md
+  - llm.md
+  - ../../product-breakdown/05-operation/guides/getting-started.md
+  - ../../product-breakdown/02-architecture/concepts/self-healing.md
 ---
 
 # Configuration
@@ -208,7 +208,7 @@ Example:
 ## `self_heal` — failure recovery
 
 Bounded, diagnosis-driven recovery for agent runs that end in failure. See
-`docs/concepts/self-healing.md` for the full layered policy.
+`../../product-breakdown/02-architecture/concepts/self-healing.md` for the full layered policy.
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -278,7 +278,7 @@ Example — run the experiment's cell 4 (topic channels, parent-authorized):
 Tools added by the layer (all topologies): `post`, `channel_read`, `channels`,
 `channel_info`, `subscribe`, `unsubscribe`, `message`. `converse` routes
 through the backend when a topology is active. See
-`breakdown/verification/communication-structures/PLAN.md`.
+`../../product-breakdown/04-verification/communication-structures/PLAN.md`.
 
 ---
 

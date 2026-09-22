@@ -1,0 +1,33 @@
+# Layer 06 — Evolution
+
+**What controlled changes come next?**
+
+The evolution layer is the controlled-change register: the roadmap (`roadmap.md`) is the IMP-style canonical list of open work — each item with status (Proposed/Selected/Completed/Superseded), priority, evidence, and a task-contract seed — and `backlog.md` is the raw idea/suggestion log (the moved `__undeveloped_sugestions__.md`, now with disposition discipline). Selected IMPs are filed under `selected/` per the IMP template and cross-listed in the Implementation Status table below. An IMP is **a scoped candidate needing a task contract before code changes — not implementation approval.**
+
+## Implementation Status
+
+| IMP | Theme | Stage | Priority |
+|-----|-------|-------|----------|
+| See [roadmap.md](roadmap.md) IMP register | — | — | — |
+
+*(fills as IMPs are selected/filed in `selected/`)*
+
+## Owns
+- Roadmap, risks, improvement candidates (IMPs), deferred work, change decisions (ED-prefixed ADRs)
+
+## Excludes
+- Current definition, current baseline → `00-intent/`, `01-product/`
+- Runbook → `05-operation/`
+- Existing-evidence claims → `04-verification/`
+
+## Contents
+
+- [roadmap.md](roadmap.md) — **NEW (fills GAP-4)**: IMP-style register of open work from the multi-agent INVESTIGATION next-steps, unresolved suggestions, and open gap-analysis gaps; replaces the stale `docs/roadmap/LIVE_CAPITAL_READINESS.md` pointer
+- [backlog.md](backlog.md) — raw suggestion log with DONE/RESOLVED/PICKED UP markers and disposition notes (moved from `breakdown/development/__undeveloped_sugestions__.md`)
+- [selected/](selected/) — completed/selected IMP records `IMP-NNN.md` (created in a parallel track)
+
+## Rules
+
+- Assign the next free IMP number; prefer updating an existing IMP's status over creating competing records.
+- Cross-list every IMP here with its stage; status is read from the file header.
+- The roadmap is the canonical answer to "what is decided vs proposed vs abandoned" — future runs must not re-search the same design space.

@@ -10,9 +10,9 @@ summary: >
   Complete reference for all 26 built-in tools, their OpenAPI schemas,
   implementations, and the ToolRegistry API for registering custom tools.
 related:
-  - api/runtime.md
-  - api/agent.md
-  - guides/extending-tools.md
+  - runtime.md
+  - agent.md
+  - ../../product-breakdown/05-operation/guides/extending-tools.md
 ---
 
 # Tools

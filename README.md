@@ -10,10 +10,11 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 | Section | Description |
 |---------|-------------|
-| [Getting Started](docs/guides/getting-started.md) | Installation, setup, first task |
+| [Getting Started](product-breakdown/05-operation/guides/getting-started.md) | Installation, setup, first task |
 | [AGENTS.md](AGENTS.md) | AI agent onboarding reference |
-| [VISION.md](docs/VISION.md) | Architecture vision and success criteria |
-| [Agent Methodology](docs/agent_methodology_guidelines.md) | Mandatory workflow and anti-patterns |
+| [VISION.md](product-breakdown/00-intent/VISION.md) | Architecture vision and success criteria |
+| [Agent Methodology](product-breakdown/02-architecture/agent_methodology_guidelines.md) | Mandatory workflow and anti-patterns |
+| [Product Breakdown](product-breakdown/README.md) | Layered definition state (intent → evolution) |
 
 ### API Reference
 
@@ -31,17 +32,17 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 | Guide | Description |
 |-------|-------------|
-| [Programmatic Usage](docs/guides/programmatic-usage.md) | Embed as a library |
-| [Custom Agents](docs/guides/custom-agents.md) | Subclass and register agent types |
-| [Extending Tools](docs/guides/extending-tools.md) | Register custom tools |
+| [Programmatic Usage](product-breakdown/05-operation/guides/programmatic-usage.md) | Embed as a library |
+| [Custom Agents](product-breakdown/05-operation/guides/custom-agents.md) | Subclass and register agent types |
+| [Extending Tools](product-breakdown/05-operation/guides/extending-tools.md) | Register custom tools |
 
 ### Concepts
 
 | Concept | Document |
 |---------|----------|
-| Delegation model | [docs/concepts/delegation-model.md](docs/concepts/delegation-model.md) |
-| Artifact system | [docs/concepts/artifact-system.md](docs/concepts/artifact-system.md) |
-| Agent lifecycle | [docs/concepts/agent-lifecycle.md](docs/concepts/agent-lifecycle.md) |
+| Delegation model | [docs/concepts/delegation-model.md](product-breakdown/02-architecture/concepts/delegation-model.md) |
+| Artifact system | [docs/concepts/artifact-system.md](product-breakdown/02-architecture/concepts/artifact-system.md) |
+| Agent lifecycle | [docs/concepts/agent-lifecycle.md](product-breakdown/02-architecture/concepts/agent-lifecycle.md) |
 
 ## Architectural principles
 
@@ -143,7 +144,7 @@ is busy or applied immediately when it is waiting on its children.
 **Everything else is persisted to the run directory** (`.dynamic-harness/<ts>_<id>/`)
 for traceability and automated inspection: `agents.txt` (text agent tree,
 updated live), `agent_tree.json`, `stats.json`, `events.jsonl`, `index.jsonl`.
-See [requirements](docs/requirements.md).
+See [requirements](product-breakdown/01-product/requirements.md).
 
 ### Single-shot
 
@@ -182,7 +183,7 @@ async def main():
 asyncio.run(main())
 ```
 
-See [docs/guides/programmatic-usage.md](docs/guides/programmatic-usage.md) for patterns and examples.
+See [docs/guides/programmatic-usage.md](product-breakdown/05-operation/guides/programmatic-usage.md) for patterns and examples.
 
 ## Without an LLM
 

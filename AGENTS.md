@@ -122,35 +122,28 @@ tests/
     ├── test_present.py           → build_agent_tree / build_stats view-models
     └── test_state.py             → StateWriter JSON + events.jsonl persistence
 
-docs/
-├── VISION.md                 → Architectural vision and success criteria
-├── requirements.md           → CLI direction & requirements (prompt-only + persisted overview)
-├── agent_methodology_guidelines.md → Mandatory agent workflow and anti-patterns
-├── AGENTS.md                 → This file
-├── references/               → Durable rationale library that survives prompt optimization
-│   ├── 15288_rationale.md    → Why the lifecycle / V-model / artifact-driven design
-│   ├── tool_motivations.md   → Why each tool exists + how to choose between them
-│   ├── guidelines.md         → Delegation / verification / stopping-conditions nuance
+product-breakdown/          → Layered definition state (the seven-layer product breakdown)
+├── 00-intent/              → Why the project exists (VISION.md, competitive-differentiation.md, platform-evaluation.md)
+├── 01-product/             → What is delivered (requirements.md, use-cases/)
+├── 02-architecture/        → How work is organized (agent_methodology_guidelines.md, concepts/, examples/, decisions/, multi-agent-coordination/)
+├── 03-implementation/      → Concrete assets (plugin/)
+├── 04-verification/        → Proof/acceptance (gap-analysis.md, communication-structures/)
+├── 05-operation/           → How authors run/maintain (runbook.md, guides/)
+├── 06-evolution/           → Controlled change (roadmap.md, backlog.md, selected/)
+├── README.md               → Index of the seven layers + boundary rule
+├── decision-log.md         → One row per decision (DL-1…DL-15)
+└── traceability.md         → Claim/Need → Decision → Artifact
+
+docs/                      → Runtime-coupled content only (api/ + references/)
+├── references/            → Durable rationale library that survives prompt optimization
+│   ├── 15288_rationale.md → Why the lifecycle / V-model / artifact-driven design
+│   ├── tool_motivations.md → Why each tool exists + how to choose between them
+│   ├── guidelines.md      → Delegation / verification / stopping-conditions nuance
 │   └── mission_command_rationale.md → Uppdragstaktik (mission command): why delegation briefs must carry intent, end state, constraints, and freedom of action
-├── api/                      → Module-level API reference
-│   ├── config.md             → Every harness.json setting (defaults + 0/null "cap off" convention)
-├── guides/                   → How-to guides for common workflows
-│   (performance-diagnostics.md → scaling profiler + methodology for slowdowns)
-├── gap-analysis.md           → Evaluation: concept/use-case promises vs implementation (G1–G13)
-├── concepts/                 → Architectural deep-dives
-│   ├── agent-lifecycle.md
-│   ├── artifact-system.md
-│   ├── delegation-model.md
-│   └── self-healing.md        → Layered failure-recovery policy (resume / fresh / escalate)
-└── use-cases/                 → Plausible use-cases deduced from the concepts + runtime
-    ├── index.md               → Taxonomy + fitness filter + how to read each family
-    ├── repository-analysis.md → Inventory, audit, security, debt scanning
-    ├── change-and-validation.md → Bug fix, test coverage, refactor, codegen
-    ├── documentation-and-knowledge.md → Module docs, reference-library curation, overviews
-    ├── research-and-synthesis.md → External research with cited artifacts
-    ├── pipelines-and-jobs.md  → Batch extraction + long resumable jobs
-    ├── evaluation-and-qa.md   → Benchmark suite, prompt A/B, failure triage
-    └── embedding-and-integration.md → Library use, custom agents/tools, product workflows
+├── api/                   → Module-level API reference
+│   ├── config.md          → Every harness.json setting (defaults + 0/null "cap off" convention)
+│   └── …                  → one page per public module (agent, runtime, task, tools, …)
+└── README.md              → Explains the docs/ vs product-breakdown/ split
 ```
 
 ## Architecture Principles
@@ -256,7 +249,7 @@ Config-sourced decision logic is extracted into host-agnostic policy objects
 `DisclosurePolicy`, `TimeoutPolicy`, `BashSafetyPolicy`, `BriefPolicy`, …). Each policy imports
 neither an agent nor a runtime; **Runtime** / **Agent** / **ToolRegistry** now
 delegate to them. This keeps the decision half reusable as a plugin surface
-(e.g. an MCP server / extension boundary) — see `docs/platform-evaluation.md`.
+(e.g. an MCP server / extension boundary) — see `product-breakdown/00-intent/platform-evaluation.md`.
 
 ### ArtifactView / Artifact / ArtifactStore (`artifact/store.py`)
 - `ArtifactView(headline, summary_200, summary_1000, technical, full_report, raw_data)`
@@ -360,7 +353,7 @@ reads (watermark from→to), subscription changes, and deliveries (blocking
 `converse` vs queued `message`) — one cross-agent file, followable live with
 `tail -f` or replayable post-run. The backend is host-agnostic (routes on
 `AgentRef` + the `TopologyView` interface the runtime implements) — see
-`breakdown/verification/communication-structures/PLAN.md`.
+`product-breakdown/04-verification/communication-structures/PLAN.md`.
 
 ## Safety Invariants
 
@@ -424,7 +417,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change commit/persistence | `memory/repository.py` |
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
-| Change agent methodology | `docs/agent_methodology_guidelines.md` |
+| Change agent methodology | `product-breakdown/02-architecture/agent_methodology_guidelines.md` |
 | Change rationale / reference library | `core/references.py` + `docs/references/` |
 
 

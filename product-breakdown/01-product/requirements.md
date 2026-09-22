@@ -1,0 +1,142 @@
+---
+title: "CLI Direction & Requirements"
+category: requirement
+summary: >
+  Requirements governing the CLI surface and the persisted overview. The CLI is
+  kept minimal and prompt-only; all telemetry is written to files, making the
+  tool composable as part of larger automated workflows.
+related:
+  - ../05-operation/guides/getting-started.md
+  - use-cases/pipelines-and-jobs.md
+  - ../00-intent/VISION.md
+---
+
+# CLI Direction & Requirements
+
+## Direction
+
+The CLI is intentionally **minimal and prompt-only**. Status, agent tree, and
+event telemetry are **persisted to files** under the run directory rather than
+rendered in a terminal dashboard. This makes the application composable in a
+larger automated workflow: the same run can be driven headlessly, its progress
+streamed to disk, and its output inspected by other tooling.
+
+> Prompts and the final outcome are printed to the terminal; everything else
+> that was previously rendered live (agent tree, status, events) is written to
+> files for traceability and overview.
+
+## Functional Requirements
+
+### FR-1. Prompt-only terminal
+
+- **FR-1.1** The terminal accepts a task prompt (batch or interactive `-i`).
+- **FR-1.2** Batch runs print the final outcome (report summary or failure
+  reason), one aggregate line (agent/commit/token counts), and the persisted
+  state file paths.
+- **FR-1.3** No live dashboard (no Rich `Live`, no tree/status rendered to the
+  terminal during the run).
+
+### FR-2. Persisted overview
+
+Every run writes a continuously-refreshed overview to the **run root** (the
+parent of `artifacts/`, `repo/`, and `traces/`):
+
+- **FR-2.1** `agents.txt` — plain-text agent tree (id, status, description,
+  messages, token usage), rewritten on every terminal event. Watchable while a
+  run is live.
+- **FR-2.2** `agent_tree.json` — same tree as structured JSON for machine use.
+- **FR-2.3** `stats.json` — aggregate agent/commit/token counts.
+- **FR-2.4** `events.jsonl` — append-only structured event stream
+  (report/failure/escalation/activity).
+- **FR-2.5** `index.jsonl` — flat artifact→agent/task/path map, written after
+  the run when artifacts exist.
+
+### FR-3. Visible "progress is happening"
+
+While a run is active the terminal shows a lightweight live token counter whose
+(optional) label reflects the latest activity (tool calls, delegations,
+compression, self-heal). The counter is rendered as the **prompt line itself**
+of the otherwise-prompt-only input (via `prompt_toolkit`), so it cannot corrupt
+the terminal output; the agent `ask` interaction swaps that same prompt to
+`[ask] <question>` and pauses the counter while prompting.
+
+### FR-3.5. Always-available input during a run
+
+- **FR-3.5.1** The operator can type into the same `>>>` line at any time
+  during a run (commands or messages to the agent).
+- **FR-3.5.2** A message typed while the agent is **busy** (mid-turn) is
+  **queued** and lands as a fresh user turn when the agent finishes its current
+  work.
+- **FR-3.5.3** A message typed while the top agent is **waiting on its
+  children** is **applied immediately** — it interrupts the wait so the agent
+  reacts now. Interrupted children are not discarded: they are re-gathered and
+  their results fold into the parent's context once they settle, so answering
+  the user never loses the in-flight delegation (still-running children
+  otherwise continue in the background).
+- **FR-3.5.4** Slash commands such as `/tree`, `/agents`, `/provenance` are
+  available **during** the run to inspect live status, not only when idle.
+  Mutating commands (`/resume`, `/reset`) are refused while a run is active.
+- **FR-3.5.5** Non-TTY sessions (batch/pipelines) do not render the input line
+  or token counter at all — output stays clean and machine-parseable.
+
+### FR-3.6. Streaming the top agent's replies
+
+- **FR-3.6.1** Each LLM call that produces text emits an `assistant_reply`
+  activity event carrying that content (empty/tool-only turns stay silent).
+- **FR-3.6.2** In interactive sessions the **root** agent's replies are printed
+  above the live prompt as they happen (a printed line, not a dashboard — the
+  input line itself is untouched), so the operator sees the top agent answer a
+  mid-run question instead of talking to a silent terminal.
+- **FR-3.6.3** Replies from delegated children are never printed; the operator
+  only hears from the agent they talk to.
+
+### FR-4. Quick operator evaluation
+
+- **FR-4.1** The operator can view a plain-text agent tree showing per-agent
+  `[status]`, message count, and token usage — on the terminal via `/tree` and
+  on disk via `agents.txt`.
+- **FR-4.2** The tree is sufficient to spot a stuck, looping, or cost-runaway
+  agent (a high message/token count with a non-terminal status).
+
+### FR-5. Interactive session continues the same root agent
+
+- The `-i` / default REPL keeps the same root agent across turns
+  (`root_agent`), so the operator can iterate on a task conversationally.
+
+### FR-6. Traceability after exit
+
+- Provenance and overview files (traces, artifacts, commits, plus the overview
+  files above) survive the process, so a run is fully auditable afterwards.
+
+## Non-functional requirements
+
+- **NFR-1. Composability** — the terminal must be usable inside a pipeline:
+  batch mode produces a deterministic exit report (outcome line + state files)
+  and no dashboard clutter.
+- **NFR-2. Isolation of rendering** — the presentation layer
+  (`cli/present.py`) is pure text/JSON view-models with no terminal-library
+  dependency, so it can render to console *or* disk without coupling.
+- **NFR-3. Cheap live helpers** — the input line runs in the foreground asyncio
+  loop via `prompt_toolkit` (bracketed paste, multi-line input, history,
+  wide-char/wrap handling are all delegated to it); no live-dashboard machinery
+  (no Rich `Live`, no full-screen TUI) is used, keeping the run loop itself
+  free of TUI dependencies. `prompt_toolkit` is the single input dependency
+  added for the interactive surface.
+- **NFR-4. Atomic, append-only event log** — `events.jsonl` is append-only to
+  allow tailing; tree/stats snapshots are atomic rewrites (write-then-replace).
+
+## Acceptance criteria
+
+- Running `dynamic-harness "task"` prints only: the outcome line, an aggregate,
+  and the state-file paths — no tree/dashboard.
+- During a run, `tail -f <run>/agents.txt` shows agents appearing and status /
+  message / token counts progressing (messages are the cumulative count sent
+  to the LLM, so they persist after an agent completes).
+- `/tree` in the interactive terminal prints a box-drawn tree of
+  id/status/messages/tokens matching `agent_tree.json`.
+- During a run, typing a message either queues it (busy) or interrupts the
+  child-wait (idle), and typing `/tree` prints a live status snapshot without
+  disrupting the run.
+- A non-TTY batch run prints no token counter/input artifacts.
+- The CLI imports with no Rich rendering dependency if Rich is removed from the
+  `cli/present.py` render path.

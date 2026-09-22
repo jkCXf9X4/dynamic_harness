@@ -45,7 +45,7 @@ def delegate_target_signature(description: str) -> str:
     for p in re.findall(r"(?<![A-Za-z0-9_./])/[\w./\-]+", description):
         if len(p) > 3:
             paths.append(p)
-    # Dotted relative file paths (docs/roadmap/x.md).
+    # Dotted relative file paths (product-breakdown/06-evolution/roadmap.md).
     paths.extend(
         re.findall(
             r"(?<![A-Za-z0-9])(?:[\w./\-]+\.(?:md|txt|py|json|yaml|yml|toml|log))",

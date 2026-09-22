@@ -8,11 +8,11 @@ summary: >
   artifact store, repository, and trace store. All agent lifecycle events flow
   through the Runtime.
 related:
-  - api/agent.md
-  - api/task.md
-  - api/tools.md
-  - api/artifacts.md
-  - api/repository.md
+  - agent.md
+  - task.md
+  - tools.md
+  - artifacts.md
+  - repository.md
 ---
 
 # Runtime

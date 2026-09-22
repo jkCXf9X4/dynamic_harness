@@ -106,10 +106,10 @@ class _NoopLLM(LLMProvider):
 def test_signature_extracts_file_and_directory_paths() -> None:
     sig = delegate_target_signature(
         "Explore the repository at /home/eriro/work/agentic_trading (READ-ONLY) "
-        "and read docs/roadmap/LIVE_CAPITAL_READINESS.md in full"
+        "and read ../../product-breakdown/06-evolution/roadmap.md in full"
     )
     assert "/home/eriro/work/agentic_trading" in sig
-    assert "docs/roadmap/LIVE_CAPITAL_READINESS.md" in sig
+    assert "../../product-breakdown/06-evolution/roadmap.md" in sig
 
 
 def test_signature_stable_across_wording() -> None:

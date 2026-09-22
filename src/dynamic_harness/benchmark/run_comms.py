@@ -11,7 +11,7 @@ Each cell is one ``communication.topology`` value; everything else (task, LLM,
 workspace snapshot) is identical. Runs that do not complete cleanly (provider
 stalls, internal errors) are re-attempted ``--retries`` times. Results are
 written as a markdown report + raw metrics JSON under the experiment directory
-(``breakdown/verification/communication-structures/``).
+(``../../../product-breakdown/04-verification/communication-structures/``).
 """
 
 from __future__ import annotations

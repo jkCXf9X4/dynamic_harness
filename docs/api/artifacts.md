@@ -11,9 +11,9 @@ summary: >
   (headline → full_report) enabling parents to read summaries before
   loading full details. Artifacts are immutable and persisted to disk.
 related:
-  - api/runtime.md
-  - api/agent.md
-  - concepts/artifact-system.md
+  - runtime.md
+  - agent.md
+  - ../../product-breakdown/02-architecture/concepts/artifact-system.md
 ---
 
 # Artifact System

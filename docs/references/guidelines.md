@@ -133,7 +133,7 @@ space, not re-opening it.
 - **Close the design space.** Persist each evaluation's verdict. The point of an eval is
   that its conclusion becomes a fact the project no longer needs to re-check. Future runs
   read the verdict and skip the exploration.
-- **Maintain a goal-aligned roadmap.** One markdown checklist (`docs/roadmap/<goal>.md`)
+- **Maintain a goal-aligned roadmap.** One markdown checklist (`product-breakdown/06-evolution/roadmap.md`)
   tracks progress against the explicit readiness bar, updated each turn as facts land.
   It is the state handoff between runs: what is done, what remains, and what the finish
   line looks like.

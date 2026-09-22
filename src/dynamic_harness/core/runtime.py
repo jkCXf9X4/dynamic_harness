@@ -559,7 +559,7 @@ class Runtime:
         — so a host or diagnostic can enumerate what is installed without
         reaching into any registry's internals. This is the single source of
         truth for the extension surfaces (see investigation
-        `breakdown/development/plugin/INVESTIGATION.md` §The count).
+        `../../../product-breakdown/03-implementation/plugin/INVESTIGATION.md` §The count).
         """
         return {
             "tools": self.tool_registry.list_tools(),
@@ -598,7 +598,7 @@ class Runtime:
         ``expected_outputs`` (optional) lists on-disk files the agent must
         produce; they are used as the deliverable check for self-heal. If the
         run ends in failure, or finishes without producing its deliverable, a
-        bounded self-heal policy (docs/concepts/self-healing.md) may resume it
+        bounded self-heal policy (../../../product-breakdown/02-architecture/concepts/self-healing.md) may resume it
         once (blunt) or spawn a fresh worker (rot). ``root_agent``: resumes an
         existing agent with the new message (``continue_with_input``). Returns
         the (possibly healed) agent; read ``agent.outcome`` / ``agent.last_report``
@@ -729,7 +729,7 @@ class Runtime:
         self._active_root = agent
         return agent
 
-    # -- self-heal (docs/concepts/self-healing.md) ------------------------
+    # -- self-heal (../../../product-breakdown/02-architecture/concepts/self-healing.md) ------------------------
 
     def _heal_counts_for(self, agent_id: str) -> HealBudget:
         return self._heal_counts.setdefault(agent_id, HealBudget())
@@ -881,7 +881,7 @@ class Runtime:
         own initiative could burn the whole run budget again. The child stays
         failed and is surfaced to its parent, who decides whether to resume it
         (strategy=\"resume\"/\"fresh\") or re-delegate. Escalations are never
-        healed. See docs/concepts/self-healing.md.
+        healed. See ../../../product-breakdown/02-architecture/concepts/self-healing.md.
         """
         # No LLM → nothing to resume; leave the agent as-is.
         if not self._self_heal_mode or self._llm is None:

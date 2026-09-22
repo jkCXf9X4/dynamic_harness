@@ -1,0 +1,29 @@
+# Decision Log — dynamic_harness
+
+One row per decision affecting more than one section; kept current. This log was **created 2026-09-21** from the reconstruction in `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md` — the repo previously had **no decision log**, and decisions existed only as prose inside investigation documents (several without IDs, status, or a home). Rows DL-1…DL-15 and their Status values are inferred from the latest in-repo evidence and are proposals to be reconciled against the ADR records and code history as the ADRs land in `02-architecture/decisions/`.
+
+**DL-6 (reject parent-mediated relaying) is reconstructed:** the original reference in `multi-agent-coordination/INVESTIGATION.md` ("Parent-mediated relaying (option A) is rejected — see decision log") pointed to a **nonexistent log**. The row below reconstructs that entry from the investigation's "Why rejected" rationale (documented) and the verification experiment's measured deadlock/channel results (documented); the *existence* of a log entry is the inferred part. The ADR for it (AD-001) will supersede this row as the canonical record.
+
+Locations are the **post-move** canonical homes (files currently under `docs/` and `breakdown/` land in these layer paths; `docs/references/` and root `README.md` stay where they are).
+
+| ID | Title | Status | Layer | Location (post-move) | Notes |
+|----|-------|--------|-------|----------------------|-------|
+| DL-1 | Fresh-context economics as founding thesis | Accepted | 00-intent | `00-intent/VISION.md`, `README.md` (root), `02-architecture/concepts/delegation-model.md` | cost model: ~3K delegation overhead vs >15K context rot |
+| DL-2 | ISO/IEC 15288 lifecycle / V-model mapping | Accepted | 02-architecture | `00-intent/VISION.md`, `02-architecture/agent_methodology_guidelines.md`, `docs/references/15288_rationale.md` | mandatory ANALYZE→DECOMPOSE→DELEGATE→VERIFY→SYNTHESIZE→TERMINATE loop |
+| DL-3 | Actor-model isolation (know only parent/children/task) | Accepted | 02-architecture | `README.md`, `00-intent/VISION.md`, `02-architecture/concepts/{delegation-model,agent-lifecycle}.md` | invariant treated as a constraint by later decisions |
+| DL-4 | Artifact-driven communication + progressive disclosure | Accepted | 02-architecture / 03-implementation | `02-architecture/concepts/artifact-system.md`; gap G3/G4 RESOLVED (`04-verification/gap-analysis.md`) | decision accepted; implementation matured via G3/G4 fixes |
+| DL-5 | Git-like provenance (commits, immutable artifacts) | Accepted | 02-architecture / 03-implementation | `02-architecture/concepts/artifact-system.md`, `01-product/requirements.md` FR-6 | branchable, resumable, auditable runs |
+| DL-6 | **Reject parent-mediated relaying for collaboration** | **Rejected** | 02-architecture | `02-architecture/multi-agent-coordination/INVESTIGATION.md` ("see decision log" — log absent; entry reconstructed here) | scaling + context pollution; measured deadlock in `off` cell (FINDINGS/RESULTS) |
+| DL-7 | Topic-channel / workspace-primary communication for peer collaboration | Accepted (direction), empirically validated | 02-architecture / 04-verification | `04-verification/communication-structures/{INVESTIGATION,PLAN,FINDINGS,RESULTS}.md`, `context-injection-design.md` | hybrid: artifact-primary + bounded messages + mechanical facilitation; shared cell validated, topics_parent churn to re-measure (n=1) |
+| DL-8 | Plugin-readiness via interface economy (~7 seams), no loader | Accepted | 03-implementation / 06-evolution | `03-implementation/plugin/INVESTIGATION.md` | Q1–Q7 rulings; pilot seam IMPLEMENTED (pytest green) |
+| DL-9 | Policy extraction into host-agnostic decision objects | Accepted | 03-implementation | `03-implementation/plugin/INVESTIGATION.md`, `docs/references/mission_command_rationale.md` | `core/policies/` pattern; host-agnostic seams |
+| DL-10 | Self-healing: blunt-vs-rot, shared budget, deterministic machinery | Accepted | 03-implementation | `02-architecture/concepts/self-healing.md`, `00-intent/competitive-differentiation.md`, gap G2 RESOLVED | enforced in code, not prompt advice |
+| DL-11 | Benchmark-driven verification of communication topologies | Accepted | 04-verification | `04-verification/communication-structures/{INVESTIGATION,PLAN,FINDINGS,RESULTS}.md`, `metrics-cells.json` | P4 first real-LLM run; n=1 per cell, replicates pending (see roadmap) |
+| DL-12 | CLI-first minimal prompt-only surface; telemetry to files | Accepted | 05-operation | `01-product/requirements.md`, `06-evolution/backlog.md` | FR-1..6 / NFR-1..4; composable in automated workflows |
+| DL-13 | Golden delegation rule (2+ calls → delegate) | Accepted | 01-product (methodology) | `02-architecture/agent_methodology_guidelines.md`, `02-architecture/concepts/delegation-model.md`, `docs/references/guidelines.md` | under-delegation is the failure mode; over-delegation never a flaw |
+| DL-14 | Streaming children as opt-in mode | Accepted (opt-in) | 02-architecture | `02-architecture/concepts/delegation-model.md`, `00-intent/competitive-differentiation.md` | `agent.stream_children`; a divergence, not a default |
+| DL-15 | Mission-command delegation briefs (intent/end_state/constraints/authority) | Accepted | 01-product / 03-implementation | `docs/references/mission_command_rationale.md`, `02-architecture/concepts/delegation-model.md` | BriefPolicy; intent as the decision criterion for delegated autonomy |
+
+## Reconciliation Rule
+
+When an ADR record lands in `02-architecture/decisions/`, add/replace the corresponding row's Location with the ADR path and confirm Status matches the ADR header. When a decision is superseded, update both the old and new records and this log in one pass.

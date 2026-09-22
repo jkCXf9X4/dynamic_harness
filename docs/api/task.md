@@ -6,8 +6,8 @@ summary: >
   Pydantic models for the task system: Task, TaskStatus, ReportPayload,
   Escalation, Failure, DelegateRequest, and BudgetRequest.
 related:
-  - api/runtime.md
-  - api/agent.md
+  - runtime.md
+  - agent.md
 ---
 
 # Task & Related Models

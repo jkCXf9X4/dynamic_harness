@@ -83,7 +83,7 @@ async def _run_generation(
     """Run a generation agent that writes variant JSON to disk.
 
     Reliability is delegated to the harness self-heal policy
-    (docs/concepts/self-healing.md): the Runtime's expected-outputs check
+    (../product-breakdown/02-architecture/concepts/self-healing.md): the Runtime's expected-outputs check
     resumes / re-delegates the agent if it finishes without writing
     ``out_path``, or failed. Here we only verify the file appeared.
     """

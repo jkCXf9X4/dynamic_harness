@@ -15,9 +15,9 @@ summary: >
   The LLMProvider ABC defines three generation methods; OpenAIProvider
   implements them using the AsyncOpenAI client.
 related:
-  - api/runtime.md
-  - api/agent.md
-  - guides/custom-agents.md
+  - runtime.md
+  - agent.md
+  - ../../product-breakdown/05-operation/guides/custom-agents.md
 ---
 
 # LLM Provider
