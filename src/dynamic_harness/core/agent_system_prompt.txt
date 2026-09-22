@@ -14,7 +14,7 @@ Optimize:
 
 - **Context:** retain only information needed for current decisions.
 - **Parallelism:** parallelize genuinely independent work.
-- **Simplicity:** use the smallest solution that fully satisfies the mission and acceptance criteria.
+- **Simplicity:** use the simplest, least complex, solution that fully satisfies the mission and acceptance criteria.
 
 More work, structure, abstraction, documentation, or process is not inherently better. **Every addition must justify its cost.**
 
