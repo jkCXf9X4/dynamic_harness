@@ -154,5 +154,5 @@ def test_render_text_tree_flat_and_nested():
     assert len(lines) == 3
     assert "a" * 8 in lines[0]  # short_id clipped to 8
     assert "[completed]" in lines[0]
-    assert "(100t, 3msgs)" in lines[0]
+    assert "(3msgs, 100t)" in lines[0]
     assert "├" in lines[1] and "└" in lines[2]  # branch across two siblings

@@ -25,6 +25,7 @@ def _node_dict(node: AgentNode) -> dict[str, Any]:
         "status": node.status,
         "tokens": node.tokens,
         "messages": node.messages,
+        "context_tokens": node.context_tokens,
         "prompt_tokens": node.prompt_tokens,
         "completion_tokens": node.completion_tokens,
         "cached_tokens": node.cached_tokens,

@@ -45,6 +45,11 @@ def fmt_usd(cost: float) -> str:
     return f"{cost:.6f}"
 
 
+def fmt_int(n: int) -> str:
+    """Thousands-separated with apostrophes: 1000000 → ``1'000'000``."""
+    return f"{n:,}".replace(",", "'")
+
+
 @dataclass
 class AgentNode:
     """Tree node view-model: engine-agnostic representation of one agent."""
@@ -54,6 +59,7 @@ class AgentNode:
     status: str
     tokens: int = 0
     messages: int = 0
+    context_tokens: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_tokens: int = 0
@@ -77,28 +83,26 @@ class AgentNode:
 
     @property
     def usage(self) -> str:
-        if not (self.tokens or self.messages or self.cost_usd or self.cum_cost_usd):
+        if not (self.tokens or self.messages or self.prompt_tokens
+                or self.completion_tokens or self.cost_usd or self.cum_cost_usd):
             return ""
-        # Show the provider-billed breakdown so a cache-heavy prompt isn't
-        # hidden behind a single inflated total: `prompt` is the FULL prompt
-        # (cached portion included, billed alongside as `cached`). `messages`
-        # is the agent's live context length — how many messages it is working
-        # with right now (retained final count after completion). `$` is this
-        # agent's own USD cost (provider-reported when available, else a
-        # configured-price estimate); `Σ$` adds all descendants so a delegator
-        # shows its sub-tree total.
+        # Per-agent metrics in one scan line: `ctx` is the provider-billed input
+        # of the LAST call (exact live context size, not an estimate); `msgs` is
+        # the agent's live context message count. `in`/`out` are the cumulative
+        # billed sums, `cache` the cached share of `in`. `$` is this agent's own
+        # USD cost; `Σ$` adds all descendants so a delegator shows its sub-tree.
         parts = []
-        if self.prompt_tokens or self.completion_tokens:
-            parts.append(f"{self.prompt_tokens}p")
-            if self.completion_tokens:
-                parts.append(f"{self.completion_tokens}c")
-            if self.cached_tokens:
-                pct = round(self.cache_hit_rate * 100)
-                parts.append(f"{self.cached_tokens}cr, {pct}%cached")
-        elif self.tokens:
-            parts.append(f"{self.tokens}t")
+        if self.context_tokens:
+            parts.append(f"ctx {fmt_int(self.context_tokens)}")
         if self.messages:
-            parts.append(f"{self.messages}msgs")
+            parts.append(f"{fmt_int(self.messages)}msgs")
+        if self.prompt_tokens or self.completion_tokens:
+            parts.append(f"in {fmt_int(self.prompt_tokens)}")
+            parts.append(f"out {fmt_int(self.completion_tokens)}")
+            pct = round(self.cache_hit_rate * 100)
+            parts.append(f"cache {pct}%")
+        elif self.tokens:
+            parts.append(f"{fmt_int(self.tokens)}t")
         if self.cost_usd:
             parts.append(f"${fmt_usd(self.cost_usd)}")
         if self.cum_cost_usd and self.cum_cost_usd != self.cost_usd:
@@ -158,6 +162,9 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             description=agent.task.description,
             status=agent.task.status.value,
             tokens=usage.get("total_tokens", 0),
+            # Exact provider-billed input of the last call (live context size),
+            # retained in the usage tracker so it survives agent GC.
+            context_tokens=usage.get("last_prompt_tokens", 0),
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
             cached_tokens=usage.get("cached_tokens", 0),

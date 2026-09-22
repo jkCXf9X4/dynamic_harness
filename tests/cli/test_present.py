@@ -38,23 +38,30 @@ class TestAgentNode:
 
     def test_usage_shows_tokens_and_messages(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", tokens=100, messages=3)
-        assert node.usage == " (100t, 3msgs)"
+        assert node.usage == " (3msgs, 100t)"
 
     def test_usage_renders_cache_hit_rate(self) -> None:
         node = AgentNode(
             agent_id="id", description="d", status="running",
-            tokens=4010, messages=2,
+            tokens=4010, messages=2, context_tokens=3600,
             prompt_tokens=4000, completion_tokens=10, cached_tokens=3600,
         )
-        assert node.usage == " (4000p, 10c, 3600cr, 90%cached, 2msgs)"
+        assert node.usage == " (ctx 3'600, 2msgs, in 4'000, out 10, cache 90%)"
 
-    def test_usage_omits_hit_rate_when_no_cached(self) -> None:
+    def test_usage_renders_zero_cache_when_none_cached(self) -> None:
         node = AgentNode(
             agent_id="id", description="d", status="running",
             tokens=5010, messages=2,
             prompt_tokens=5000, completion_tokens=10, cached_tokens=0,
         )
-        assert node.usage == " (5000p, 10c, 2msgs)"
+        assert node.usage == " (2msgs, in 5'000, out 10, cache 0%)"
+
+    def test_usage_apostrophe_thousands_separator(self) -> None:
+        node = AgentNode(
+            agent_id="id", description="d", status="running",
+            prompt_tokens=1_000_000, completion_tokens=234_567, cached_tokens=500_000,
+        )
+        assert node.usage == " (in 1'000'000, out 234'567, cache 50%)"
 
 
 class TestCacheHitRate:
@@ -123,6 +130,13 @@ class TestBuildAgentTree:
         assert node.tokens == 100
         assert node.messages == 3
 
+    def test_context_tokens_reflect_last_call_input(self, runtime) -> None:
+        aid = _seed(runtime, n=1)[0]
+        asyncio.run(runtime.record_usage(aid, prompt_tokens=4000))
+        asyncio.run(runtime.record_usage(aid, prompt_tokens=2500))
+        node = build_agent_tree(runtime)[0]
+        assert node.context_tokens == 2500
+
     def test_messages_persist_after_context_freed(self, runtime) -> None:
         aid = _seed(runtime, n=1)[0]
         agent = runtime.get_agent(aid)
@@ -178,11 +192,11 @@ class TestBuildAgentTree:
             agent_id="id", description="d", status="running",
             tokens=1000, messages=1, cost_usd=0.05,
         )
-        assert node.usage == " (1000t, 1msgs, $0.0500)"
+        assert node.usage == " (1msgs, 1'000t, $0.0500)"
 
     def test_usage_omits_zero_cost(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", tokens=1000)
-        assert node.usage == " (1000t)"
+        assert node.usage == " (1'000t)"
 
     def test_usage_shows_cumulative_subtree_cost(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", cum_cost_usd=0.05)

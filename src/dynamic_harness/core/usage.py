@@ -29,6 +29,7 @@ class UsageTracker:
                     "total_tokens": 0,
                     "cached_tokens": 0,
                     "message_count": 0,
+                    "last_prompt_tokens": 0,
                     "cost": 0.0,
                 },
             )
@@ -37,6 +38,10 @@ class UsageTracker:
             prev["total_tokens"] += prompt_tokens + completion_tokens
             prev["cached_tokens"] += cached_tokens
             prev["message_count"] = prev.get("message_count", 0) + message_count
+            # ``last_prompt_tokens`` is the input sent on the most recent call
+            # (overwrite, not accumulate) — the live context size without an
+            # estimate, surviving agent GC since it lives in the tracker.
+            prev["last_prompt_tokens"] = prompt_tokens
             # ``cost`` is the provider-reported USD cost of the request (e.g.
             # OpenRouter's ``usage.cost``). ``None`` means the provider did not
             # report one — leave the accumulated total untouched so callers can
@@ -55,6 +60,7 @@ class UsageTracker:
                 "total_tokens": 0,
                 "cached_tokens": 0,
                 "message_count": 0,
+                "last_prompt_tokens": 0,
                 "cost": 0.0,
             },
         )
