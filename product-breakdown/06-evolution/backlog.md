@@ -42,6 +42,9 @@ set a context goal of using a total per agent of less than 50000 tokens,
 
 ---
 
+> **PICKED UP** → investigation `investigations/watchdog.md` (threat model
+> T1–T5, cheap gaps, watchdog design space, recommended composition).
+
 hangs at 
 
 {"timestamp": "2026-08-20T07:25:45.519899+00:00", "type": "tool_result", "tool_call_id": "chatcmpl-tool-b0fe599dc7680626", "name": "bash", "content_length": 11, "content_preview": "(no output)"}
@@ -73,6 +76,8 @@ use the sess
 lets push the agents further when it comes to persisting partial results and evaluations. models often fail or suffer from hallucinations during long runs
 
 ---
+
+> **PICKED UP** → investigation `investigations/watchdog.md` (root-exempt backstop = whole-run guard §3.2/W1)
 
 The main orchestrator still times out, can you evaluate why?
 
@@ -163,6 +168,8 @@ similar command failure that leads to agent termination, is a warning message in
 also the 
 
 ---
+
+> **PICKED UP** → investigation `investigations/watchdog.md` (bash bound = cheap gap §3.1)
 
 Im having problems with bash commands not completing and killing the agents by timing out
 

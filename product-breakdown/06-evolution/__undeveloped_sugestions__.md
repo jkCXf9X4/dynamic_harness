@@ -275,3 +275,7 @@ Lets make the communication visible and auditable, evaluate how this could be do
 
 can you do a critical review if the breakdown structure and fill in the missing aspects to better allow the rational behind the development
  to be clear
+
+ ---
+
+ investigate how a watchdog could be implemented in a cheap and robust manner 

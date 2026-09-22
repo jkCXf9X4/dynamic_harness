@@ -24,6 +24,7 @@ The evolution layer is the controlled-change register: the roadmap (`roadmap.md`
 
 - [roadmap.md](roadmap.md) — **NEW (fills GAP-4)**: IMP-style register of open work from the multi-agent INVESTIGATION next-steps, unresolved suggestions, and open gap-analysis gaps; replaces the stale `docs/roadmap/LIVE_CAPITAL_READINESS.md` pointer
 - [backlog.md](backlog.md) — raw suggestion log with DONE/RESOLVED/PICKED UP markers and disposition notes (moved from `breakdown/development/__undeveloped_sugestions__.md`)
+- [investigations/](investigations/) — design-space investigations feeding the roadmap register (e.g. `watchdog.md`)
 - [selected/](selected/) — completed/selected IMP records `IMP-NNN.md` (created in a parallel track)
 
 ## Rules
