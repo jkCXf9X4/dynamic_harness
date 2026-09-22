@@ -19,7 +19,7 @@ from ..core.task import ActivityEventType
 from ..core.tools.agents import TOOL_ASK_DEF
 from ..core.runtime import Runtime
 from .common import build_runtime
-from .present import build_agent_tree, render_text_tree
+from .present import build_agent_tree, fmt_int, render_text_tree
 from .profile import RunProfiler, run_meta
 from .state import StateWriter, attach_events
 
@@ -96,9 +96,19 @@ def _make_writer(runtime: Runtime) -> StateWriter:
     return StateWriter(runtime.artifact_store.root.parent)
 
 
+def _live_context_messages(runtime: Runtime) -> int:
+    """Sum of messages currently held in every agent's context.
+
+    A progress gauge for the whole run: unlike cumulative billed totals, it
+    reflects the live working set across all agents right now, so it climbs as
+    work is underway and settles once contexts are reclaimed.
+    """
+    return sum(a.live_context_messages for a in runtime.all_agents().values())
+
+
 def _progress_status(runtime: Runtime, label: str) -> str:
-    tokens = runtime.total_usage().get("total_tokens", 0)
-    return f"{tokens} tokens" + (f" \u00b7 {label}" if label else "")
+    msgs = _live_context_messages(runtime) - 1
+    return f"{fmt_int(msgs)} msgs" + (f" \u00b7 {label}" if label else "")
 
 
 def _prune_done_tasks(tasks: set[asyncio.Task[None]]) -> None:
@@ -526,8 +536,7 @@ async def _run_command(
     elif cmd == "/tree":
         _print_tree(runtime)
     elif cmd == "/agents":
-        u = runtime.total_usage()
-        console.print(f"Agents: {runtime.agent_count()}  Commits: {runtime.repository.count()}  Tokens: {u['total_tokens']}")
+        console.print(f"Agents: {runtime.agent_count()}  Commits: {runtime.repository.count()}  Context msgs: {_live_context_messages(runtime)}")
     elif cmd == "/provenance":
         _print_provenance(runtime, arg)
     elif cmd == "/trace":
