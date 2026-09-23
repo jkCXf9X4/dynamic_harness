@@ -1,0 +1,3 @@
+[submodule "3rd_party/agent_methods_and_tools"]
+	path = 3rd_party/agent_methods_and_tools
+	url = git@github.com:jkCXf9X4/agent_methods_and_tools.git
