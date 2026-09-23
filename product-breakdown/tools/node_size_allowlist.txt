@@ -1,0 +1,62 @@
+# Node-size allow-list (AD-009) — TEMPORARY.
+#
+# Nodes listed here exceed the budget (index cap 75 / leaf cap 75 / leaf floor 10)
+# but are grandfathered so the checker can run before the refactor lands.
+# IMP-016 splits/trims this set; remove each path as its node comes under budget.
+# When this file is empty, `check_node_size.py --strict` is clean and the
+# allow-list mechanism can be removed.
+#
+# One repo-relative path per line; '#' comments and blank lines ignored.
+
+product-breakdown/00-intent/VISION.md
+product-breakdown/00-intent/competitive-differentiation.md
+product-breakdown/00-intent/platform-evaluation.md
+product-breakdown/01-product/requirements.md
+product-breakdown/01-product/use-cases/README.md
+product-breakdown/01-product/use-cases/change-and-validation.md
+product-breakdown/01-product/use-cases/documentation-and-knowledge.md
+product-breakdown/01-product/use-cases/embedding-and-integration.md
+product-breakdown/01-product/use-cases/evaluation-and-qa.md
+product-breakdown/01-product/use-cases/pipelines-and-jobs.md
+product-breakdown/01-product/use-cases/repository-analysis.md
+product-breakdown/02-architecture/agent_methodology_guidelines.md
+product-breakdown/02-architecture/concepts/agent-lifecycle.md
+product-breakdown/02-architecture/concepts/artifact-system.md
+product-breakdown/02-architecture/concepts/delegation-model.md
+product-breakdown/02-architecture/concepts/self-healing.md
+product-breakdown/02-architecture/decisions/AD-001.md
+product-breakdown/02-architecture/decisions/AD-002.md
+product-breakdown/02-architecture/decisions/AD-003.md
+product-breakdown/02-architecture/decisions/AD-004.md
+product-breakdown/02-architecture/decisions/AD-005.md
+product-breakdown/02-architecture/decisions/AD-006.md
+product-breakdown/02-architecture/decisions/AD-007.md
+product-breakdown/02-architecture/decisions/AD-008.md
+product-breakdown/02-architecture/examples/anti_patterns.md
+product-breakdown/02-architecture/multi-agent-coordination/INVESTIGATION.md
+product-breakdown/02-architecture/multi-agent-coordination/collaboration-setting-spec.md
+product-breakdown/02-architecture/multi-agent-coordination/management-theory-communication-facilitation.md
+product-breakdown/03-implementation/plugin/INVESTIGATION.md
+product-breakdown/04-verification/communication-structures/FINDINGS.md
+product-breakdown/04-verification/communication-structures/INVESTIGATION.md
+product-breakdown/04-verification/communication-structures/PLAN.md
+product-breakdown/04-verification/communication-structures/context-injection-design.md
+product-breakdown/04-verification/gap-analysis.md
+product-breakdown/05-operation/guides/benchmark-alternatives.md
+product-breakdown/05-operation/guides/custom-agents.md
+product-breakdown/05-operation/guides/extending-tools.md
+product-breakdown/05-operation/guides/getting-started.md
+product-breakdown/05-operation/guides/performance-diagnostics.md
+product-breakdown/05-operation/guides/programmatic-usage.md
+product-breakdown/05-operation/guides/prompt-optimization.md
+product-breakdown/05-operation/runbook.md
+product-breakdown/06-evolution/__undeveloped_sugestions__.md
+product-breakdown/06-evolution/backlog.md
+product-breakdown/06-evolution/investigations/watchdog.md
+product-breakdown/06-evolution/investigations/watchdog_w3_utilization.md
+product-breakdown/06-evolution/selected/IMP-001.md
+product-breakdown/06-evolution/selected/IMP-002.md
+product-breakdown/06-evolution/selected/IMP-003.md
+product-breakdown/06-evolution/selected/IMP-004.md
+product-breakdown/06-evolution/selected/IMP-005.md
+product-breakdown/06-evolution/selected/IMP-006.md

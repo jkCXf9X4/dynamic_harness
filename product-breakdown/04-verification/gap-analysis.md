@@ -10,7 +10,7 @@ related:
   - ../02-architecture/concepts/artifact-system.md
   - ../02-architecture/concepts/self-healing.md
   - ../02-architecture/concepts/delegation-model.md
-  - ../01-product/use-cases/index.md
+  - ../01-product/use-cases/README.md
   - ../00-intent/VISION.md
 ---
 

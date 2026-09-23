@@ -21,13 +21,15 @@ IMP-style register of open work. Created 2026-09-21 (fills review GAP-4 — the 
 | IMP-013 | External-benchmark scaffolding (Terminal-Bench mini / GAIA adapter as opt-in pipelines) | Proposed | Low | `../05-operation/guides/benchmark-alternatives.md` verdicts; suggestion thread "evaluate external agents / benchmarks" |
 | IMP-014 | Trace send/receive for simpler debugging | Proposed | Low | `06-evolution/backlog.md` ("make the trace send and receive") |
 | IMP-015 | Tight fallback loop before failing at tool-call limits (loop-point-out + recover) | Proposed | Low | `06-evolution/backlog.md` ("tighter fallback loop… point out it's looping and see if it can recover") |
+| IMP-016 | Refactor `product-breakdown` nodes to the AD-009 budget (empty the size allow-list) | Selected | Medium | AD-009 / DL-17; `tools/check_node_size.py` reports 52 grandfathered nodes |
 
 ## Notes on provenance
 
 - **IMP-001..006** migrate the multi-agent INVESTIGATION's open next-steps (all under `02-architecture/multi-agent-coordination/INVESTIGATION.md` "Investigation next steps"; completed ones are marked `[x]` there and are NOT re-registered here).
 - **IMP-007..012** migrate the open gaps of `04-verification/gap-analysis.md` (G1, G7, G8, G9, G11–G13). Resolved gaps (G2–G6, G10) are NOT re-registered.
 - **IMP-013..015** come from unresolved/unpicked suggestions in `06-evolution/backlog.md`.
-- All statuses are **Proposed** until an IMP is written to `selected/` and Selected.
+- **IMP-016** comes from the node-model merge (AD-009): it is the refactor that empties `tools/node_size_allowlist.txt`; filed as Selected in `selected/`.
+- All other statuses are **Proposed** until an IMP is written to `selected/` and Selected.
 
 ## Task-contract seed (mandatory before code changes)
 

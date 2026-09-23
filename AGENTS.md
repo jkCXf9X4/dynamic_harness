@@ -133,8 +133,8 @@ product-breakdown/          → Layered definition state (the seven-layer produc
 ├── 05-operation/           → How authors run/maintain (runbook.md, guides/)
 ├── 06-evolution/           → Controlled change (roadmap.md, backlog.md, selected/)
 ├── README.md               → Index of the seven layers + boundary rule
-├── decision-log.md         → One row per decision (DL-1…DL-15)
-└── traceability.md         → Claim/Need → Decision → Artifact
+├── decision-log.md         → One row per decision (DL-1…DL-17)
+└── traceability-map.md     → Claim/Need → Decision → Artifact
 
 docs/                      → Runtime-coupled content only (api/ + references/)
 ├── references/            → Durable rationale library that survives prompt optimization

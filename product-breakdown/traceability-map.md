@@ -16,6 +16,7 @@ Seed map linking **Claim/Need → Decision Record(s) → Realizing artifact/evid
 | "Composable CLI for automation" | DL-12 (CLI-first minimal) | `01-product/requirements.md` FR/NFR, `06-evolution/backlog.md` |
 | "Delegate when it pays; right-size ceremony" | DL-13 (golden delegation rule) | `02-architecture/agent_methodology_guidelines.md`, `docs/references/guidelines.md`, `docs/references/tool_motivations.md` |
 | "Child autonomy safe via intent" | DL-15 (mission-command briefs) | `docs/references/mission_command_rationale.md`, `02-architecture/concepts/delegation-model.md`, `03-implementation/` policies (BriefPolicy) |
+| "Definition state stays navigable and canonical, not accumulated" | DL-17 (node model) | `02-architecture/decisions/AD-009.md`, `product-breakdown/README.md` (Node Model), `product-breakdown/tools/check_node_size.py`, `docs/references/information_hygiene.md` |
 
 ## What Is Not Yet Traced (open work)
 

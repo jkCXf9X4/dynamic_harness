@@ -42,16 +42,23 @@ executable for day-to-day and agent-driven edits.
   primary concern and defer the secondary concern by reference; state carve-outs
   explicitly at the owning layer.
 
-### 1.3 Proportionality
+### 1.3 Proportionality and the node budget
 
 - Records are small, decisive, canonical. Do not copy rationale that already
   lives in a layer README, a variant doc, or a decision record.
+- Every markdown file is a **node**. Index nodes (one per folder, `README.md`)
+  are navigational only — purpose, owns/excludes, a link table, a decisions
+  pointer. Leaf nodes hold one concern, and there is exactly one canonical leaf
+  per fact.
+- The repo declares its budget in `product-breakdown/README.md`. Over cap →
+  **trim → link → split** along a concern seam; never split a decision record —
+  tighten or supersede it. Name files by role; folder indexes are `README.md`.
 
 ### 1.4 Routing table — where each type of information lives
 
 | Type of information | Home |
 |---|---|
-| Current scope / state / requirements / interfaces | owning layer README |
+| Current scope / state / requirements / interfaces | owning layer README (index) + leaf nodes |
 | Decided rationale (why the baseline is what it is) | `<layer>/decisions/<PREFIX>-NNN-<slug>.md` |
 | Candidate / future change (not yet decided) | `06-evolution/` as an IMP |
 | Accepted cross-cutting change decision | owning layer's `decisions/<PREFIX>-NNN-<slug>.md`|
@@ -159,6 +166,8 @@ Before writing: locate the canonical home (§1.4), check for an existing
 representation, and decide create / update / merge / supersede / remove.
 
 After editing: confirm the decision log and traceability map are consistent with
-the files touched; run the repo's own build command (e.g. `./build.sh`, per its
-`05-operation/` runbook) for LaTeX edits and the repo's test command (e.g.
+the files touched; resolve any node over budget (trim → link → split) with the
+repo's checker (e.g. `python3 product-breakdown/tools/check_node_size.py --strict`,
+per its `05-operation/` runbook); run the repo's own build command (e.g.
+`./build.sh`) for LaTeX edits and the repo's test command (e.g.
 `python3 -m pytest`) for scaffold edits.

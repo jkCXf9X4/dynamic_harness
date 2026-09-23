@@ -105,6 +105,28 @@ them. Examples of the shape, drawn from one deployment:
 Ground rules of a specific repo are authoritative for that repo; where they
 conflict with this pattern, the repo's own rules win.
 
+## Node Model
+
+Every markdown file in the structure is a **node**, and each node has a size
+budget. The point is retrieval: a reader must be able to tell on sight what is
+navigational, what is one concern, and what is authoritative.
+
+- **Index node** — one per folder, `README.md`. Navigational only: purpose,
+  owns/excludes, a `link → one-line description` table, a decisions pointer. No
+  rationale or substantive detail.
+- **Leaf node** — one concern. Exactly one canonical leaf per fact.
+- **Over cap → trim → link → split**: first trim material owned elsewhere, then
+  replace repetition with a link, then split along a concern seam. Never split a
+  decision record — tighten or supersede it.
+- Name files by role; folder indexes are always `README.md`.
+
+The budget is **repo-declared** — a repo sets its own limits in
+`product-breakdown/README.md` (a common shape: index target ≤40 / hard cap 75,
+leaf target ≤50 / hard cap 75, minimum ~10). A repo may enforce it with a
+checker (e.g. `product-breakdown/tools/check_node_size.py --strict`); oversized
+existing nodes should be grandfathered behind an allow-list and refactored under
+an IMP rather than rewritten all at once.
+
 ## Layer Hygiene
 
 - Follow the library's information-hygiene doc

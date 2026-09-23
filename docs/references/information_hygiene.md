@@ -35,6 +35,10 @@ slows decisions, and creates ambiguity. It is not neutral: every extra fact is a
 for a future agent to read the wrong one. Prefer the smallest set of information that
 represents the current canonical state.
 
+The product-breakdown **node model** is the concrete mechanism for this: index
+nodes stay navigational, leaf nodes hold one concern, and oversized nodes are
+trimmed, linked, or split (see `product_breakdown_skill.md`).
+
 ## Prevent duplication and contradiction
 
 Before adding information, check whether an existing representation already covers it.

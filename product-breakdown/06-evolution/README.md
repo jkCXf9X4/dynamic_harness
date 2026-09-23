@@ -8,15 +8,16 @@ The evolution layer is the controlled-change register: the roadmap (`roadmap.md`
 
 | IMP | Theme | Stage | Priority |
 |-----|-------|-------|----------|
-| See [roadmap.md](roadmap.md) IMP register | — | — | — |
+| [IMP-016](selected/IMP-016.md) | Refactor `product-breakdown` nodes to the AD-009 budget | Selected | Medium |
 
-*(fills as IMPs are selected/filed in `selected/`)*
+Other open candidates are listed in the [roadmap.md](roadmap.md) register (IMP-001…IMP-015); selected ones are filed under `selected/`.
 
 ## Owns
-- Roadmap, risks, improvement candidates (IMPs), deferred work, change decisions (ED-prefixed ADRs)
+- Roadmap, risks, improvement candidates (IMPs), deferred work
 
 ## Excludes
 - Current definition, current baseline → `00-intent/`, `01-product/`
+- Decision records → the owning layer's `decisions/` (there is no `ED-*` class)
 - Runbook → `05-operation/`
 - Existing-evidence claims → `04-verification/`
 

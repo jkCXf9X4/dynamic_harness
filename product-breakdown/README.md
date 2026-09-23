@@ -22,10 +22,19 @@ Text that changes the reason-to-exist → **Intent**; the promised deliverable �
 
 A document's home is the layer whose primary question it answers. Information flows downward only (Intent → Product → Architecture → Implementation → Verification → Operation); design detail is never pushed up into higher layers.
 
+## Node Model
+
+Every markdown file here is a **node** with a size budget ([AD-009](02-architecture/decisions/AD-009.md)), enforced by `tools/check_node_size.py --strict`.
+
+- **Index node** — one per folder, `README.md`. Navigational only: purpose, owns/excludes, a `link → one-line description` table, decisions pointer. No rationale or substantive detail. Target ≤40 lines, hard cap 75.
+- **Leaf node** — one concern; target ≤50 lines, hard cap 75, minimum ~10. Decision records stay ≤~50 and are never split — tighten or supersede.
+- Over cap → **trim**, then **link**, then **split** along a concern seam. Keep exactly one canonical leaf per fact. Name files by role; folder indexes are `README.md`.
+- Existing oversized nodes are grandfathered in `tools/node_size_allowlist.txt` and refactored under IMP-016; `--strict` is clean once that list is empty.
+
 ## Cross-Cutting Registers
 
 - **[Decision log](decision-log.md)** — one row per decision (DL-1…DL-15); kept current whenever an ADR is added, edited, or superseded.
-- **[Traceability map](traceability.md)** — Claim/Need → Decision Record(s) → Artifact(s); closes the V-model loop at repo level ("every output traced to a requirement").
+- **[Traceability map](traceability-map.md)** — Claim/Need → Decision Record(s) → Artifact(s); closes the V-model loop at repo level ("every output traced to a requirement").
 
 ## Decision Records & IMPs
 
@@ -38,6 +47,7 @@ A document's home is the layer whose primary question it answers. Information fl
 
 ## Maintenance
 
-- Every new/edited ADR MUST be reflected in `decision-log.md` (ID, title, status, layer, location, supersedes/superseded-by); update `traceability.md` when a claim, decision, or artifact changes.
+- Every new/edited ADR MUST be reflected in `decision-log.md` (ID, title, status, layer, location, supersedes/superseded-by); update `traceability-map.md` when a claim, decision, or artifact changes.
+- After editing any node, run `python3 product-breakdown/tools/check_node_size.py --strict` and resolve violations (trim → link → split).
 - Every new/edited IMP is cross-listed in `06-evolution/README.md` with its stage.
 - Follow the skill's layer hygiene and the repo's own information-hygiene rule (canonical state, no duplication). Where the repo's rules conflict with the pattern, the repo's rules win.

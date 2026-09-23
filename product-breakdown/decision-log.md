@@ -24,6 +24,7 @@ Locations are the **post-move** canonical homes (files currently under `docs/` a
 | DL-14 | Streaming children as opt-in mode | Accepted (opt-in) | 02-architecture | `02-architecture/concepts/delegation-model.md`, `00-intent/competitive-differentiation.md` | `agent.stream_children`; a divergence, not a default |
 | DL-15 | Mission-command delegation briefs (intent/end_state/constraints/authority) | Accepted | 01-product / 03-implementation | `docs/references/mission_command_rationale.md`, `02-architecture/concepts/delegation-model.md` | BriefPolicy; intent as the decision criterion for delegated autonomy |
 | DL-16 | Prompt normalization via scoping delegation (no deterministic gate) | Accepted | 01-product / 03-implementation | `docs/references/guidelines.md` ("Scope before work"), `src/dynamic_harness/core/prompts.py`, `src/dynamic_harness/core/agent_system_prompt.txt` | new missions are scoped via `ask()` or ONE scoping-brief sub-agent before decomposition; compliance is prompt-enforced (probabilistic), no IntakePolicy/scope tool/config added; best-effort in batch |
+| DL-17 | Node model: budgeted, navigational definition state | Accepted | 02-architecture | `02-architecture/decisions/AD-009.md`, `product-breakdown/README.md`, `product-breakdown/tools/check_node_size.py`, `docs/references/product_breakdown_skill.md` | backported from the `tmp/` deployment; index ≤40/cap 75, leaf ≤50/cap 75, decision records ≤~50 (never split); trim→link→split; existing oversized nodes grandfathered and refactored under IMP-016 |
 
 ## Reconciliation Rule
 

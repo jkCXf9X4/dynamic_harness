@@ -27,6 +27,14 @@ pytest            # from repo root; testpaths=["tests"]; asyncio_mode=auto
 
 With coverage: `pytest --cov --cov-report=term-missing` (coverage config in `pyproject.toml`, source = `src/dynamic_harness`). The suite currently passes ~466 tests (plugin pilot seam check). AGENTS.md: "Run tests: pytest from repo root."
 
+## Definition-State Check (node sizes)
+
+```bash
+python3 product-breakdown/tools/check_node_size.py --strict   # AD-009 node budget
+```
+
+Every markdown file under `product-breakdown/` is a node: index `README.md` ≤75 lines, leaf ≤75 lines (min ~10). Violations are resolved by trim → link → split. Existing oversized nodes are grandfathered in `product-breakdown/tools/node_size_allowlist.txt` until IMP-016 completes. Run this after editing any `product-breakdown/` node.
+
 ## Lint / Format (pre-commit)
 
 `.pre-commit-config.yaml` installs:
