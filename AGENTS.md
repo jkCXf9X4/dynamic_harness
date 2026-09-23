@@ -8,6 +8,7 @@ summary: >
 model_refs:
   - Task, TaskStatus, ReportPayload, Escalation, Failure, BudgetRequest, AgentOutcome
   - Agent, Runtime, ToolRegistry, ToolDef, ToolResult, ToolContext
+  - Skill, SkillRegistry
   - ArtifactView, Artifact, ArtifactStore
   - Commit, Repository
   - LLMProvider, LLMConfig, LLMResponse, ToolCallData, ToolCallResponse
@@ -59,7 +60,7 @@ src/dynamic_harness/
 │   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop + outcome
 │   ├── context.py           → AgentContext (turns, prune/restore/compress)
 │   ├── environment.py       → EnvironmentInfo (runtime-detected, injected)
-│   ├── references.py        → Reference library: discover + index durable rationale docs
+│   ├── references.py        → Reference library: discover + index durable rationale docs; skill discovery (name/description/roles frontmatter) + trigger rendering + SkillRegistry
 │   ├── tool_context.py      → ToolContext (public interface handed to tool functions)
 │   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus, run())
 │   ├── task.py              → Task, ReportPayload, Escalation, Failure, AgentOutcome, ActivityEvent
@@ -79,15 +80,16 @@ src/dynamic_harness/
 │   │   ├── message.py         → CommsMessage/AgentRef/TopicInfo + envelope renderers
 │   │   ├── factory.py         → build_backend(config, view): topology → backend
 │   │   └── backends/          → relay (1) / siblings (2) / shared (3) / topics (4)
-│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 33 tools split by concern
+│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 34 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()
 │       ├── filesystem.py    → read, write, glob, grep, edit (+ sandbox helpers)
-│       ├── process.py       → bash
-│       ├── network.py       → webfetch
-│       ├── agents.py        → delegate, report, escalate, fail, ask, converse, read_artifact
-│       ├── planning.py      → plan, checkpoint
-│       └── context.py       → compress, prune, restore
+│   ├── process.py       → bash
+│   ├── network.py       → webfetch
+│   ├── agents.py        → delegate, report, escalate, fail, ask, converse, read_artifact
+│   ├── skills.py        → skill_load
+│   ├── planning.py      → plan, checkpoint
+│   └── context.py       → compress, prune, restore
 ├── cli/
 │   ├── terminal.py          → DEFAULT CLI: prompt-only (batch, -i REPL); outcome printed
 │   ├── present.py           → AgentNode/Stats view-models + render_text_tree (pure text)
@@ -270,7 +272,7 @@ delegate to them. This keeps the decision half reusable as a plugin surface
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 33 Built-in Tools
+## 34 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -309,6 +311,7 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 31 | `subscribe` | `topic: str` | No |
 | 32 | `unsubscribe` | `topic: str` | No |
 | 33 | `message` | `agent_id: str, content: str, kind?: str` | No |
+| 34 | `skill_load` | `skill: str` | No |
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its
@@ -327,6 +330,29 @@ auto self-healed (its context is intact — it is diagnosed **blunt**, not rot) 
 the parent decides via `resume(agent_id, strategy="resume"|"fresh")` or
 re-delegation; the failure message and `status` `heal.resume_hint` carry those
 directions.
+
+## Skills layer
+
+Skill-shaped docs in the reference library (`docs/references/` — any doc with
+`name` + `description` YAML frontmatter, plus an optional `roles:` list) are
+discovered once per runtime and surfaced three ways:
+
+1. **Role-filtered triggers in the stable system-prompt block.** Each agent
+   sees a `[Skills]` list of `name: description` lines for skills whose `roles`
+   scope matches its `task.role` (unscoped skills are visible to every role).
+   Only triggers — never bodies — occupy the prefix, preserving prompt caching.
+2. **`skill_load(skill)`** — loads a skill's full body into context on demand
+   (pathless, read-only/cacheable). The role gate applies to *loading* too: a
+   skill scoped to roles the agent does not hold returns `status: refused`;
+   unknown names list the available skills.
+3. **`SkillInjectionPolicy`** (`core/policies/skill_inject.py`, wired per agent
+   at delegate time) — after the first turn, injects at most one `notice`
+   (`skill_hint`) naming the single skill whose description best overlaps the
+   task, so a model that would never load a skill on its own is pointed at the
+   right one.
+
+Frontmatter convention: `name` (load key), `description` (when-to-use trigger,
+kept matchable), optional `roles` (comma-separated or YAML list, lowercase).
 
 ## Communication layer (`core/comms/` + `core/tools/comms.py`)
 

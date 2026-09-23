@@ -25,7 +25,7 @@ question and must NOT duplicate ownership from adjacent layers.
 | `03-implementation/` | With what concrete assets is it realized? | Repo layout, build modules, scripts, model resources, interfaces, config conventions | Scope, architecture rationale, proof criteria, release policy, future features |
 | `04-verification/` | How do we know it satisfies requirements? | Acceptance criteria, test strategy, test cases, traceability, numerical checks, reproducibility | New requirements, architecture changes, routine run commands, future work |
 | `05-operation/` | How do authors run, maintain, release? | Runbook, build/test/release workflow, monitoring, release practice | Design rationale, internals, verification criteria, backlog |
-| `06-evolution/` | What controlled changes come next? | Roadmap, risks, improvement candidates (IMPs), deferred work, change decisions | Current definition, current baseline, runbook, existing-evidence claims |
+| `06-evolution/` | What controlled changes come next? | Roadmap, risks, improvement candidates (IMPs), deferred work | Current definition, current baseline, runbook, existing-evidence claims, decision records |
 
 **Boundary rule:** text that changes the reason-to-exist → Intent; the promised
 deliverable → Product; the organizing design → Architecture; files/scripts/
@@ -36,7 +36,10 @@ how authors build/release → Operation; future work or risk → Evolution.
 
 One file per decision under `<layer>/decisions/<PREFIX>-<NNN>-<slug>.md`.
 Prefixes map to layers: `ID`=Intent, `PD`=Product, `AD`=Architecture,
-`IMD`=Implementation, `VD`=Verification, `OD`=Operation, `ED`=Evolution.
+`IMD`=Implementation, `VD`=Verification, `OD`=Operation. 
+
+There is no `ED-*` class: a decision is homed at — and honored by — the layer that owns its resulting state. Evolution holds only roadmap, risks, and unimplemented IMP
+candidates.
 
 Use the structure's ADR template
 (`docs/references/templates/ADR-template.md`) exactly. Required sections:
@@ -55,9 +58,12 @@ Rules:
 
 ## Implementation Candidates (IMPs)
 
-Future/selected work lives under `06-evolution/`. Completed/selected IMPs are
-filed at `06-evolution/selected/IMP-NNN.md`; status is read from the file
-header. Lifecycle: Proposed → Selected → Completed (or Superseded).
+Future/selected work lives under `06-evolution/`. Selected IMPs are filed at
+`06-evolution/selected/IMP-NNN.md`; status is read from the file header.
+Lifecycle: `Proposed → Selected → removed once implemented` (or `Superseded`).
+
+An implemented IMP is removed — its resulting state lives in the owning layer's
+README and decision record, not in Evolution.
 
 The IMP template (`docs/references/templates/IMP-template.md`) includes:
 Lifecycle Stage, Status, Layer, Theme, Evidence, Current Pain Or Risk, Proposed

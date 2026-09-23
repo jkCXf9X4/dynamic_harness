@@ -54,8 +54,8 @@ executable for day-to-day and agent-driven edits.
 | Current scope / state / requirements / interfaces | owning layer README |
 | Decided rationale (why the baseline is what it is) | `<layer>/decisions/<PREFIX>-NNN-<slug>.md` |
 | Candidate / future change (not yet decided) | `06-evolution/` as an IMP |
-| Accepted cross-cutting change decision | `06-evolution/decisions/ED-NNN-<slug>.md` |
-| Registry of all decisions | `decision-log.md` (one row per ADR/IMP) |
+| Accepted cross-cutting change decision | owning layer's `decisions/<PREFIX>-NNN-<slug>.md`|
+| Registry of all decisions | `decision-log.md` (one row per decision record/IMP) |
 | Claim/Need → Decision → Artifact links | `traceability-map.md` |
 | Raw, unresolved notes | `06-evolution/undeveloped_suggestions.md` — only until resolved, then removed or superseded |
 
@@ -64,36 +64,38 @@ executable for day-to-day and agent-driven edits.
 ### 2.1 The change pipeline
 
 ```
-Idea → IMP (Proposed) → IMP (Selected, scoped) → ED (if baseline-changing
-       or cross-layer) → owning layer adopts → task contract → implement
-       → verify → IMP Completed
+Idea → IMP (Proposed) → IMP (Selected, scoped) → owning-layer decision
+       record → owning layer adopts → task contract → implement → verify → IMP removed
 ```
 
 An IMP is a **scoped candidate**, not implementation approval. A change is
 implementable only once it has a task contract (Objective / Scope / Acceptance)
-and — if it alters an accepted baseline or spans layers — an accepted ED that the
-owning layer cites as authority.
+and — if it alters an accepted baseline or spans layers — an accepted
+owning-layer decision record that the layer cites as authority.
 
-### 2.2 Choosing IMP vs ED vs task
+### 2.2 Choosing IMP vs decision record vs task
 
 - **IMP** — any improvement candidate with an evidence-backed pain/risk that is
   not yet decided. Creating an IMP requires no permission and confers no approval.
-- **ED** — a change that (a) modifies an accepted owning-layer baseline, (b)
-  spans more than one layer, or (c) supersedes an existing decision. An ED must
-  follow the ADR template and be logged.
-- **Task** — concrete work derived from an accepted IMP/ED, with explicit scope
-  and acceptance. Only tasks produce code changes.
+- **Decision record** — a change that (a) modifies an accepted owning-layer
+  baseline, (b) spans more than one layer, or (c) supersedes an existing
+  decision. It must follow the ADR template, be logged, and be homed at the layer that owns the resulting state. 
+  There is no `ED-*` class: a decision is honored at the layer that owns it, never in a parallel Evolution home.
+- **Task** — concrete work derived from an accepted decision record/IMP, with
+  explicit scope and acceptance. Only tasks produce code changes.
 
 Rule of thumb: if the change is already decided and only the doing is left, it is
-a task, not a new record. Prefer updating an existing IMP/ED over creating a new
-number.
+a task, not a new record. Prefer updating an existing IMP/decision record over
+creating a new number.
 
 ### 2.3 IMP lifecycle rules
 
-- Lifecycle: `Proposed → Selected → Completed` (or `Superseded`). Status is read
-  **only** from the IMP file header; never maintain a second status copy.
+- Lifecycle: `Proposed → Selected` then, once the change is implemented at the
+  owning layer, the IMP is **removed** (or `Superseded` if abandoned). Status is
+  read **only** from the IMP file header; never maintain a second status copy.
 - Every IMP is cross-listed in `06-evolution/README.md` (Implementation Status
-  table). A listed IMP must have a real file; do not list phantom IDs.
+  table). A listed IMP must have a real file; do not list phantom IDs. Removing
+  an implemented IMP removes its cross-list row in the same change.
 - Update an IMP's status in place; do not create competing records for the same
   candidate.
 
@@ -101,7 +103,7 @@ number.
 
 A change may be implemented only when all of these hold:
 
-1. Owning layer cites the accepted ED (or an adopted IMP) as authority.
+1. Owning layer cites the accepted decision record (or an adopted IMP) as authority.
 2. Task contract has Objective / Scope / Acceptance.
 3. Verification/acceptance criteria are defined (Verification owns the proof).
 4. The resulting state is written into the owning layer README in the same
@@ -130,8 +132,8 @@ every decision; the map is the index from need to evidence.
 - The map is the index; reverse lookups resolve through each record's Affected
   Artifacts paths.
 - A decision that builds on or refines another must name it (e.g. "Parent
-  decisions: ED-003, ED-004"). This is how change decisions in Evolution point
-  back to the layer decisions they amend.
+  decisions: PD-003, AD-002"). This is how decisions point back to the
+  decisions they amend, regardless of layer.
 
 ### 3.4 Supersession protocol
 

@@ -326,6 +326,10 @@ class Agent:
         self._checkpoint_notes: list[str] = []
         self._environment_info: EnvironmentInfo | None = None
         self._environment_render: str = ""
+        # Role-filtered skill triggers (name + description), rendered by the
+        # runtime at delegate time and folded into the static system-prompt
+        # block. Empty when the library has no skills (or none for this role).
+        self._skill_triggers: str = ""
         # Set once this agent's heavyweight in-memory context has been reclaimed
         # by ``collect_garbage()``. Guards repeated collection and lets a parent
         # know its child is already just a lightweight outcome stub.
@@ -776,9 +780,30 @@ class Agent:
         self._environment_info = info
         self._environment_render = info.render()
 
+    def set_skill_triggers(self, triggers: str) -> None:
+        """Inject the role-filtered skill trigger block into the static steerage.
+
+        Rendered by the runtime at delegate time (empty when no skills apply to
+        this agent's role). Lives in the static system-prompt block so the
+        prompt prefix stays byte-identical for provider caching.
+        """
+        self._skill_triggers = triggers
+
     @property
     def environment_info(self) -> str:
         return self._environment_render
+
+    @property
+    def skill_triggers(self) -> str:
+        """The role-filtered skill trigger block in this agent's steerage."""
+        return self._skill_triggers
+
+    @property
+    def skills(self) -> Any:
+        """The runtime's discovered skill registry (or None when no runtime)."""
+        if self._runtime is None:
+            return None
+        return self._runtime.skills
 
     async def run(self) -> None:
         llm = self.llm
@@ -1172,6 +1197,8 @@ class Agent:
             blocks.append(timeout_guidance)
         if self.environment_info:
             blocks.append(self.environment_info)
+        if self._skill_triggers:
+            blocks.append(self._skill_triggers)
         return "\n\n".join(blocks)
 
     async def _handle_tool_calls(self, response: Any) -> bool:
@@ -1327,6 +1354,8 @@ class Agent:
             tree_depth=self._depth,
             spawn_usage=self._runtime.spawn_usage(self) if self._runtime is not None else None,
             agent_id=self.id,
+            task_description=self.task.description,
+            role=self.task.role,
         )
 
     def _apply_prompt_injection(self, injection: PromptInjection) -> bool:

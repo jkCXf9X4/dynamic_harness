@@ -32,6 +32,11 @@ class ToolContext:
     def agent_id(self) -> str:
         return self._agent.id
 
+    @property
+    def role(self) -> str | None:
+        """The agent's task role tag (drives tool/skill scoping)."""
+        return self._agent.role
+
     # -- environment -----------------------------------------------------
 
     @property
@@ -46,6 +51,15 @@ class ToolContext:
         they live outside the project workspace.
         """
         return self._agent.reference_root
+
+    @property
+    def skills(self) -> Any:
+        """The runtime's discovered skill library (or None).
+
+        Exposed so the ``skill_load`` tool can resolve a skill by name and
+        enforce its role scope. ``None`` when the runtime has no skills.
+        """
+        return self._agent.skills
 
     def gitignore_filter(self):
         return self._agent.get_gitignore_filter()

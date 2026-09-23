@@ -37,6 +37,7 @@ class ToolPermissionPolicy:
         "compress", "prune", "restore",
         "plan", "checkpoint",
         "result_read",
+        "skill_load",
         # Communication layer: coordination, not hands-on work.
         "post", "channel_read", "channels", "channel_info",
         "subscribe", "unsubscribe", "message",

@@ -15,7 +15,15 @@ from .agent import Agent, progress_summary_block
 from .checkpoint import AgentCheckpoint, CheckpointStore
 from .environment import EnvironmentInfo, build_environment_info
 from .prompts import FocusLedger
-from .references import discover_references, render_reference_index, resolve_references_root
+from .references import (
+    Skill,
+    SkillRegistry,
+    discover_references,
+    discover_skills,
+    render_reference_index,
+    render_skill_triggers,
+    resolve_references_root,
+)
 from .policies.agent import AgentPolicy
 from .policies.cost import CostPolicy
 from .policies.disclosure import DisclosurePolicy
@@ -69,6 +77,23 @@ def _build_reference_index(config: HarnessConfig | None) -> str:
     except Exception:
         return ""
     return render_reference_index(docs)
+
+
+def _discover_skills(config: HarnessConfig | None) -> list[Skill]:
+    """Discover the skill-shaped docs in the reference library.
+
+    Mirrors ``_build_reference_index``: the root is resolved from config the
+    same way, and the library is purely additive — no directory (or an empty
+    one) yields ``[]``, never an error.
+    """
+    if config is None:
+        root = None
+    else:
+        root = config.agent.references_dir
+    try:
+        return discover_skills(root)
+    except Exception:
+        return []
 
 
 class Runtime:
@@ -156,6 +181,9 @@ class Runtime:
             warning_attempts=config.safety.spawn_limit_warning_attempts,
         )
         self._reference_root = _resolve_reference_root(config)
+        # Skills are discovered once per runtime (they live under the same
+        # references root); per-agent role filtering happens at delegate time.
+        self.skill_registry = SkillRegistry(_discover_skills(config))
         refs_index = _build_reference_index(config)
         notes = list(config.agent.environment_notes if config else [])
         if refs_index:
@@ -237,6 +265,16 @@ class Runtime:
         normal file tools can reach the docs from any working directory.
         """
         return self._reference_root
+
+    @property
+    def skills(self) -> SkillRegistry:
+        """The runtime's discovered skill library (name + role lookup).
+
+        Skills are skill-shaped reference docs (``name`` + ``description``
+        frontmatter) discovered once at construction from the same references
+        root. Empty when no skill docs exist — the layer is purely additive.
+        """
+        return self.skill_registry
 
     # -- policy back-compat shims ---------------------------------------
     # Config values migrated into the composable policies (SpawnPolicy /
@@ -1005,6 +1043,10 @@ class Runtime:
         # policy (which would leak one agent's override into its siblings).
         self.agent_policy.post_construct(agent)
         agent.set_environment_info(self._environment_info)
+        # Role-filtered skill triggers land in the agent's static system-prompt
+        # block (set once at reset → prompt-cache-stable). The body is loaded on
+        # demand via the skill_load tool.
+        agent.set_skill_triggers(render_skill_triggers(self.skill_registry, role=task.role))
         agent.agent_type = agent_type
         # Spawn-cap accounting: depth is per-agent; the ledger (and the warning
         # budget for its caps) is shared down the whole lineage.
@@ -1015,6 +1057,15 @@ class Runtime:
         # policy into the agent's post-turn directive pass.
         for factory in self._reactive_policy_factories:
             agent.add_reactive_policy(factory())
+        # Proactive skill relevance: recommend the single best-matching skill for
+        # this agent's task (role-scoped), so a model that would never load a
+        # skill on its own is pointed at the right one. Fires at most once.
+        if self.skill_registry:
+            from .policies.skill_inject import SkillInjectionPolicy
+
+            agent.add_reactive_policy(
+                SkillInjectionPolicy(list(self.skill_registry), role=task.role)
+            )
         self._agents[agent_id] = agent
         self._task_graph[agent_id] = []
         if parent:

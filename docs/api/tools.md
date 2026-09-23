@@ -112,6 +112,7 @@ The registered tool count is authoritative from `register_default_tools()` in
 | 24 | `archive` | `content?: str, path?: str, label?: str, summary?: str` | No | Artifact |
 | 25 | `result_read` | `result_id: str, token_limit?: int, token_offset?: int` | No | Result cache |
 | 26 | `result_bash` | `result_id: str, command: str, timeout?: int` | No | Result cache |
+| 27 | `skill_load` | `skill: str` | No | Skills |
 
 Terminal tools (report, escalate, fail) set the agent's task status and stop the tool-calling loop.
 
@@ -554,6 +555,22 @@ Escalations are never resumed.
 ```
 
 **Implementation**: Looks up the cached snapshot by `result_id` (same unknown/evicted error contract as `result_read`), then spawns `sh -c <command>` and pipes the snapshot text to its **stdin**. The full bash vocabulary (`rg`, `grep`, `jq`, `awk`, `wc -l`, `sort`, `tail`, `python3 -c '...'`) can probe an expensive saved output without ever re-running the producing tool; the filter's stdout+stderr is returned (and itself cached/truncated like any cacheable tool). The process group is killed on timeout/cancel. Read-only and worker-only (not in the orchestrator allow-list), mirroring `bash`.
+
+---
+
+### 27. `skill_load` — Load a skill's full instructions
+
+```json
+{
+  "name": "skill_load",
+  "parameters": {
+    "skill": { "type": "string", "description": "The skill's name (the label in the [Skills] block)" }
+  },
+  "required": ["skill"]
+}
+```
+
+**Implementation**: Skill-shaped docs in the reference library (`docs/references/`, any doc with `name` + `description` frontmatter) are discovered once per runtime. Their triggers (`name: description`) are injected into each agent's static system-prompt block, role-filtered by the optional `roles:` frontmatter. `skill_load` resolves a skill by name and returns its full body (frontmatter stripped), read from the already-sandboxed reference root — read-only and cacheable like `read`. The role gate applies to loading too: a skill scoped to roles the agent does not hold returns `status: refused`; unknown names list the available skills. The `SkillInjectionPolicy` (`core/policies/skill_inject.py`) recommends the single best-matching skill for a task via a one-time `skill_hint` notice.
 
 ---
 

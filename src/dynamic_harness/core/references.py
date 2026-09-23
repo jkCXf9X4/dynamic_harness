@@ -1,17 +1,28 @@
-"""Durable reference library — rationale that survives prompt optimization.
+"""Durable reference library + skills — rationale that survives prompt optimization.
 
 The live system prompt is a compressed, optimized derivation of the project's
 principles, tool motivations, and guidelines. Prompt optimization can strip some of
 that rationale away. This module discovers the git-tracked, on-disk source of truth
-(by default ``docs/references/``) and hands agents a compact *index* they can
-`read` from on demand — so the full rationale is always recoverable even if it was
+(by default ``docs/references/``) and hands agents a compact *index* they can pull
+full bodies from on demand — so the rationale is always recoverable even if it was
 optimized out of the prompt.
+
+Two kinds of documents live in the library:
+
+- **References** — plain rationale docs, listed in a compact index the agent
+  ``read``s on demand.
+- **Skills** — docs with ``name`` + ``description`` frontmatter (optionally a
+  ``roles`` list). The ``description`` is a *trigger*: a short when-to-use signal
+  that is always visible, while the full body is loaded on demand via the
+  ``skill_load`` tool. A skill with a ``roles`` scope is only listed for — and only
+  loadable by — agents whose ``role`` tag matches.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 DEFAULT_REFERENCES_DIR = "docs/references"
 
@@ -55,23 +66,45 @@ class ReferenceDoc:
         return f"- {self.title} [{self.path}] ({self.filename}){tail}"
 
 
-def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
+def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a leading ``---``-delimited YAML frontmatter block from the body.
 
     Returns ``({}, text)`` unchanged when no frontmatter block is present, so
     plain markdown files are untouched. Keys are read line-wise (``key: value``)
-    until the closing ``---``; the first line of the body must not be ``---``.
+    until the closing ``---``; a key with an empty value collects a following
+    YAML list block (``- item`` lines) into a list. The first line of the body
+    must not be ``---``.
     """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, text
-    meta: dict[str, str] = {}
-    for i, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
+    meta: dict[str, Any] = {}
+    i = 1
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped == "---":
             return meta, "\n".join(lines[i + 1:])
         key, sep, value = line.partition(":")
         if sep:
-            meta[key.strip()] = value.strip()
+            key = key.strip()
+            value = value.strip()
+            if (
+                not value
+                and i + 1 < len(lines)
+                and lines[i + 1].strip().startswith("- ")
+            ):
+                items: list[str] = []
+                j = i + 1
+                while j < len(lines) and lines[j].strip().startswith("- "):
+                    items.append(lines[j].strip()[2:].strip())
+                    j += 1
+                if items:
+                    meta[key] = items
+                    i = j
+                    continue
+            meta[key] = value
+        i += 1
     return {}, text
 
 
@@ -91,9 +124,95 @@ def _first_paragraph(text: str) -> str:
     return ""
 
 
-def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
-    """Scan ``root`` (default ``docs/references``) for reference documents.
+def _is_skill_doc(frontmatter: dict[str, Any]) -> bool:
+    """A doc is a skill when it declares both ``name`` and ``description``."""
+    return bool(frontmatter.get("name")) and bool(frontmatter.get("description"))
 
+
+def _normalize_roles(value: Any) -> tuple[str, ...]:
+    """Normalize a ``roles`` frontmatter value (scalar or list) to a sorted
+    tuple of lowercase role tags."""
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        parts = value.replace(",", " ").split()
+    else:
+        parts = [str(v) for v in value]
+    return tuple(sorted({p.strip().lower() for p in parts if p.strip()}))
+
+
+@dataclass(frozen=True)
+class Skill:
+    """A skill-shaped reference doc: name + description triggers, body on demand.
+
+    The ``description`` is the *trigger* the model matches against its task; the
+    body is loaded via ``skill_load`` only when the model decides it applies.
+    ``roles`` scopes visibility *and* loading to agents with a matching role tag
+    (an unscoped skill is available to everyone).
+    """
+
+    name: str
+    description: str
+    roles: tuple[str, ...] = ()
+    path: str = ""
+    filename: str = ""
+
+    def applies_to_role(self, role: str | None) -> bool:
+        if not self.roles:
+            return True
+        return (role or "").strip().lower() in self.roles
+
+    def body(self) -> str:
+        """The skill's instructions, with the frontmatter stripped."""
+        if not self.path:
+            return ""
+        try:
+            text = Path(self.path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        _, body = _split_frontmatter(text)
+        return body.strip()
+
+    def render_trigger_line(self) -> str:
+        return f"- {self.name}: {self.description}"
+
+
+class SkillRegistry:
+    """Named lookup + role filtering over the discovered skill library.
+
+    Host-agnostic (no agent/runtime import): the runtime discovers the skills
+    once and hands this registry to tools and policies, which ask for a skill by
+    name or by role.
+    """
+
+    def __init__(self, skills: list[Skill]) -> None:
+        self._skills: list[Skill] = list(skills)
+        self._by_name: dict[str, Skill] = {s.name: s for s in self._skills}
+
+    def __iter__(self):
+        return iter(self._skills)
+
+    def __len__(self) -> int:
+        return len(self._skills)
+
+    def all(self) -> list[Skill]:
+        return list(self._skills)
+
+    def get(self, name: str) -> Skill | None:
+        return self._by_name.get(name)
+
+    def for_role(self, role: str | None) -> list[Skill]:
+        return [s for s in self._skills if s.applies_to_role(role)]
+
+    def names(self) -> list[str]:
+        return [s.name for s in self._skills]
+
+
+def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
+    """Scan ``root`` (default ``docs/references``) for plain reference documents.
+
+    Skill-shaped docs (``name`` + ``description`` frontmatter) are excluded —
+    they are indexed as skills, never as references, so nothing double-lists.
     Returns a sorted list of docs detected on disk. A missing or empty directory
     yields ``[]`` — never an error, so the library is purely additive.
     """
@@ -109,6 +228,8 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
         except OSError:
             continue
         frontmatter, body = _split_frontmatter(text)
+        if _is_skill_doc(frontmatter):
+            continue
         docs.append(ReferenceDoc(
             id=p.stem,
             filename=p.name,
@@ -117,6 +238,36 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
             summary=(frontmatter.get("description") or _first_paragraph(body))[:200],
         ))
     return docs
+
+
+def discover_skills(root: str | Path | None = None) -> list[Skill]:
+    """Scan ``root`` for skill-shaped docs (``name`` + ``description`` frontmatter).
+
+    A missing or empty directory yields ``[]`` — never an error. Skills keep the
+    library purely additive: behavior only changes when skill docs exist.
+    """
+    base = resolve_references_root(root)
+    if base is None or not base.is_dir():
+        return []
+    skills: list[Skill] = []
+    for p in sorted(base.iterdir()):
+        if not p.is_file() or p.suffix.lower() not in _REFERENCE_EXTENSIONS:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        frontmatter, _body = _split_frontmatter(text)
+        if not _is_skill_doc(frontmatter):
+            continue
+        skills.append(Skill(
+            name=str(frontmatter["name"]).strip(),
+            description=str(frontmatter["description"]).strip(),
+            roles=_normalize_roles(frontmatter.get("roles")),
+            path=str(p),
+            filename=p.name,
+        ))
+    return skills
 
 
 def render_reference_index(docs: list[ReferenceDoc]) -> str:
@@ -134,4 +285,25 @@ def render_reference_index(docs: list[ReferenceDoc]) -> str:
         "via read() (this lives outside the optimized prompt).",
     ]
     lines.extend(doc.render_index_line() for doc in docs)
+    return "\n".join(lines)
+
+
+def render_skill_triggers(skills: list[Skill] | SkillRegistry, role: str | None = None) -> str:
+    """Render the compact skill trigger list visible to an agent's role.
+
+    Role-scoped skills are filtered: an unscoped skill is visible to everyone; a
+    skill with a ``roles`` scope is listed only when the agent's role matches.
+    Only the name + description trigger is rendered — never the body, which is
+    loaded on demand via ``skill_load('<name>')`` (progressive disclosure).
+    """
+    registry = skills if isinstance(skills, SkillRegistry) else SkillRegistry(skills)
+    visible = registry.for_role(role)
+    if not visible:
+        return ""
+    lines = [
+        "[Skills]",
+        "Task-specific instructions are packaged as skills. Load a skill's full "
+        "instructions with skill_load('<name>') when its trigger applies to your task:",
+    ]
+    lines.extend(s.render_trigger_line() for s in visible)
     return "\n".join(lines)

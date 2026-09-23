@@ -10,6 +10,7 @@ from . import planning as _planning
 from . import process as _process
 from . import result_bash as _result_bash
 from . import result_read as _result_read
+from . import skills as _skills
 from .registry import ToolRegistry
 
 
@@ -40,6 +41,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_artifacts.TOOL_ARCHIVE_DEF, _artifacts.archive)
     registry.register(_result_read.TOOL_RESULT_READ_DEF, _result_read.result_read)
     registry.register(_result_bash.TOOL_RESULT_BASH_DEF, _result_bash.result_bash)
+    registry.register(_skills.TOOL_SKILL_LOAD_DEF, _skills.skill_load)
     # Communication layer (all topology cells share this surface).
     registry.register(_comms.TOOL_POST_DEF, _comms.post)
     registry.register(_comms.TOOL_CHANNEL_READ_DEF, _comms.channel_read)

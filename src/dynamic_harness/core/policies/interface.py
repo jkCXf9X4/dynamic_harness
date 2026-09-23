@@ -114,6 +114,8 @@ class Observation:
     tree_depth: int = 0
     spawn_usage: dict[str, Any] | None = None
     agent_id: str | None = None
+    task_description: str | None = None
+    role: str | None = None
 
 
 @runtime_checkable
