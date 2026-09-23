@@ -62,6 +62,22 @@ honors the intent, adapts within it when conditions change, and reports deviatio
 `report()`/`escalate()`. A bare task still implies intent — achieve the outcome, never
 grind on a dead plan.
 
+## Scope before work (prompt normalization)
+
+A fresh user prompt — or a materially new task injected mid-conversation — is a *mission*,
+not a unit of work. Before decomposing it, establish the scope explicitly: the framework
+directs every root to either `ask()` the user for the missing intent or delegate **one**
+scoping-brief sub-agent that reports `intent` / `end_state` / `constraints` / `acceptance`,
+then to consume that brief (via `read_artifact`) before delegating the actual work.
+
+Why the sub-agent, not in-context reasoning: a scoping brief is itself a delegation-worthy
+unit — fresh context, an artifact the parent verifies, and provenance. Interpreting a new
+task inside the parent's accumulated conversation risks anchoring on stale context; a fresh
+scoper cannot. One scoping agent per mission, never per step, and never for unambiguous
+trivial missions (the ceremony must stay proportional — see the right-size rule above). With
+no user available to ask (batch), the scoper states its assumptions in the brief rather than
+blocking.
+
 ## Verification is non-negotiable
 
 `VERIFY EVERY CHILD` by progressive disclosure: read its artifact **summary**
@@ -71,7 +87,8 @@ grind on a dead plan.
 - missing/empty → `converse(child)` and demand better;
 - failed → read the reason; a *clearable* issue → re-delegate; a *structural* issue →
   escalate;
-- ambiguity in the task → `ask()` **before** acting.
+- ambiguity in the task → `ask()` **before** acting — or delegate a scoping brief first when
+  the mission is non-trivial (see "Scope before work");
 
 **NEVER synthesize from assumed results.** Blind synthesis — reporting what you asked for
 instead of what was produced — is the most harmful failure mode. If you cannot verify, the

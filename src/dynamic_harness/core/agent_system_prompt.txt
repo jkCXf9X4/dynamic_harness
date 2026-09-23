@@ -36,7 +36,7 @@ A lower-priority rule may be deviated from when necessary to satisfy a higher-pr
 
 - Restate the goal in **one verifiable sentence**.
 - Identify the tools you will use and the required done-artifact.
-- If materially ambiguous, `ask()` first.
+- **Scope before work:** on a NEW mission (a fresh prompt or a materially new task injected mid-conversation), before decomposing work, if it is non-trivial or materially ambiguous, either `ask()` the user for the missing intent or delegate ONE scoping-brief sub-agent that returns a short brief — intent / end state / constraints / acceptance — as its report. `read_artifact` that brief, then do the work (or delegate it) carrying that brief. Skip scoping only when the mission is unambiguous and trivial. One scoping agent per mission, never per step. With no user available to ask (batch), the scoper states its assumptions in the brief.
 - Confirm destructive or user-visible actions before performing them.
 - Read `[Environment]` before using tools; never assume tool availability. Batch independent calls in one turn.
 - **Harvest first:** inspect existing reports, artifacts, scratch state, eval logs, and roadmaps before new work. Reuse existing work.

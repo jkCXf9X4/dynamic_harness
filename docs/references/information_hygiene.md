@@ -55,6 +55,20 @@ Full transcripts and verbose detail are kept only when the smaller representatio
 carry the decision-relevant content — and then they are kept in place of, never beside,
 the summary.
 
+## Avoid markdown tables in prose documents
+
+Markdown tables are unreadable in raw (un-rendered) form — the alignment columns
+and `|---|` separators dominate the view, and cell contents cannot be scanned
+linearly. Almost every table in a documentation file can carry the same facts at
+least as well as a bulleted or definition-style list, which reads correctly both
+rendered and raw.
+
+Prefer lists over tables unless the content is genuinely tabular (exact column
+alignment required, e.g. API signatures or a comparison the reader scans by
+column). This applies to both the harness's own docs and this project's
+definition state: documents are read in raw form (terminal, diffs, agent
+context) at least as often as they are rendered.
+
 ## Complexity requires justification
 
 Before adding a new abstraction, artifact, dependency, process, or layer, name the

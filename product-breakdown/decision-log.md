@@ -23,6 +23,7 @@ Locations are the **post-move** canonical homes (files currently under `docs/` a
 | DL-13 | Golden delegation rule (2+ calls → delegate) | Accepted | 01-product (methodology) | `02-architecture/agent_methodology_guidelines.md`, `02-architecture/concepts/delegation-model.md`, `docs/references/guidelines.md` | under-delegation is the failure mode; over-delegation never a flaw |
 | DL-14 | Streaming children as opt-in mode | Accepted (opt-in) | 02-architecture | `02-architecture/concepts/delegation-model.md`, `00-intent/competitive-differentiation.md` | `agent.stream_children`; a divergence, not a default |
 | DL-15 | Mission-command delegation briefs (intent/end_state/constraints/authority) | Accepted | 01-product / 03-implementation | `docs/references/mission_command_rationale.md`, `02-architecture/concepts/delegation-model.md` | BriefPolicy; intent as the decision criterion for delegated autonomy |
+| DL-16 | Prompt normalization via scoping delegation (no deterministic gate) | Accepted | 01-product / 03-implementation | `docs/references/guidelines.md` ("Scope before work"), `src/dynamic_harness/core/prompts.py`, `src/dynamic_harness/core/agent_system_prompt.txt` | new missions are scoped via `ask()` or ONE scoping-brief sub-agent before decomposition; compliance is prompt-enforced (probabilistic), no IntakePolicy/scope tool/config added; best-effort in batch |
 
 ## Reconciliation Rule
 
