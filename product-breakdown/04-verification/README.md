@@ -18,9 +18,9 @@ Verification is evidence-first, matching the repo's "verify before synthesize" e
 
 ## Contents
 
-- [gap-analysis.md](gap-analysis.md) — G1–G13 with severity + status; open: G1 (mechanical verification), G7 (Layer-2 heal naming), G8 (cost control), G9, G11–G13
-- [communication-structures/](communication-structures/) — INVESTIGATION.md, PLAN.md, FINDINGS.md, RESULTS.md, context-injection-design.md, metrics-cells.json (the auditable evidence chain for DL-6/DL-7/DL-11)
+- [gap-analysis/](gap-analysis/README.md) — G1–G13 with severity + status; open: G1 (mechanical verification), G7 (Layer-2 heal naming), G8 (cost control), G9, G11–G13
+- [communication-structures/](communication-structures/README.md) — [INVESTIGATION](communication-structures/INVESTIGATION.md), [plan/](communication-structures/plan/README.md), [FINDINGS](communication-structures/FINDINGS.md), [RESULTS](communication-structures/RESULTS.md), [context-injection-design](communication-structures/context-injection-design.md), `metrics-cells.json` (the auditable evidence chain for DL-6/DL-7/DL-11)
 
 ## Tests
 
-The executable test suite lives at the repo root: `tests/`. Run `pytest` from the repo root (see [05-operation/runbook.md](../05-operation/runbook.md)). Open verification gaps from `gap-analysis.md` are registered as IMPs in [06-evolution/roadmap.md](../06-evolution/roadmap.md).
+The executable test suite lives at the repo root: `tests/`. Run `pytest` from the repo root (see [05-operation runbook](../05-operation/runbook/README.md)). Open verification gaps from the [gap analysis](gap-analysis/README.md) are registered as IMPs in [06-evolution/roadmap.md](../06-evolution/roadmap.md).

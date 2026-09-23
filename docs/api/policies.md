@@ -6,13 +6,13 @@ summary: >
   The host-agnostic decision layer extracted from Runtime / Agent /
   ToolRegistry during the policies refactor. Each policy decides; the caller
   (agent, runtime, or registry) performs the I/O. Reused by plugin hosts.
-  See ../../product-breakdown/00-intent/platform-evaluation.md.
+  See ../../product-breakdown/00-intent/platform-evaluation/README.md.
 related:
   - runtime.md
   - agent.md
   - config.md
   - tools.md
-  - ../../product-breakdown/00-intent/platform-evaluation.md
+  - ../../product-breakdown/00-intent/platform-evaluation/README.md
 ---
 
 # Policies
@@ -32,7 +32,7 @@ enforced guarantees, extracted from the agent loop / runtime / tool registry.
 They **import neither an agent nor a runtime** — each mirrors the exact behavior
 it was extracted from, and merely *decides* while the caller performs the side
 effect (spawning, retrying, locking, saving, message injection). A plugin host
-(MCP server / extension — see `../../product-breakdown/00-intent/platform-evaluation.md`) reuses the same
+(MCP server / extension — see `../../product-breakdown/00-intent/platform-evaluation/README.md`) reuses the same
 decisions and wording without coupling to the harness core.
 
 | Policy | File | Purpose |

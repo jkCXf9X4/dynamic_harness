@@ -8,8 +8,8 @@ summary: >
   discipline around the fetcher's restrictions and the "summary is a preview,
   the artifact is the truth" rule.
 related:
-  - ../../02-architecture/concepts/delegation-model.md
-  - ../../02-architecture/concepts/artifact-system.md
+  - ../../02-architecture/concepts/delegation-model/README.md
+  - ../../02-architecture/concepts/artifact-system/README.md
   - ../../../docs/api/artifacts.md
   - ../../../docs/references/tool_motivations.md
 ---

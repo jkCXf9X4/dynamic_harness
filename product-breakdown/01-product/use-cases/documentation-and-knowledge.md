@@ -3,88 +3,71 @@ title: "Use-Case — Documentation & Knowledge"
 category: use-case
 summary: >
   Generate or refresh documentation from a codebase, map an API surface, and
-  curate a durable reference library. This family leans on read→summarize→write
-  flows and progressive disclosure; it also shows how the reference-library
-  mechanism (docs/references) becomes content, not just scaffolding.
+  curate a durable reference library — read→summarize→write flows and
+  progressive disclosure, with the reference library as content not scaffolding.
 related:
-  - ../../02-architecture/concepts/artifact-system.md
-  - ../../02-architecture/concepts/self-healing.md
+  - ../../02-architecture/concepts/artifact-system/README.md
+  - ../../02-architecture/concepts/self-healing/README.md
   - ../../../docs/api/artifacts.md
-  - ../../02-architecture/agent_methodology_guidelines.md
+  - ../../02-architecture/methodology/README.md
 ---
 
 # Documentation & Knowledge
 
-Read-only-ish knowledge work where the output is **prose/structured docs
-saved as versioned artifacts**, not code changes. Because the "source" is a
-codebase the agent must discover and read, the delegation model still governs:
-sub-agents each document one module/one surface, and a root synthesizes a
-document tree from validated summaries.
+Read-only-ish knowledge work whose output is **prose/structured docs saved as
+versioned artifacts**, not code changes. Because the source is a codebase the
+agent must discover and read, the delegation model still governs: sub-agents each
+document one module/surface, and a root synthesizes a validated document tree.
 
 ## Scenario A — Generate/refresh module docs from code
 
 > "Document the `core/` package. For each public module write a concise markdown
 > API page (purpose, key classes/functions, usage snippet, related links) into
-> `docs/api/<module>.md`. Then produce an index page. Match the existing
-> docs front-matter (title, category, summary, related)."
+> `docs/api/<module>.md`. Then produce an index page. Match the existing docs
+> front-matter (title, category, summary, related)."
 
 **Why it fits:** derives facts from code (verifiable by re-reading the source it
-    cites), splits cleanly per module into parallel sub-agents, and writes
-    durable artifacts. The index page binds separate artifacts together.
+cites), splits cleanly per module into parallel sub-agents, writes durable
+artifacts; the index page binds separate artifacts together.
 
-**Root decomposition:**
+**Root decomposition:** `core/agent.py`, `core/runtime.py`, `core/task.py`, and
+`tools/` each go to a role "API Documenter" writing `docs/api/<module>.md`
+(enumerating the tools). Root VERIFYs each page names real symbols (read the
+artifact + spot-check source), then synthesizes an index page and reports ids.
 
-```
-core/agent.py    → role "API Documenter" → docs/api/agent.md
-core/runtime.py  → role "API Documenter" → docs/api/runtime.md
-core/task.py     → role "API Documenter" → docs/api/task.md
-tools/           → role "API Documenter" → docs/api/tools.md  (enumerate 19 tools)
-          ↓ VERIFY each page names real symbols (read the artifact + spot-check source)
-Root: synthesize an index page (docs/index.md — not yet created; docs/README.md is the current docs index) + report with all ids
-```
-
-**Tool flow & constraints:** each documenter uses `read` on its module(s) and
-`read` on a sibling doc to match conventions; writes with `write`. Names cited
-must exist — a hallucinated function is caught at the root's verification pass
-(guidelines: *don't document symbols you haven't seen*).
+**Tool flow:** each documenter `read`s its module(s) and a sibling doc to match
+conventions, writes with `write`. Cited names must exist — a hallucinated
+function is caught at the root's verification pass (guidelines: *don't document
+symbols you haven't seen*).
 
 ## Scenario B — Curate the reference library (`docs/references/`)
 
-The framework itself **already exercises this family**: `core/references.py`
-discovers `docs/references/` and injects a compact index into the agent
-environment; the full rationale is only `read` on demand (progressive
-disclosure). A use-case here is an agent maintaining that library: given new
-learned guidelines or tool rationale, condense them into a durable reference doc
-and refresh the index.
-
-**Why it fits:** it is the intended durability mechanism (survives prompt
-optimization), and a maintenance agent selects which existing doc to fold a new
-insight into rather than appending to the prompt.
+The framework **already exercises this family**: `core/references.py` discovers
+`docs/references/` and injects a compact index; full rationale is `read` on
+demand. The use-case is an agent maintaining that library — condensing new
+guidelines into a durable doc and refreshing the index (the intended durability
+mechanism, folding an insight into the right doc rather than the prompt).
 
 ## Scenario C — Concept-time summaries of existing artifacts
 
-After any batch of analysis runs, produce an executive overview. Uses
-`hierarchical_summary(artifact_ids, runtime.artifact_store)` to collapse many
-artifacts into a structured, indented executive summary, then `write` it.
-
-**Why it fits:** assumes the artifacts exist (from a prior report-heavy run);
-this is a **synthesis-only** workload that does not re-discover the tree.
+After a batch of analysis runs, `hierarchical_summary(artifact_ids,
+runtime.artifact_store)` collapses many artifacts into a structured executive
+summary, then `write` it — a **synthesis-only** workload over prior artifacts.
 
 ## Verification & acceptance
 
-- For generated API docs: parent confirms each artifact cites real symbols and
+- Generated API docs: the parent confirms each artifact cites real symbols and
   follows the stated conventions; a hallucinated reference is a hard fail.
-- For reference-library edits: confirm the new entry's heading matches the doc,
-  and that `discover_references()` still lists it (the index is derived).
-- Cross-cut claims ("these are the 19 tools") must equal the real registry
-  count — verify with `read` of `registration.py` or `list_tools`.
+- Reference-library edits: the new entry's heading matches the doc, and
+  `discover_references()` still lists it (the index is derived).
+- Cross-cut claims ("these are the 19 tools") must equal the real registry count
+  — verify with `read` of `registration.py` or `list_tools`.
 
 ## Fit checklist & caveats
 
 - **Fits well**: bulk API docs, per-module doc pages, reference-library
   maintenance, overview synthesis.
-- **Strain**: "write marketing prose about the product" is not verifiable and
-  has no code source — weak fit. Keep docs grounded in symbols/files the agent
-  actually read.
-- **Watch**: source can drift after docs exist; a regeneration requires a
-  re-read, not editing the old artifact blindly.
+- **Strain**: "write marketing prose about the product" is not verifiable and has
+  no code source — weak fit. Keep docs grounded in symbols/files actually read.
+- **Watch**: source can drift after docs exist; regeneration requires a re-read,
+  not editing the old artifact blindly.

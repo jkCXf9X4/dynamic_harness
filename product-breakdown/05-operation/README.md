@@ -16,5 +16,5 @@ The operation layer makes the build/test/benchmark/release workflow explicit and
 
 ## Contents
 
-- [runbook.md](runbook.md) — **NEW (fills GAP-5)**: tests, install/build, benchmark CLI, comms benchmark, pre-commit, release practice
-- [guides/](guides/) — getting-started, programmatic-usage, custom-agents, extending-tools, prompt-optimization, benchmark-alternatives, performance-diagnostics
+- [runbook/](runbook/README.md) — **NEW (fills GAP-5)**: tests, install/build, benchmark CLI, comms benchmark, pre-commit, release practice
+- [guides/](guides/README.md) — getting-started, programmatic-usage, custom-agents, extending-tools, prompt-optimization, benchmark-alternatives, performance-diagnostics

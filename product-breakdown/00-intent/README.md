@@ -23,5 +23,5 @@ This layer is the "why". It holds the founding thesis (fresh context is cheaper 
 ## Contents
 
 - [VISION.md](VISION.md) — vision statement, 15288 foundation, core attributes, pillars, "What This Is NOT", success criteria
-- [competitive-differentiation.md](competitive-differentiation.md) — why this differs (deterministic safety machinery, blunt-vs-rot self-healing, fresh-context economics)
-- [platform-evaluation.md](platform-evaluation.md) — portability thesis: the core worth porting (~25-tool tool-execution + spawn layer)
+- [competitive-differentiation/](competitive-differentiation/README.md) — why this differs (deterministic safety machinery, blunt-vs-rot self-healing, fresh-context economics)
+- [platform-evaluation/](platform-evaluation/README.md) — portability thesis: the core worth porting (~25-tool tool-execution + spawn layer)

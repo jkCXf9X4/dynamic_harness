@@ -66,6 +66,30 @@ executable for day-to-day and agent-driven edits.
 | Claim/Need → Decision → Artifact links | `traceability-map.md` |
 | Raw, unresolved notes | `06-evolution/undeveloped_suggestions.md` — only until resolved, then removed or superseded |
 
+### 1.5 Readability rules
+
+Write every node for the reader or agent who will ingest and act on it. The node
+budget (§1.3) keeps a node small; these rules keep it easy to read. Compact is
+not cramped: the same facts should be scannable, quotable, and cheap to re-use.
+
+- **One fact per line** — break a bullet that carries several facts into a bold
+  label plus sub-bullets: `- **Label**`, then one fact per indented
+  `  - ` sub-bullet. Keep a single-fact bullet on one line. Do not chain distinct
+  facts with semicolons or dashes.
+- **Scannable structure** — lead with the label or conclusion, then the
+  supporting facts. Separate distinct groups with a blank line. Turn inline
+  enumerations into bullets. Use a table only for genuinely tabular data; do not
+  hide prose in a cell.
+- **Plain language** — split sentences longer than ~35 words. Prefer active
+  voice and plain verbs; avoid nominalizations. Expand abbreviations in prose
+  (`incl.` → `including`, `e.g.` → `for example`). Keep identifiers, keys,
+  paths, and commands exact.
+- **Proportional, never padded** — add structure, not claims: never invent
+  facts, examples, or rationale. Reformatting must preserve every fact, ID,
+  link, number, and table row. If it does not fit, use the node-budget remedy in
+  §1.3 (trim → link → split); do not re-compact, overflow, or duplicate to make
+  room.
+
 ## 2. Working with future changes before they are implemented
 
 ### 2.1 The change pipeline

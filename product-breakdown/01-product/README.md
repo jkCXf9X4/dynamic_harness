@@ -30,7 +30,7 @@ This layer answers "what" — scope, capabilities, use cases, requirements, acce
 4. Total context across all agents remains shallow
 5. Cost proportional to task complexity, not context duration
 
-Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analysis.md`) — verification is currently prompt-discipline plus a file-existence gate, not mechanical acceptance checking; tracked in `06-evolution/roadmap.md`.
+Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analysis/README.md`) — verification is currently prompt-discipline plus a file-existence gate, not mechanical acceptance checking; tracked in `06-evolution/roadmap.md`.
 
 ## Owns
 - Scope, capabilities, out-of-scope, acceptance expectations
@@ -46,5 +46,5 @@ Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analys
 
 ## Contents
 
-- [requirements.md](requirements.md) — **CLI sub-spec**: FR-1…FR-6 (prompt-only terminal, persisted overview, always-available input, streaming replies), NFR-1…NFR-4 (composability). The runtime's product definition above is the canonical "what"; this doc pins the terminal surface.
-- [use-cases/](use-cases/) — 7 use-case families (repository-analysis, change-and-validation, documentation-and-knowledge, research-and-synthesis, pipelines-and-jobs, evaluation-and-qa, embedding-and-integration) + index.
+- [requirements/](requirements/README.md) — **CLI sub-spec**: [FR-1…FR-6](requirements/fr-terminal.md) (prompt-only terminal, persisted overview, always-available input, streaming replies), [NFR-1…NFR-4](requirements/nfr.md) (composability), and [acceptance](requirements/acceptance.md). The runtime's product definition above is the canonical "what"; this doc set pins the terminal surface.
+- [use-cases/](use-cases/README.md) — 7 use-case families (repository-analysis, change-and-validation, documentation-and-knowledge, research-and-synthesis, pipelines-and-jobs, evaluation-and-qa, embedding-and-integration) + [fitness filter](use-cases/fitness-filter.md).

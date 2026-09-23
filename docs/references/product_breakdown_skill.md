@@ -123,9 +123,15 @@ navigational, what is one concern, and what is authoritative.
 The budget is **repo-declared** — a repo sets its own limits in
 `product-breakdown/README.md` (a common shape: index target ≤40 / hard cap 75,
 leaf target ≤50 / hard cap 75, minimum ~10). A repo may enforce it with a
-checker (e.g. `product-breakdown/tools/check_node_size.py --strict`); oversized
-existing nodes should be grandfathered behind an allow-list and refactored under
-an IMP rather than rewritten all at once.
+checker (e.g. `product-breakdown/tools/check_node_size.py --strict`). When
+adopting the budget while many nodes are still overweight, phase the refactor
+behind a **temporary** allow-list that is emptied and removed once the checker
+is clean — never leave it as a permanent exemption.
+
+The budget bounds a node's *size*; the **readability rules** — one fact per
+line, scannable structure, plain language, proportional-never-padded — keep it
+easy to read and are the operating counterpart, owned in
+`product_breakdown_workflow.md` §1.5.
 
 ## Layer Hygiene
 

@@ -11,7 +11,7 @@ related:
   - runtime.md
   - task.md
   - tools.md
-  - ../../product-breakdown/02-architecture/concepts/agent-lifecycle.md
+  - ../../product-breakdown/02-architecture/concepts/agent-lifecycle/README.md
 ---
 
 # Agent
@@ -196,7 +196,7 @@ Key rules enforced in the prompt:
 - **Context health** — compress at 50+ messages, delegate at 5–15 turns
 - **Artifact-driven communication** — write findings to disk, reference by path
 
-See `../../product-breakdown/02-architecture/agent_methodology_guidelines.md` for the full detailed methodology.
+See `../../product-breakdown/02-architecture/methodology/README.md` for the full detailed methodology.
 
 ## Public State
 
@@ -211,4 +211,4 @@ agent.message_count           # int — messages in this agent's context
 agent.iteration_count         # int — LLM iterations executed
 ```
 
-Full agent lifecycle details in `../../product-breakdown/02-architecture/concepts/agent-lifecycle.md`.
+Full agent lifecycle details in `../../product-breakdown/02-architecture/concepts/agent-lifecycle/README.md`.

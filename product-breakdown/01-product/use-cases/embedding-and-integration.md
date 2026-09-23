@@ -2,108 +2,74 @@
 title: "Use-Case — Embedding & Integration"
 category: use-case
 summary: >
-  Dynamic Harness as a library inside a product or pipeline: the `Harness` /
-  `Runtime` API, custom agent classes, custom tools, and event-handler wiring.
-  Includes product-specific workflows such as a notification-aware audit bot,
-  a custom-verifier QA runner, and a DB-assisted triage assistant.
+  Dynamic Harness as a library inside a product or pipeline: the Harness /
+  Runtime API, custom agent classes, custom tools, and event-handler wiring.
 related:
   - ../../../docs/api/runtime.md
-  - ../../../docs/api/task.md
-  - ../../05-operation/guides/programmatic-usage.md
-  - ../../05-operation/guides/custom-agents.md
-  - ../../05-operation/guides/extending-tools.md
+  - ../../05-operation/guides/programmatic-usage/README.md
+  - ../../05-operation/guides/custom-agents/README.md
+  - ../../05-operation/guides/extending-tools/README.md
 ---
 
 # Embedding & Integration
 
-The framework is importable (`from dynamic_harness import Harness`, or use
-`Runtime` directly), so a common use-case is a **small, purpose-built
-wrapper** — a specialized agent stack for one product/domain. Everything is
-composable from the documented extension points (AGENTS.md "Extension Points").
+The framework is importable (`from dynamic_harness import Harness`, or `Runtime`
+directly), so a common use-case is a **small, purpose-built wrapper** — a
+specialized agent stack for one product/domain, composed from the documented
+extension points (AGENTS.md "Extension Points").
 
 ## Scenario A — Notification-aware audit bot
 
 A headless service that audits a repo on a schedule and posts verdicts:
 
 ```python
-from dynamic_harness import Harness
-
-harness = Harness(artifact_root="./audit/artifacts", repo_root="./audit/repo",
-                  llm_config={"model": "gpt-4o", "base_url": "https://api.openai.com/v1"})
-
-def notify(agent_id, payload):
-    # on_report → post to a channel/log with confidence gate
-    if payload.confidence is not None and payload.confidence < 0.5:
-        post(f"⚠️ low-confidence report from {agent_id[:8]}")
-
-harness.on_report(notify)
+harness = Harness(artifact_root="./audit/artifacts", repo_root="./audit/repo", ...)
+harness.on_report(notify)   # notify() gates on payload.confidence < 0.5
 harness.run("Audit src/ for secrets and report to audit/secrets.md")
 ```
 
-**Why it fits:** `Harness.run(description)` is synchronous and scriptable; event
-handlers give you the *outcome stream* without parsing internals. The artifact
-commit trail is your audit log.
+`Harness.run(description)` is synchronous and scriptable; event handlers give the
+*outcome stream* without parsing internals, and the commit trail is the audit log.
 
-## Scenario B — Custom-agent specialist (a hard-scoped reviewer)
+## Scenario B — Custom-agent specialist (hard-scoped reviewer)
 
-Subclass `Agent` to bake in a domain system prompt and stricter safety:
-
-```python
-class PolicyReviewer(Agent):
-    def __init__(self, agent_id, task, runtime, parent=None):
-        custom = AGENT_SYSTEM_PROMPT + (
-            "\nYou are a PolicyReviewer. Concern: policy compliance ONLY. "
-            "Never modify code; cite policy doc sections in every finding.")
-        super().__init__(agent_id, task, runtime, parent,
-                         system_prompt=custom, repeated_call_limit=3)
-
-runtime.register_agent_class("policy", PolicyReviewer)
-```
-
-`runtime.delegate(task, agent_type="policy")` from programmatic code, or the
-LLM can spawn it inside a larger tree via
-`delegate(description=..., agent_type="policy")` — unknown names are rejected
-rather than silently falling back to the base `Agent`.
+Subclass `Agent` to bake in a domain system prompt and stricter safety, then
+`runtime.register_agent_class("policy", PolicyReviewer)`. The subclass appends
+"Concern: policy compliance ONLY; never modify code" to `AGENT_SYSTEM_PROMPT` and
+sets `repeated_call_limit=3`. `runtime.delegate(task, agent_type="policy")` from
+code (or the LLM via `delegate(description=..., agent_type="policy")`); unknown
+names are rejected, not silently falling back to base `Agent`.
 
 ## Scenario C — DB-assisted triage assistant (custom tool)
 
-Extend the registry so a sub-agent can query a read-only database while
-troubleshooting (exact pattern in `../../05-operation/guides/extending-tools.md`):
-
-```python
-runtime.tool_registry.register(TOOL_DB_QUERY, _tool_db_query)  # SELECT-only
-harness.run("Query the orders table for the 5 largest recent failures and "
-            "write a triage report to reports/triage.md")
-```
-
-The tool runs under the registry's normal `ToolContext` (sandbox, locks,
-activity events) — no agent needs to know the DB exists to benefit from it.
+Extend the registry so a sub-agent can query a read-only database
+(`runtime.tool_registry.register(TOOL_DB_QUERY, _tool_db_query)`, `SELECT`-only;
+pattern in `../../05-operation/guides/extending-tools/README.md`). The tool runs under the
+normal `ToolContext` (sandbox, locks, activity events) — no agent need know it
+exists.
 
 ## Scenario D — Custom-verifier QA gate in CI
 
-`Harness.run_file("prompts/smoke.txt")` for a golden task, then assert on
+`Harness.run_file("prompts/smoke.txt")` runs a golden task, then assert on
 `harness.last_reports`, `harness.agent_count`, `harness.commit_count`, and
-`harness.total_usage`. Fail the job if the root agent didn't complete — the
-deterministic-verifier philosophy from `evaluation-and-qa.md`
-applied to a consumer repo.
+`harness.total_usage`; fail the job if the root agent didn't complete — the
+deterministic-verifier philosophy from `evaluation-and-qa.md`.
 
 ## Verification & acceptance
 
-- For product use, wire **your** ground truth (test suite, schema validator,
-  DB checks) into either a custom tool or a post-run assertion on artifacts —
-  mirror the benchmark's failable-verifier idea instead of trusting the
-  agent's summary.
+- Wire **your** ground truth (test suite, schema validator, DB checks) into a
+  custom tool or a post-run assertion on artifacts — mirror the failable-verifier
+  idea instead of trusting the agent's summary.
 - Event handlers are the accepted way to observe; don't reach into
-  `_last_report`/`_messages` unless you're in a debug session.
+  `_last_report`/`_messages` unless debugging.
 
 ## Fit checklist & caveats
 
 - **Fits well**: scheduled/repetitive jobs, domain-specialized agents, custom
   read-only data access, CI QA gates.
-- **Strain**: per-agent tool scoping is limited — the registry is shared, so
-  "agent A sees the DB tool, agent B doesn't" needs a separate registry or a
-  custom agent subclass; plan for that before layering permissions.
+- **Strain**: the shared registry means per-agent tool scoping needs a separate
+  registry or a custom agent subclass.
 - **Watch**: `Runtime.reset()` clears artifacts/commits/traces (handlers only
   with `reset(clear_handlers=True)`) — persist roots you want to keep.
-- **Not a fit**: embedding as a long-lived daemon that "chats" with users
-  continuously; the runtime executes *runs*, with resume for continuity.
+- **Not a fit**: embedding as a long-lived daemon that "chats" continuously; the
+  runtime executes *runs*, with resume for continuity.

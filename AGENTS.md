@@ -125,12 +125,12 @@ tests/
     └── test_state.py             → StateWriter JSON + events.jsonl persistence
 
 product-breakdown/          → Layered definition state (the seven-layer product breakdown)
-├── 00-intent/              → Why the project exists (VISION.md, competitive-differentiation.md, platform-evaluation.md)
-├── 01-product/             → What is delivered (requirements.md, use-cases/)
-├── 02-architecture/        → How work is organized (agent_methodology_guidelines.md, concepts/, examples/, decisions/, multi-agent-coordination/)
+├── 00-intent/              → Why the project exists (VISION.md, competitive-differentiation/, platform-evaluation/)
+├── 01-product/             → What is delivered (requirements/, use-cases/)
+├── 02-architecture/        → How work is organized (methodology/, concepts/, examples/, decisions/, multi-agent-coordination/)
 ├── 03-implementation/      → Concrete assets (plugin/)
-├── 04-verification/        → Proof/acceptance (gap-analysis.md, communication-structures/)
-├── 05-operation/           → How authors run/maintain (runbook.md, guides/)
+├── 04-verification/        → Proof/acceptance (gap-analysis/, communication-structures/)
+├── 05-operation/           → How authors run/maintain (runbook/, guides/)
 ├── 06-evolution/           → Controlled change (roadmap.md, backlog.md, selected/)
 ├── README.md               → Index of the seven layers + boundary rule
 ├── decision-log.md         → One row per decision (DL-1…DL-17)
@@ -251,7 +251,7 @@ Config-sourced decision logic is extracted into host-agnostic policy objects
 `DisclosurePolicy`, `TimeoutPolicy`, `BashSafetyPolicy`, `BriefPolicy`, …). Each policy imports
 neither an agent nor a runtime; **Runtime** / **Agent** / **ToolRegistry** now
 delegate to them. This keeps the decision half reusable as a plugin surface
-(e.g. an MCP server / extension boundary) — see `product-breakdown/00-intent/platform-evaluation.md`.
+(e.g. an MCP server / extension boundary) — see `product-breakdown/00-intent/platform-evaluation/README.md`.
 
 ### ArtifactView / Artifact / ArtifactStore (`artifact/store.py`)
 - `ArtifactView(headline, summary_200, summary_1000, technical, full_report, raw_data)`
@@ -379,7 +379,7 @@ reads (watermark from→to), subscription changes, and deliveries (blocking
 `converse` vs queued `message`) — one cross-agent file, followable live with
 `tail -f` or replayable post-run. The backend is host-agnostic (routes on
 `AgentRef` + the `TopologyView` interface the runtime implements) — see
-`product-breakdown/04-verification/communication-structures/PLAN.md`.
+`product-breakdown/04-verification/communication-structures/plan/README.md`.
 
 ## Safety Invariants
 
@@ -443,7 +443,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change commit/persistence | `memory/repository.py` |
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
-| Change agent methodology | `product-breakdown/02-architecture/agent_methodology_guidelines.md` |
+| Change agent methodology | `product-breakdown/02-architecture/methodology/README.md` |
 | Change rationale / reference library | `core/references.py` + `docs/references/` |
 
 

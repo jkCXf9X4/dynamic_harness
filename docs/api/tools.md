@@ -12,7 +12,7 @@ summary: >
 related:
   - runtime.md
   - agent.md
-  - ../../product-breakdown/05-operation/guides/extending-tools.md
+  - ../../product-breakdown/05-operation/guides/extending-tools/README.md
 ---
 
 # Tools

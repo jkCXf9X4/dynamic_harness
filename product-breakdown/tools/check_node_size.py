@@ -8,9 +8,7 @@ Every markdown file under ``product-breakdown/`` is a node:
 - **Leaf node** — one concern. Target <=50 lines, hard cap 75, minimum ~10.
 
 Nodes that exceed the cap (or fall under the leaf minimum) are violations.
-Existing oversized nodes are grandfathered via ``node_size_allowlist.txt``
-(one repo-relative path per line, ``#`` comments allowed) and refactored under
-IMP-016; once that allow-list is empty, ``--strict`` is clean.
+There are no exemptions: ``--strict`` exits non-zero on any violation.
 
 Usage::
 
@@ -26,7 +24,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BREAKDOWN = REPO_ROOT / "product-breakdown"
-ALLOWLIST = Path(__file__).resolve().parent / "node_size_allowlist.txt"
 
 INDEX_TARGET = 40
 INDEX_CAP = 75
@@ -39,54 +36,36 @@ def classify(path: Path) -> str:
     return "index" if path.name == "README.md" else "leaf"
 
 
-def load_allowlist() -> set[str]:
-    if not ALLOWLIST.exists():
-        return set()
-    return {
-        line.strip()
-        for line in ALLOWLIST.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.startswith("#")
-    }
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check product-breakdown node sizes.")
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit non-zero when a non-grandfathered node violates its budget",
+        help="exit non-zero when any node violates its budget",
     )
     args = parser.parse_args(argv)
 
-    allow = load_allowlist()
     violations: list[tuple[str, str, int]] = []
-    grandfathered: list[tuple[str, str, int]] = []
 
     for path in sorted(BREAKDOWN.rglob("*.md")):
         rel = path.relative_to(REPO_ROOT).as_posix()
         kind = classify(path)
         lines = len(path.read_text(encoding="utf-8").splitlines())
         cap = INDEX_CAP if kind == "index" else LEAF_CAP
-        over = lines > cap or (kind == "leaf" and lines < LEAF_MIN)
-        if over:
-            (grandfathered if rel in allow else violations).append((rel, kind, lines))
+        if lines > cap or (kind == "leaf" and lines < LEAF_MIN):
+            violations.append((rel, kind, lines))
 
-    stale = sorted(allow - {rel for rel, _, _ in violations + grandfathered})
-
-    for rel, kind, lines in sorted(grandfathered):
-        print(f"[grandfathered] {rel} ({kind}, {lines} lines)")
     for rel, kind, lines in sorted(violations):
         cap = INDEX_CAP if kind == "index" else LEAF_CAP
-        print(f"[VIOLATION]     {rel} ({kind}, {lines} lines > cap {cap})")
-    for rel in stale:
-        print(f"[stale]         {rel} listed in allow-list but no longer violates")
+        if kind == "leaf" and lines < LEAF_MIN:
+            reason = f"{lines} lines < leaf minimum {LEAF_MIN}"
+        else:
+            reason = f"{lines} lines > cap {cap}"
+        print(f"[VIOLATION] {rel} ({kind}, {reason})")
 
-    print(
-        f"\n{len(grandfathered)} grandfathered, {len(violations)} violation(s), "
-        f"{len(stale)} stale allow-list entr{'y' if len(stale) == 1 else 'ies'}."
-    )
+    print(f"\n{len(violations)} violation(s).")
 
-    if args.strict and (violations or stale):
+    if args.strict and violations:
         return 1
     return 0
 

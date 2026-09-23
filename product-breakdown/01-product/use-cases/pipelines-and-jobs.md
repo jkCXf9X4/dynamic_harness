@@ -2,109 +2,74 @@
 title: "Use-Case — Pipelines & Long Jobs"
 category: use-case
 summary: >
-  Batch extraction/transformation over many files, and long multi-step jobs.
-  Covers the manyfiles pattern (process one item at a time, write each result),
-  the prune/restore discipline that keeps prompt tokens bounded, and the
-  checkpoint/resume self-healing that makes an interrupted overnight job
-  recoverable instead of restartable.
+  Batch extraction/transformation over many files, and long multi-step jobs:
+  the manyfiles pattern (one item at a time, write each result), prune/restore,
+  and checkpoint/resume that makes an interrupted overnight job recoverable.
 related:
-  - ../../02-architecture/concepts/agent-lifecycle.md
-  - ../../02-architecture/concepts/artifact-system.md
-  - ../../02-architecture/concepts/self-healing.md
+  - ../../02-architecture/concepts/agent-lifecycle/README.md
+  - ../../02-architecture/concepts/artifact-system/README.md
+  - ../../02-architecture/concepts/self-healing/README.md
   - ../../02-architecture/examples/execution_patterns.md
 ---
 
 # Pipelines & Long Jobs
 
-Tasks that are mechanically repetitive and long: process N items, one at a
-time; or walk a large workspace serially and reap structured data. Two tools
-decide success here:
-
-- **write-as-you-go** — each item's result is appended/written to a disk
-  artifact immediately, so progress survives any interruption.
-- **`prune`/`restore` + checkpoint resume** — the built-in defense against the
-  context rot this shape tends to create, and the path back after a crash.
+Mechanically repetitive, long tasks: process N items one at a time, or walk a
+large workspace serially. Two disciplines decide success — **write-as-you-go**
+(each result written to disk immediately, so progress survives interruption) and
+**`prune`/`restore` + checkpoint resume** (the rot defense and post-crash path).
 
 ## Scenario A — Batch sizing / inventory (the `manyfiles` pattern)
 
-> "There is a `resources/_payload/` directory with many files. Compute and record the byte
-> size of EVERY file, one at a time.
-> List all files in `resources/_payload/`; for each, run `wc -c <file>`, and append
-> `<name>:<size>` to `.optimize_benchmarks/sizes.txt`. Process one file per
-> turn, write each result as soon as you have it, and `prune()` turns for files
-> already written to disk. When all are done, report with the artifact."
+> "There is a `resources/_payload/` directory with many files. Compute and record
+> the byte size of EVERY file, one at a time: list all files, for each run
+> `wc -c <file>` and append `<name>:<size>` to `.optimize_benchmarks/sizes.txt`,
+> one file per turn; `prune()` turns for files already written. Report when done."
 
-**Why it fits:** the benchmark `FileSizesTask` maps exactly: sequential
-single-command calls whose outputs are *stale the moment the next file starts*.
-Writing each line to disk before moving on (write-as-you-go) + `prune()` of done
-turns is the designed antidote to the long-transcript rot problem this workload
-bloats.
+**Why it fits:** the benchmark `FileSizesTask` maps exactly — sequential
+single-command calls whose outputs *stale the moment the next file starts*;
+write-as-you-go + `prune()` is the designed antidote.
 
 ## Scenario B — Pipeline extraction across a tree
 
-> "Find every `config.json` in `services/`, validate it against our schema
-> class, and write a `issues.csv` with one row per failing file (path, missing
-> field, sample). Leave valid files untouched. Keep the run resumable."
+> "Find every `config.json` in `services/`, validate it against our schema class,
+> and write a `issues.csv` with one row per failing file (path, missing field,
+> sample). Leave valid files untouched. Keep the run resumable."
 
-**Why it fits:** same write-as-you-go + prune discipline; `read`/`grep` to
-discover targets, `read` each file's current content, aggregate, and write rows
-as they are validated. A hard cap on turns per item with escalation/retry
-prevents a single bad file from grinding the whole tree.
+**Why it fits:** same write-as-you-go + prune discipline; `read`/`grep` discover
+targets, content is aggregated, rows written as validated. A hard cap on turns
+per item with escalation/retry prevents one bad file grinding the tree.
 
 ## Scenario C — Headless job monitoring via persisted overview
 
-> "Run the nightly extraction job as a background process. Monitor its
-> progress, and surface a link or file the ops team can tail."
+> "Run the nightly extraction job as a background process. Monitor its progress,
+> and surface a link or file the ops team can tail."
 
-**Why it fits:** the CLI is prompt-only, so the job can be launched batch-style
-inside a workflow without dashboard noise. The run's progress is continuously
-streamed to the run directory:
-
-| File | What to watch |
-|------|---------------|
-| `agents.txt` | text tree — updated on every terminal event; tail it live |
-| `events.jsonl` | appended events — `tail -f` for tool calls/delegations |
-| `stats.json` | aggregate token/commit/agent counts |
-| `checkpoints/` | resume handle if the job is interrupted |
-
-Instead of a status TUI, the ops tooling reads these files while the process
-runs and can `--resume <agent_id>` after a restart.
+The prompt-only CLI lets the job run batch-style without dashboard noise, its
+progress streamed to the run directory. Ops tooling tails `agents.txt` (tree,
+`events.jsonl` (tool calls), `stats.json`, and `checkpoints/`, then
+`--resume <agent_id>` after a restart, instead of a status TUI.
 
 ## Resumability (self-healing for jobs)
 
-For a long job that may be *interrupted* (a crash, a timed-out batch call, a
-stopped container):
-
-1. **Checkpoint**: the run loop auto-persists an `AgentCheckpoint` after every
-   committed turn; the `/checkpoints` CLI command and the on-disk store list
-   resumable agents.
+1. **Checkpoint**: the run loop auto-persists an `AgentCheckpoint` each committed
+   turn; `/checkpoints` lists resumable agents.
 2. **Resume**: `--resume <agent_id>` (CLI) or `Runtime.resume(agent_id)` (async)
-   rebuilds the agent from the persisted checkpoint and continues to completion.
-3. **Rot recovery**: if the rot discriminator fires (repeated identical calls /
-   max-iterations), Layer-3 machinery re-delegates a fresh worker **reusing the
-   partial on-disk result** — disk preserves progress, freshness cures rot.
+   rebuilds it from the checkpoint and continues to completion.
+3. **Rot recovery**: on repeated calls / max-iterations, Layer-3 re-delegates a
+   fresh worker **reusing the partial on-disk result**.
 
 ## Verification & acceptance
 
-- Verify the *artifact* (the appended file), not the summary: confirm per-row
-  counts add up to the actual file inventory (`glob`), and re-run `wc -c` on a
-  sample to confirm sizes.
-- For interrupted runs, compare the resume **evidence** (the on-disk results
-  file) rather than re-computing the whole tree.
+Verify the *artifact*, not the summary: confirm per-row counts add up to the
+actual file inventory (`glob`) and re-run `wc -c` on a sample; for interrupted
+runs, compare the on-disk resume **evidence** rather than re-computing the tree.
 
 ## Fit checklist & caveats
 
-- **Fits well**: bounded item counts, verifiable per-item ground truth, and
-  any workload that *writes as it goes*.
-- **Strain**: an open-ended crawl ("size everything, then every subfolder,
-  then...") is a spec problem — the task must define the terminal condition
-  exactly (this is also why `FileSizesTask` names the whole `resources/_payload/` tree).
-- **Watch**: `bash` has no pipes/redirects, so "`ls | wc -l`" must be
-  decomposed into plain single commands; sort/aggregate in Python or `sort`/`uniq`
-  as separate calls.
-- **Watch**: `bash` has no pipes/redirects, so "`ls | wc -l`" must be
-  decomposed into plain single commands; sort/aggregate in Python or `sort`/`uniq`
-  as separate calls.
-- **Not a fit**: interactive "watching" loops; an agent is not a long-running
-  daemon — work is one run (resumable), then terminate. Monitoring a live run
-  is done by tailing the persisted overview files, not by a TUI.
+- **Fits well**: bounded item counts, verifiable per-item ground truth, any
+  workload that *writes as it goes*.
+- **Strain / watch**: define the terminal condition exactly (an open-ended crawl
+  is a spec problem), and remember `bash` has no pipes/redirects.
+- **Not a fit**: interactive "watching" loops; work is one run (resumable), then
+  terminate — monitor a live run by tailing the overview files, not a TUI.

@@ -19,7 +19,7 @@ The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async acto
 
 ## Contents
 
-- [plugin/](plugin/) — INVESTIGATION.md (Q1–Q7 rulings, interface economy direction, "no loader, ever")
+- [plugin/](plugin/README.md) — [investigation/](plugin/investigation/README.md) (Q1–Q7 rulings, interface economy direction, "no loader, ever")
 
 ## Pointers (assets that stay at repo root)
 
@@ -28,4 +28,4 @@ The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async acto
 - `pyproject.toml` — build system, entry point `dynamic-harness = dynamic_harness.cli.terminal:main`
 - `harness.json.example` — layered config template (common base `~/.config/dynamic-harness/harness.json` + local overlay)
 
-Implementation status is tracked in `06-evolution/`; verify with the tests in `tests/` (see `../05-operation/runbook.md`).
+Implementation status is tracked in `06-evolution/`; verify with the tests in `tests/` (see `../05-operation/runbook/README.md`).
