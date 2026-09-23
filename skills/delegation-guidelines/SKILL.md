@@ -38,7 +38,7 @@ requirement set. It knows nothing else. Therefore every brief must contain:
 - **one task per delegation** — never mega-delegate ("do X then Y then Z").
 
 The brief must also carry the mission-command intent dimension
-(`docs/references/mission_command_rationale.md`): the child needs *why* to keep making
+(`../mission-command/SKILL.md`): the child needs *why* to keep making
 correct decisions when the situation changes, not just *what*:
 
 - **intent** — why this task matters to the parent's objective (the decision criterion),

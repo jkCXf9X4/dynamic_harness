@@ -37,7 +37,7 @@ represents the current canonical state.
 
 The product-breakdown **node model** is the concrete mechanism for this: index
 nodes stay navigational, leaf nodes hold one concern, and oversized nodes are
-trimmed, linked, or split (see `product_breakdown_skill.md`).
+trimmed, linked, or split (see the `product-breakdown` skill).
 
 ## Prevent duplication and contradiction
 

@@ -21,7 +21,7 @@ scaling behaviour of the hot paths most likely to explain that grow:
 
 It prints shading tables: size -> per-unit time -> scaling ratio vs. linear. A
 ratio near 1.0 = linear (fine); a ratio that climbs with size = superlinear
-(that axis is a suspect). See ../../../product-breakdown/05-operation/guides/performance-diagnostics.md for the
+(that axis is a suspect). See ../../../product-breakdown/05-operation/guides/performance-diagnostics/README.md for the
 methodology and how to read the output.
 
 Usage:
@@ -359,7 +359,7 @@ def main() -> None:
 
     shutil.rmtree(".profile-tmp", ignore_errors=True)
     print("\nDone. Lines whose 'ratio' climbs with size mark superlinear axes.")
-    print("See ../../../product-breakdown/05-operation/guides/performance-diagnostics.md for interpretation.")
+    print("See ../../../product-breakdown/05-operation/guides/performance-diagnostics/README.md for interpretation.")
 
 
 if __name__ == "__main__":

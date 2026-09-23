@@ -14,6 +14,7 @@ from dynamic_harness.core.references import (
     render_reference_index,
     render_skill_triggers,
     resolve_references_root,
+    resolve_skills_root,
 )
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task
@@ -62,21 +63,23 @@ def test_discover_references_uses_frontmatter_description(tmp_path: Path) -> Non
     assert doc.path == str(p)
 
 
-def test_skill_shaped_docs_excluded_from_plain_references(tmp_path: Path) -> None:
-    """A doc with name + description frontmatter is a skill, not a reference."""
-    _make_doc(
-        tmp_path,
-        "product_breakdown_skill.md",
-        "---\n"
-        "name: product-breakdown\n"
-        "description: Use when working in product-breakdown/ decision records.\n"
-        "---\n\n"
-        "# Product Breakdown Structure\n\n"
-        "Seven-layer product-definition flow with per-layer decision records.\n",
+def test_skill_shaped_docs_in_references_are_still_references(tmp_path: Path) -> None:
+    """References and skills are separate roots: a doc under the references root
+    is a reference regardless of frontmatter; a doc under the skills root is a
+    skill. Nothing double-lists."""
+    refs = tmp_path / "refs"
+    refs.mkdir()
+    (refs / "product_breakdown_skill.md").write_text(
+        "---\nname: product-breakdown\ndescription: Use in decision records.\n---\n\n"
+        "# Product Breakdown\n\nbody\n"
     )
-    _make_doc(tmp_path, "plain.md", "# Plain\n\njust a rationale doc\n")
-    assert [d.filename for d in discover_references(tmp_path)] == ["plain.md"]
-    assert [s.name for s in discover_skills(tmp_path)] == ["product-breakdown"]
+    assert [d.filename for d in discover_references(refs)] == ["product_breakdown_skill.md"]
+    assert discover_skills(refs) == []  # references root holds no skills
+
+    skills = tmp_path / "skills"
+    _make_skill(skills, "product-breakdown", "Use in decision records.")
+    assert [s.name for s in discover_skills(skills)] == ["product-breakdown"]
+    assert discover_references(skills) == []  # skills root holds no references
 
 
 def test_discover_references_truncates_long_frontmatter_description(tmp_path: Path) -> None:
@@ -153,18 +156,14 @@ def test_runtime_without_references_dir_is_unchanged(tmp_path: Path) -> None:
 
 
 def test_runtime_injects_role_filtered_skill_triggers(tmp_path: Path) -> None:
-    refs = tmp_path / "refs"
-    refs.mkdir()
-    (refs / "mission_command.md").write_text(
-        "---\nname: mission-command\ndescription: Brief children with intent.\n"
-        "roles:\n  - orchestrator\n---\n\n# Mission Command\n\nbrief body\n"
+    skills = tmp_path / "skills"
+    _make_skill(
+        skills, "mission-command", "Brief children with intent.",
+        "roles:\n  - orchestrator",
     )
-    (refs / "tool_motivations.md").write_text(
-        "---\nname: tool-motivations\ndescription: Choose between tools.\n---\n\n"
-        "# Tool Motivations\n\ntool body\n"
-    )
+    _make_skill(skills, "tool-motivations", "Choose between tools.")
     cfg = HarnessConfig()
-    cfg.agent.references_dir = str(refs)
+    cfg.agent.skills_dir = str(skills)
 
     rt = Runtime(
         artifact_root=tmp_path / "a",
@@ -176,7 +175,7 @@ def test_runtime_injects_role_filtered_skill_triggers(tmp_path: Path) -> None:
     assert "mission-command" not in worker.skill_triggers
     assert "tool-motivations" in worker.skill_triggers
     # Only triggers, never bodies.
-    assert "tool body" not in worker.skill_triggers
+    assert "full instructions body" not in worker.skill_triggers
 
     orchestrator = rt.delegate(Task(description="O", role="orchestrator"))
     assert "mission-command" in orchestrator.skill_triggers
@@ -205,41 +204,43 @@ async def test_reference_docs_readable_via_normal_tools_from_any_cwd(
     assert rt.reference_root is not None
     agent = rt.delegate(Task(description="T"))
 
-    target = rt.reference_root / "guidelines.md"
+    target = rt.reference_root / "15288_rationale.md"
     res = await rt.tool_registry.execute("read", "tc1", agent, path=str(target))
     assert "outside the workspace" not in res.content
-    assert "Delegate" in res.content
+    assert "ISO/IEC 15288" in res.content
 
     glob_res = await rt.tool_registry.execute(
         "glob", "tc2", agent, pattern=str(rt.reference_root / "*.md")
     )
-    assert "guidelines.md" in glob_res.content
+    assert "15288_rationale.md" in glob_res.content
 
     write_res = await rt.tool_registry.execute(
         "write", "tc3", agent,
         path=str(rt.reference_root / "pwned.md"), content="x",
     )
-    assert "outside the workspace" in write_res.content
+    assert "read-only" in write_res.content
 
 
 def test_default_references_dir_resolves_package_relative(tmp_path: Path, monkeypatch) -> None:
-    """The default library is the harness package's docs, not the cwd project's.
+    """The default library is the harness package's, not the cwd project's.
 
     Running from a separate project folder must still discover the baked-in
-    library (the product-breakdown skill etc.), so it resolves relative to the
-    package rather than the process working directory.
+    library and skills, so they resolve relative to the package rather than the
+    process working directory.
     """
     monkeypatch.chdir(tmp_path)  # a random "target project" folder
     root = resolve_references_root(None)
     assert root is not None
     assert root.name == "references" or root.name == "docs"
-    # The bundled library is skill-shaped (name + description frontmatter), so
-    # skills — not plain references — are the discoverable surface from any cwd.
-    skills = discover_skills(None)
-    assert skills
-    assert all(s.path.startswith(str(root)) for s in skills)
     refs = discover_references(None)
     assert all(d.path.startswith(str(root)) for d in refs)
+
+    skills_root = resolve_skills_root(None)
+    assert skills_root is not None
+    assert skills_root.name == "skills"
+    skills = discover_skills(None)
+    assert skills
+    assert all(s.path.startswith(str(skills_root)) for s in skills)
 
 
 def test_explicit_references_dir_override(tmp_path: Path) -> None:
@@ -256,11 +257,13 @@ def test_explicit_references_dir_override(tmp_path: Path) -> None:
 
 
 def _make_skill(root: Path, name: str, description: str, roles: str | None = None) -> Path:
+    d = root / name
+    d.mkdir(parents=True, exist_ok=True)
     meta = [f"name: {name}", f"description: {description}"]
     if roles is not None:
         meta.append(roles)
     body = f"---\n{chr(10).join(meta)}\n---\n\n# {name}\n\nfull instructions body\n"
-    return _make_doc(root, f"{name}.md", body)
+    return _make_doc(d, "SKILL.md", body)
 
 
 def test_discover_skills_reads_name_description_and_roles(tmp_path: Path) -> None:
@@ -271,14 +274,28 @@ def test_discover_skills_reads_name_description_and_roles(tmp_path: Path) -> Non
     (scoped,) = [s for s in skills if s.name == "product-breakdown"]
     assert scoped.description == "Use in decision records."
     assert scoped.roles == ("orchestrator", "worker")
+    assert scoped.filename == "SKILL.md"
+    assert Path(scoped.dir) == tmp_path / "product-breakdown"
     (unscoped,) = [s for s in skills if s.name == "unscoped"]
     assert unscoped.roles == ()
 
 
+def test_discover_skills_defaults_name_to_directory(tmp_path: Path) -> None:
+    d = tmp_path / "my-skill"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\ndescription: Does a thing.\nroles:\n  - worker\n---\n\n"
+        "# My Skill\n\nbody\n"
+    )
+    (skill,) = discover_skills(tmp_path)
+    assert skill.name == "my-skill"
+    assert skill.roles == ("worker",)
+
+
 def test_discover_skills_parses_yaml_list_roles(tmp_path: Path) -> None:
-    _make_doc(
-        tmp_path,
-        "listy.md",
+    d = tmp_path / "listy"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
         "---\nname: listy\ndescription: d\nroles:\n  - orchestrator\n  - worker\n---\n\n"
         "# Listy\n\nbody\n",
     )
@@ -291,9 +308,9 @@ def test_discover_skills_missing_dir_returns_empty() -> None:
 
 
 def test_skill_body_strips_frontmatter(tmp_path: Path) -> None:
-    p = _make_doc(
-        tmp_path,
-        "s.md",
+    d = tmp_path / "s"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
         "---\nname: s\ndescription: d\nroles:\n  - worker\n---\n\n# The body\n\n"
         "full instructions live here\n",
     )
@@ -301,6 +318,17 @@ def test_skill_body_strips_frontmatter(tmp_path: Path) -> None:
     assert "name: s" not in skill.body()
     assert "The body" in skill.body()
     assert "full instructions live here" in skill.body()
+
+
+def test_skill_registry_skill_for_path(tmp_path: Path) -> None:
+    _make_skill(tmp_path, "product-breakdown", "d")
+    (skill,) = discover_skills(tmp_path)
+    reg = SkillRegistry([skill])
+    sk_file = tmp_path / "product-breakdown" / "SKILL.md"
+    resource = tmp_path / "product-breakdown" / "templates" / "ADR.md"
+    assert reg.skill_for_path(sk_file) is skill
+    assert reg.skill_for_path(resource) is skill
+    assert reg.skill_for_path(tmp_path / "unrelated.md") is None
 
 
 def test_skill_applies_to_role(tmp_path: Path) -> None:
@@ -356,9 +384,10 @@ def test_render_skill_triggers_accepts_registry(tmp_path: Path) -> None:
     assert "a: da" in render_skill_triggers(reg, role=None)
 
 
-def test_default_references_dir_discovers_bundled_skills(tmp_path: Path, monkeypatch) -> None:
-    """The bundled library is all skill-shaped; skills stay discoverable from any cwd."""
+def test_default_skills_dir_discovers_bundled_skills(tmp_path: Path, monkeypatch) -> None:
+    """The bundled skills (dir-per-skill) stay discoverable from any cwd."""
     monkeypatch.chdir(tmp_path)
     skills = discover_skills(None)
     assert skills
     assert any(s.name == "product-breakdown" for s in skills)
+    assert any(s.name == "tool-motivations" for s in skills)

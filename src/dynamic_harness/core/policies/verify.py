@@ -1,6 +1,6 @@
 """Verification policy as a composable policy object (G1).
 
-gap-analysis.md G1: "VERIFY is prompt discipline, not a mechanism; acceptance
+gap-analysis/README.md G1: "VERIFY is prompt discipline, not a mechanism; acceptance
 criteria are never checked." ``plan(acceptance=...)`` recorded the acceptance
 terms but nothing mechanically evaluated them against the output. This policy
 closes the mechanism half: ``plan`` must declare an objective + acceptance

@@ -55,8 +55,13 @@ class SandboxPolicy:
 
         ``write=True`` (the conservative default) requires the path to be
         inside the workspace root. ``write=False`` additionally permits paths
-        under the read-only roots (the reference library), so agents can read
-        durable docs that live with the harness rather than in the project.
+        under the read-only roots (the reference library / skills library), so
+        agents can read durable docs that live with the harness rather than in
+        the project.
+
+        Read-only roots are read-only *unconditionally*: a path under one is
+        never writable, even when the root happens to sit inside the workspace
+        (a project's own ``skills/`` must not be mutated by its agents).
         """
         sandbox = self.root
         p = Path(path)
@@ -64,12 +69,17 @@ class SandboxPolicy:
             resolved = p.resolve()
         else:
             resolved = (sandbox / p).resolve()
+        for rroot in self.read_only_roots:
+            if rroot in resolved.parents or resolved == rroot:
+                if write:
+                    raise ValueError(
+                        f"Path '{path}' is inside read-only root {rroot} — it is "
+                        f"read-only. You may not write to the reference/skills "
+                        f"library."
+                    )
+                return resolved
         if sandbox in resolved.parents or resolved == sandbox:
             return resolved
-        if not write:
-            for rroot in self.read_only_roots:
-                if rroot in resolved.parents or resolved == rroot:
-                    return resolved
         raise ValueError(
             f"Path '{path}' is outside the workspace. You may only access "
             f"paths under the workspace root: {sandbox}. Use a relative path "

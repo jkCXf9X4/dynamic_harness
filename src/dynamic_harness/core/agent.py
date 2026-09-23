@@ -306,6 +306,7 @@ class Agent:
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
         self._reference_root = runtime.reference_root
+        self._skills_root = runtime.skills_root
         # Bounded, in-memory cache of full tool-result snapshots behind opaque
         # handles. The read-only `result_read` tool pages them WITHOUT
         # re-running the producing tool (slow bash/webfetch/grep especially).
@@ -1826,6 +1827,11 @@ class Agent:
     @property
     def reference_root(self) -> Any:
         return self._reference_root
+
+    @property
+    def skills_root(self) -> Any:
+        """The resolved skills library root (or None)."""
+        return self._skills_root
 
     @property
     def artifact_store(self) -> Any:

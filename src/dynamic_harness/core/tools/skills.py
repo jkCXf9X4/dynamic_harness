@@ -51,4 +51,11 @@ async def skill_load(*, ctx: ToolContext, skill: str) -> str:
     body = skill_obj.body()
     if not body:
         return f"Error: skill '{skill}' is empty or unreadable."
+    if skill_obj.dir:
+        prefix = (
+            f"[skill resources] This skill's directory is: {skill_obj.dir}\n"
+            f"Resource files (templates, references) live here; read them with the "
+            f"read() tool by absolute path.\n\n"
+        )
+        body = prefix + body
     return body

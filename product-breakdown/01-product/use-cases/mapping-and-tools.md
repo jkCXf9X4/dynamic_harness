@@ -16,7 +16,7 @@ Every use-case family is built from the same load-bearing concepts:
 
 ## Tool Vocabulary
 
-Typical tool choices per step (see `docs/references/tool_motivations.md` for the
+Typical tool choices per step (see `skills/tool-motivations/SKILL.md` for the
 full rationale):
 
 - Discover: `glob` (enumerate), `grep` (search contents by symbol/behavior)

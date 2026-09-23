@@ -60,7 +60,7 @@ src/dynamic_harness/
 │   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop + outcome
 │   ├── context.py           → AgentContext (turns, prune/restore/compress)
 │   ├── environment.py       → EnvironmentInfo (runtime-detected, injected)
-│   ├── references.py        → Reference library: discover + index durable rationale docs; skill discovery (name/description/roles frontmatter) + trigger rendering + SkillRegistry
+│   ├── references.py        → Reference library: discover + index durable rationale docs; skills root resolution + dir-per-skill discovery + trigger rendering + SkillRegistry
 │   ├── tool_context.py      → ToolContext (public interface handed to tool functions)
 │   ├── runtime.py           → Runtime orchestrator (agents, task graph, event bus, run())
 │   ├── task.py              → Task, ReportPayload, Escalation, Failure, AgentOutcome, ActivityEvent
@@ -139,13 +139,18 @@ product-breakdown/          → Layered definition state (the seven-layer produc
 docs/                      → Runtime-coupled content only (api/ + references/)
 ├── references/            → Durable rationale library that survives prompt optimization
 │   ├── 15288_rationale.md → Why the lifecycle / V-model / artifact-driven design
-│   ├── tool_motivations.md → Why each tool exists + how to choose between them
-│   ├── guidelines.md      → Delegation / verification / stopping-conditions nuance
-│   └── mission_command_rationale.md → Uppdragstaktik (mission command): why delegation briefs must carry intent, end state, constraints, and freedom of action
+│   └── information_hygiene.md → Canonical state over accumulation; decide create/update/replace/merge/supersede/remove before storing
 ├── api/                   → Module-level API reference
 │   ├── config.md          → Every harness.json setting (defaults + 0/null "cap off" convention)
 │   └── …                  → one page per public module (agent, runtime, task, tools, …)
 └── README.md              → Explains the docs/ vs product-breakdown/ split
+
+skills/                    → Task-specific instruction packages (one directory per skill)
+├── delegation-guidelines/SKILL.md → When to delegate, verify, and stop; brief composition
+├── mission-command/SKILL.md       → Uppdragstaktik (mission command): why delegation briefs must carry intent, end state, constraints, and freedom of action (orchestrator-scoped)
+├── product-breakdown/SKILL.md     → Product-breakdown structure (seven layers, ADRs, IMPs) + templates/
+├── product-breakdown-workflow/SKILL.md → Executable operating rules for an established product-breakdown/
+└── tool-motivations/SKILL.md      → Why each tool exists + how to choose between them
 ```
 
 ## Architecture Principles
@@ -333,8 +338,9 @@ directions.
 
 ## Skills layer
 
-Skill-shaped docs in the reference library (`docs/references/` — any doc with
-`name` + `description` YAML frontmatter, plus an optional `roles:` list) are
+Skills are task-specific instruction packages stored one directory per skill
+under `skills/` (`skills/<name>/SKILL.md` with `name` + `description` YAML
+frontmatter, optional `roles:`, and sibling resource files). They are
 discovered once per runtime and surfaced three ways:
 
 1. **Role-filtered triggers in the stable system-prompt block.** Each agent
@@ -342,17 +348,24 @@ discovered once per runtime and surfaced three ways:
    scope matches its `task.role` (unscoped skills are visible to every role).
    Only triggers — never bodies — occupy the prefix, preserving prompt caching.
 2. **`skill_load(skill)`** — loads a skill's full body into context on demand
-   (pathless, read-only/cacheable). The role gate applies to *loading* too: a
-   skill scoped to roles the agent does not hold returns `status: refused`;
-   unknown names list the available skills.
+   (pathless, read-only/cacheable); the footer advertises the skill's directory
+   for resource files. The role gate applies to *loading* too: a skill scoped
+   to roles the agent does not hold returns `status: refused`; unknown names
+   list the available skills.
 3. **`SkillInjectionPolicy`** (`core/policies/skill_inject.py`, wired per agent
    at delegate time) — after the first turn, injects at most one `notice`
    (`skill_hint`) naming the single skill whose description best overlaps the
    task, so a model that would never load a skill on its own is pointed at the
    right one.
 
-Frontmatter convention: `name` (load key), `description` (when-to-use trigger,
-kept matchable), optional `roles` (comma-separated or YAML list, lowercase).
+The role gate is enforced **across tools**, not just `skill_load`: the skills
+root is a read-only sandbox root, and `read`/`glob`/`grep` refuse (or filter)
+any path inside a role-scoped skill the agent may not load — raw file access
+cannot bypass the scoping the trigger index advertises.
+
+Frontmatter convention: `name` (load key, defaults to the directory name),
+`description` (when-to-use trigger, kept matchable), optional `roles`
+(comma-separated or YAML list, lowercase).
 
 ## Communication layer (`core/comms/` + `core/tools/comms.py`)
 
@@ -444,7 +457,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
 | Change agent methodology | `product-breakdown/02-architecture/methodology/README.md` |
-| Change rationale / reference library | `core/references.py` + `docs/references/` |
+| Change rationale / reference library | `core/references.py` + `docs/references/` + `skills/` |
 
 
 

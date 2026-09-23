@@ -42,7 +42,7 @@ There is no `ED-*` class: a decision is homed at — and honored by — the laye
 candidates.
 
 Use the structure's ADR template
-(`docs/references/templates/ADR-template.md`) exactly. Required sections:
+(`templates/ADR-template.md` in this skill's directory) exactly. Required sections:
 Status, Layer, Context, Decision, Alternatives Considered, Consequences,
 Affected Artifacts, Verification, Review Trigger, Supersedes, Superseded By.
 
@@ -65,7 +65,7 @@ Lifecycle: `Proposed → Selected → removed once implemented` (or `Superseded`
 An implemented IMP is removed — its resulting state lives in the owning layer's
 README and decision record, not in Evolution.
 
-The IMP template (`docs/references/templates/IMP-template.md`) includes:
+The IMP template (`templates/IMP-template.md` in this skill's directory) includes:
 Lifecycle Stage, Status, Layer, Theme, Evidence, Current Pain Or Risk, Proposed
 Improvement, Risk And Blast Radius, Dependencies, Suggested Priority, Selected
 Date, Task Contract Seed (Objective/Scope/Acceptance), Out Of Scope, Traceability.
@@ -131,7 +131,7 @@ is clean — never leave it as a permanent exemption.
 The budget bounds a node's *size*; the **readability rules** — one fact per
 line, scannable structure, plain language, proportional-never-padded — keep it
 easy to read and are the operating counterpart, owned in
-`product_breakdown_workflow.md` §1.5.
+`../product-breakdown-workflow/SKILL.md` §1.5.
 
 ## Layer Hygiene
 

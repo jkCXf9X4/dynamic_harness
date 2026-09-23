@@ -1,6 +1,6 @@
 # Product Breakdown — dynamic_harness
 
-This directory is the repo's **definition state**: the seven-layer product breakdown that makes the development rationale explicit. It is the binding instance of the convention defined in [`docs/references/product_breakdown_skill.md`](../docs/references/product_breakdown_skill.md). Every document that answers one of the seven layer questions lives in its layer; every durable decision is recorded (ADR record + decision log); every claim/need is traced to the decision(s) and artifact(s) that realize it; every piece of future work is registered in the evolution layer. Created 2026-09-21 as the instantiation of that convention (see `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md`), wrapping — not replacing — the existing INVESTIGATION→PLAN→FINDINGS→RESULTS rationale that already lives in the moved files.
+This directory is the repo's **definition state**: the seven-layer product breakdown that makes the development rationale explicit. It is the binding instance of the convention defined in [`skills/product-breakdown/SKILL.md`](../skills/product-breakdown/SKILL.md). Every document that answers one of the seven layer questions lives in its layer; every durable decision is recorded (ADR record + decision log); every claim/need is traced to the decision(s) and artifact(s) that realize it; every piece of future work is registered in the evolution layer. Created 2026-09-21 as the instantiation of that convention (see `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md`), wrapping — not replacing — the existing INVESTIGATION→PLAN→FINDINGS→RESULTS rationale that already lives in the moved files.
 
 ## The Seven Layers
 
@@ -38,16 +38,16 @@ Every markdown file here is a **node** with a size budget ([AD-009](02-architect
 
 ## Decision Records & IMPs
 
-- **ADRs** live under `02-architecture/decisions/<PREFIX>-<NNN>-<slug>.md`, per [`docs/references/templates/ADR-template.md`](../docs/references/templates/ADR-template.md). Prefixes map to layers: ID/PD/AD/IMD/VD/OD/ED. Status ∈ `Proposed | Accepted | Superseded | Rejected | Deprecated`. Created in a parallel track (AD-001…).
-- **IMPs** live under `06-evolution/selected/IMP-NNN.md`, per [`docs/references/templates/IMP-template.md`](../docs/references/templates/IMP-template.md) — a scoped candidate needing a task contract, **not** implementation approval. Cross-listed in `06-evolution/README.md`.
+- **ADRs** live under `02-architecture/decisions/<PREFIX>-<NNN>-<slug>.md`, per [`skills/product-breakdown/templates/ADR-template.md`](../skills/product-breakdown/templates/ADR-template.md). Prefixes map to layers: ID/PD/AD/IMD/VD/OD/ED. Status ∈ `Proposed | Accepted | Superseded | Rejected | Deprecated`. Created in a parallel track (AD-001…).
+- **IMPs** live under `06-evolution/selected/IMP-NNN.md`, per [`skills/product-breakdown/templates/IMP-template.md`](../skills/product-breakdown/templates/IMP-template.md) — a scoped candidate needing a task contract, **not** implementation approval. Cross-listed in `06-evolution/README.md`.
 
 ## What Stays Runtime-Coupled in docs/
 
-`docs/api/` (module API reference) and `docs/references/` (skill, templates, durable rationale docs) remain in `docs/` — they are runtime-coupled. `docs/README.md` explains the split.
+`docs/api/` (module API reference) and `docs/references/` (durable rationale docs) remain in `docs/` — they are runtime-coupled. Skills (task instruction packages) live in top-level `skills/` — also runtime-coupled. `docs/README.md` explains the split.
 
 ## Maintenance
 
 - Every new/edited ADR MUST be reflected in `decision-log.md` (ID, title, status, layer, location, supersedes/superseded-by); update `traceability-map.md` when a claim, decision, or artifact changes.
 - After editing any node, run `python3 product-breakdown/tools/check_node_size.py --strict` and resolve violations (trim → link → split).
 - Every new/edited IMP is cross-listed in `06-evolution/README.md` with its stage.
-- Follow the skill's layer hygiene and the repo's own information-hygiene rule (canonical state, no duplication). When writing a node, apply the readability rules (one fact per line, scannable structure, plain language, proportional-never-padded) in [`docs/references/product_breakdown_workflow.md`](../docs/references/product_breakdown_workflow.md) §1.5. Where the repo's rules conflict with the pattern, the repo's rules win.
+- Follow the skill's layer hygiene and the repo's own information-hygiene rule (canonical state, no duplication). When writing a node, apply the readability rules (one fact per line, scannable structure, plain language, proportional-never-padded) in [`skills/product-breakdown-workflow/SKILL.md`](../skills/product-breakdown-workflow/SKILL.md) §1.5. Where the repo's rules conflict with the pattern, the repo's rules win.

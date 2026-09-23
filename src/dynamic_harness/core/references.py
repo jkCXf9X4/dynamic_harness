@@ -3,19 +3,19 @@
 The live system prompt is a compressed, optimized derivation of the project's
 principles, tool motivations, and guidelines. Prompt optimization can strip some of
 that rationale away. This module discovers the git-tracked, on-disk source of truth
-(by default ``docs/references/``) and hands agents a compact *index* they can pull
-full bodies from on demand — so the rationale is always recoverable even if it was
-optimized out of the prompt.
+and hands agents a compact *index* they can pull full bodies from on demand — so the
+rationale is always recoverable even if it was optimized out of the prompt.
 
-Two kinds of documents live in the library:
+Two separate, canonical roots (each discovered independently):
 
-- **References** — plain rationale docs, listed in a compact index the agent
-  ``read``s on demand.
-- **Skills** — docs with ``name`` + ``description`` frontmatter (optionally a
-  ``roles`` list). The ``description`` is a *trigger*: a short when-to-use signal
-  that is always visible, while the full body is loaded on demand via the
-  ``skill_load`` tool. A skill with a ``roles`` scope is only listed for — and only
-  loadable by — agents whose ``role`` tag matches.
+- **References** (``docs/references/``) — plain rationale docs, listed in a compact
+  index the agent ``read``s on demand. Never role-scoped.
+- **Skills** (``skills/``) — task-specific instruction packages, one directory per
+  skill (``skills/<name>/SKILL.md`` with ``name`` + ``description`` frontmatter,
+  optional ``roles``, and sibling resource files). The ``description`` is a
+  *trigger*: a short when-to-use signal that is always visible, while the full body
+  is loaded on demand via the ``skill_load`` tool. A skill with a ``roles`` scope is
+  only listed for — and only readable by — agents whose ``role`` tag matches.
 """
 
 from __future__ import annotations
@@ -25,13 +25,16 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_REFERENCES_DIR = "docs/references"
+DEFAULT_SKILLS_DIR = "skills"
 
 _REFERENCE_EXTENSIONS = (".md", ".txt", ".markdown")
 
-#: The harness's own bundled reference library, resolved relative to this module
-#: (``src/dynamic_harness/core/references.py`` → repo root ``docs/references``)
-#: so it stays reachable when the harness runs from a separate project folder.
+#: The harness's own bundled library, resolved relative to this module
+#: (``src/dynamic_harness/core/references.py`` → repo root ``docs/references``
+#: and ``skills``) so it stays reachable when the harness runs from a separate
+#: project folder.
 _PACKAGE_REFERENCES_DIR = Path(__file__).resolve().parents[3] / DEFAULT_REFERENCES_DIR
+_PACKAGE_SKILLS_DIR = Path(__file__).resolve().parents[3] / DEFAULT_SKILLS_DIR
 
 
 def resolve_references_root(root: str | Path | None) -> Path | None:
@@ -49,6 +52,21 @@ def resolve_references_root(root: str | Path | None) -> Path | None:
         return _PACKAGE_REFERENCES_DIR
     cwd_refs = Path(DEFAULT_REFERENCES_DIR)
     return cwd_refs if cwd_refs.is_dir() else None
+
+
+def resolve_skills_root(root: str | Path | None) -> Path | None:
+    """Effective skills root: explicit override, else the bundled library.
+
+    Mirrors ``resolve_references_root``: with ``None`` the default is the
+    package's own ``skills`` (independent of the process cwd), with a cwd-relative
+    ``skills`` fallback. Returns ``None`` when no skills exist — purely additive.
+    """
+    if root is not None:
+        return Path(root)
+    if _PACKAGE_SKILLS_DIR.is_dir():
+        return _PACKAGE_SKILLS_DIR
+    cwd_skills = Path(DEFAULT_SKILLS_DIR)
+    return cwd_skills if cwd_skills.is_dir() else None
 
 
 @dataclass(frozen=True)
@@ -124,11 +142,6 @@ def _first_paragraph(text: str) -> str:
     return ""
 
 
-def _is_skill_doc(frontmatter: dict[str, Any]) -> bool:
-    """A doc is a skill when it declares both ``name`` and ``description``."""
-    return bool(frontmatter.get("name")) and bool(frontmatter.get("description"))
-
-
 def _normalize_roles(value: Any) -> tuple[str, ...]:
     """Normalize a ``roles`` frontmatter value (scalar or list) to a sorted
     tuple of lowercase role tags."""
@@ -143,11 +156,13 @@ def _normalize_roles(value: Any) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class Skill:
-    """A skill-shaped reference doc: name + description triggers, body on demand.
+    """A skill-shaped instruction doc: name + description triggers, body on demand.
 
-    The ``description`` is the *trigger* the model matches against its task; the
-    body is loaded via ``skill_load`` only when the model decides it applies.
-    ``roles`` scopes visibility *and* loading to agents with a matching role tag
+    Canonical storage is one directory per skill (``skills/<name>/SKILL.md``),
+    with sibling resource files reachable via ``dir``. The ``description`` is the
+    *trigger* the model matches against its task; the body is loaded via
+    ``skill_load`` only when the model decides it applies. ``roles`` scopes
+    visibility, loading, *and* raw file access to agents with a matching role tag
     (an unscoped skill is available to everyone).
     """
 
@@ -155,6 +170,7 @@ class Skill:
     description: str
     roles: tuple[str, ...] = ()
     path: str = ""
+    dir: str = ""
     filename: str = ""
 
     def applies_to_role(self, role: str | None) -> bool:
@@ -207,14 +223,31 @@ class SkillRegistry:
     def names(self) -> list[str]:
         return [s.name for s in self._skills]
 
+    def skill_for_path(self, path: str | Path) -> Skill | None:
+        """The skill owning ``path``, or None when the path belongs to no skill.
+
+        Any path under a skill's directory (or equal to its file) belongs to that
+        skill, so the filesystem layer can enforce the same role gate the
+        ``skill_load`` tool applies — a role-scoped skill's files are not readable
+        by out-of-scope agents through any tool.
+        """
+        p = Path(path).resolve()
+        for skill in self._skills:
+            if not skill.dir:
+                continue
+            d = Path(skill.dir).resolve()
+            if d == p or d in p.parents:
+                return skill
+        return None
+
 
 def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
-    """Scan ``root`` (default ``docs/references``) for plain reference documents.
+    """Scan ``root`` (default ``docs/references``) for reference documents.
 
-    Skill-shaped docs (``name`` + ``description`` frontmatter) are excluded —
-    they are indexed as skills, never as references, so nothing double-lists.
-    Returns a sorted list of docs detected on disk. A missing or empty directory
-    yields ``[]`` — never an error, so the library is purely additive.
+    References and skills live in separate roots: anything under the references
+    root is a reference, regardless of frontmatter. Returns a sorted list of docs
+    detected on disk. A missing or empty directory yields ``[]`` — never an
+    error, so the library is purely additive.
     """
     base = resolve_references_root(root)
     if base is None or not base.is_dir():
@@ -228,8 +261,6 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
         except OSError:
             continue
         frontmatter, body = _split_frontmatter(text)
-        if _is_skill_doc(frontmatter):
-            continue
         docs.append(ReferenceDoc(
             id=p.stem,
             filename=p.name,
@@ -241,33 +272,48 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
 
 
 def discover_skills(root: str | Path | None = None) -> list[Skill]:
-    """Scan ``root`` for skill-shaped docs (``name`` + ``description`` frontmatter).
+    """Scan ``root`` (default ``skills``) for skills.
 
-    A missing or empty directory yields ``[]`` — never an error. Skills keep the
-    library purely additive: behavior only changes when skill docs exist.
+    Canonical storage is one directory per skill: ``<root>/<name>/SKILL.md``
+    with ``description`` (and optional ``roles``) frontmatter; the skill name is
+    the directory name. A missing or empty root yields ``[]`` — never an error.
+    The library is purely additive.
     """
-    base = resolve_references_root(root)
+    base = resolve_skills_root(root)
     if base is None or not base.is_dir():
         return []
     skills: list[Skill] = []
-    for p in sorted(base.iterdir()):
-        if not p.is_file() or p.suffix.lower() not in _REFERENCE_EXTENSIONS:
+    for directory in sorted(base.iterdir()):
+        if not directory.is_dir():
             continue
-        try:
-            text = p.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        frontmatter, _body = _split_frontmatter(text)
-        if not _is_skill_doc(frontmatter):
-            continue
-        skills.append(Skill(
-            name=str(frontmatter["name"]).strip(),
-            description=str(frontmatter["description"]).strip(),
-            roles=_normalize_roles(frontmatter.get("roles")),
-            path=str(p),
-            filename=p.name,
-        ))
+        sk = _discover_skill_dir(directory)
+        if sk is not None:
+            skills.append(sk)
     return skills
+
+
+def _discover_skill_dir(directory: Path) -> Skill | None:
+    """A ``SKILL.md`` in a directory is a skill named after that directory."""
+    sk_file = directory / "SKILL.md"
+    if not sk_file.is_file():
+        return None
+    try:
+        text = sk_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    frontmatter, _body = _split_frontmatter(text)
+    description = str(frontmatter.get("description") or "").strip()
+    if not description:
+        return None
+    name = str(frontmatter.get("name") or directory.name).strip() or directory.name
+    return Skill(
+        name=name,
+        description=description,
+        roles=_normalize_roles(frontmatter.get("roles")),
+        path=str(sk_file),
+        dir=str(directory),
+        filename="SKILL.md",
+    )
 
 
 def render_reference_index(docs: list[ReferenceDoc]) -> str:

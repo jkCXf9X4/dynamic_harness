@@ -247,7 +247,7 @@ class SelfHealConfig(BaseModel):
     ``max_resumes`` bounds Layer 1 (resume the same agent with a corrective
     nudge — salvages a healthy context). ``max_fresh_retries`` bounds Layer 3
     (spawn a fresh worker over the same task when the context is poisoned / rot).
-    See ../../product-breakdown/02-architecture/concepts/self-healing.md.
+    See ../../product-breakdown/02-architecture/concepts/self-healing/README.md.
     """
 
     mode: bool = True
@@ -342,6 +342,17 @@ class AgentConfig(BaseModel):
                     "package, not the cwd, so it works from any project folder); "
                     "falls back to a cwd-relative 'docs/references' when the project "
                     "carries its own library.",
+    )
+    skills_dir: str | None = Field(
+        default=None,
+        description="Directory of git-tracked skills — task-specific instruction "
+                    "packages, one directory per skill (skills/<name>/SKILL.md with "
+                    "name + description frontmatter and optional roles). Triggers "
+                    "(name + description) are injected role-filtered into each "
+                    "agent's system prompt; bodies load on demand via the "
+                    "skill_load tool; the role gate applies to raw file access too. "
+                    "Defaults to the harness package's own 'skills'; falls back to a "
+                    "cwd-relative 'skills' when the project carries its own library.",
     )
     active_turn_window: int = Field(
         default=50, ge=1,

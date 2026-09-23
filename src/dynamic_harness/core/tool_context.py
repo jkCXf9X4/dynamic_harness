@@ -53,6 +53,15 @@ class ToolContext:
         return self._agent.reference_root
 
     @property
+    def skills_root(self) -> Any:
+        """The harness's bundled skills library root (or None).
+
+        Exposed so the sandbox can grant read-only access to skill files and
+        resources when they live outside the project workspace.
+        """
+        return self._agent.skills_root
+
+    @property
     def skills(self) -> Any:
         """The runtime's discovered skill library (or None).
 

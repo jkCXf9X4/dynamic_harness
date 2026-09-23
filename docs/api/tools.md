@@ -7,7 +7,7 @@ classes:
   - ToolResult
   - ToolRegistry
 summary: >
-  Complete reference for all 26 built-in tools, their OpenAPI schemas,
+  Complete reference for all 27 built-in tools, their OpenAPI schemas,
   implementations, and the ToolRegistry API for registering custom tools.
 related:
   - runtime.md
@@ -570,7 +570,7 @@ Escalations are never resumed.
 }
 ```
 
-**Implementation**: Skill-shaped docs in the reference library (`docs/references/`, any doc with `name` + `description` frontmatter) are discovered once per runtime. Their triggers (`name: description`) are injected into each agent's static system-prompt block, role-filtered by the optional `roles:` frontmatter. `skill_load` resolves a skill by name and returns its full body (frontmatter stripped), read from the already-sandboxed reference root — read-only and cacheable like `read`. The role gate applies to loading too: a skill scoped to roles the agent does not hold returns `status: refused`; unknown names list the available skills. The `SkillInjectionPolicy` (`core/policies/skill_inject.py`) recommends the single best-matching skill for a task via a one-time `skill_hint` notice.
+**Implementation**: Skills are task-specific instruction packages stored one directory per skill under the skills root (`skills/<name>/SKILL.md` with `name` + `description` frontmatter and optional `roles`, plus sibling resource files). Their triggers (`name: description`) are injected into each agent's static system-prompt block, role-filtered by `roles`. `skill_load` resolves a skill by name and returns its full body (frontmatter stripped) plus a footer advertising the skill's directory for resource files — read-only and cacheable like `read`. The role gate applies to loading and to raw file access alike: a skill scoped to roles the agent does not hold returns `status: refused`, and `read`/`glob`/`grep` refuse or filter paths inside a role-scoped skill the agent may not load. Unknown names list the available skills. The `SkillInjectionPolicy` (`core/policies/skill_inject.py`) recommends the single best-matching skill for a task via a one-time `skill_hint` notice.
 
 ---
 

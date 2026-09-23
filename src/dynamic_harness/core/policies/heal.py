@@ -128,7 +128,7 @@ class HealBudget:
 
 
 class HealPolicy:
-    """Decisions for the layered recovery policy (../../../../product-breakdown/02-architecture/concepts/self-healing.md).
+    """Decisions for the layered recovery policy (../../../../product-breakdown/02-architecture/concepts/self-healing/README.md).
 
     Holds the shared heal *limits* (``max_resumes`` / ``max_fresh``); the per-
     child *used* counters live in ``HealBudget`` instances owned separately.

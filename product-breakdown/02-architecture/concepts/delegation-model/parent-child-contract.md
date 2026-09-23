@@ -6,7 +6,7 @@ The parent provides:
 - A specific, focused task description
 - A role that scopes what the child cares about
 - Any necessary context (file paths, conventions)
-- A mission-command intent block (see `../../../../docs/references/mission_command_rationale.md`):
+- A mission-command intent block (see `../../../../skills/mission-command/SKILL.md`):
   `intent` (why it matters — the child's decision criterion), `end_state` (the
   desired final condition — *this is* the acceptance criteria), `constraints`
   (task boundaries and interface rules; the child's runtime token/time caps are

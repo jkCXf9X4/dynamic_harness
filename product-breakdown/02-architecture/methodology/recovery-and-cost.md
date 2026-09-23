@@ -2,7 +2,7 @@
 
 ## Failure Recovery
 
-See [references/guidelines.md](../../../docs/references/guidelines.md) →
+See [delegation-guidelines skill](../../../skills/delegation-guidelines/SKILL.md) →
 "The Kill → Inspect → Retry loop" for the full salvage-and-retry protocol.
 Short version:
 

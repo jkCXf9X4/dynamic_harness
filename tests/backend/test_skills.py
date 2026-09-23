@@ -1,4 +1,5 @@
-"""Skills layer: the skill_load tool and the proactive SkillInjectionPolicy."""
+"""Skills layer: the skill_load tool, the proactive SkillInjectionPolicy, and
+the filesystem role gate (read/glob/grep refuse role-scoped skill files)."""
 
 from __future__ import annotations
 
@@ -14,13 +15,25 @@ from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task
 
 
-def _runtime_with_refs(tmp_path: Path, refs: dict[str, str]) -> Runtime:
-    d = tmp_path / "refs"
-    d.mkdir()
-    for filename, body in refs.items():
-        (d / filename).write_text(body)
+def _write_skill(root: Path, name: str, description: str, roles: str | None = None, body: str = "body") -> Path:
+    d = root / name
+    d.mkdir(parents=True, exist_ok=True)
+    meta = [f"name: {name}", f"description: {description}"]
+    if roles is not None:
+        meta.append(roles)
+    (d / "SKILL.md").write_text(
+        f"---\n{chr(10).join(meta)}\n---\n\n# {name}\n\n{body}\n"
+    )
+    return d
+
+
+def _runtime_with_skills(tmp_path: Path, specs: dict[str, tuple[str, str | None]]) -> Runtime:
+    d = tmp_path / "skills"
+    d.mkdir(parents=True, exist_ok=True)
+    for name, (description, roles) in specs.items():
+        _write_skill(d, name, description, roles)
     cfg = HarnessConfig()
-    cfg.agent.references_dir = str(d)
+    cfg.agent.skills_dir = str(d)
     return Runtime(
         artifact_root=tmp_path / "a",
         repo_root=tmp_path / "r",
@@ -41,11 +54,26 @@ _SKILL_BODY = (
 @pytest.mark.asyncio
 async def test_skill_load_returns_body(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="T"))
-    result = await runtime.tool_registry.execute("skill_load", "tc1", agent=agent, skill="tool-motivations")
+    result = await runtime.tool_registry.execute(
+        "skill_load", "tc1", agent=agent, skill="tool-motivations", token_limit=2000
+    )
     assert "Error" not in result.content
     assert "Discovery tools" in result.content
     # Frontmatter is stripped from the body.
     assert "name: tool-motivations" not in result.content
+
+
+@pytest.mark.asyncio
+async def test_skill_load_advertises_resources(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "product-breakdown": ("Product breakdown work.", None),
+    })
+    agent = rt.delegate(Task(description="T"))
+    result = await rt.tool_registry.execute("skill_load", "tc1", agent=agent, skill="product-breakdown")
+    assert "[skill resources]" in result.content
+    assert "skills/product-breakdown" in result.content
+    # The resource note is prefixed so it survives truncation; the body follows.
+    assert result.content.index("[skill resources]") < result.content.index("# product-breakdown")
 
 
 @pytest.mark.asyncio
@@ -59,7 +87,7 @@ async def test_skill_load_unknown_name(runtime: Runtime) -> None:
 @pytest.mark.asyncio
 async def test_skill_load_no_library(runtime: Runtime, tmp_path: Path) -> None:
     cfg = HarnessConfig()
-    cfg.agent.references_dir = str(tmp_path / "does_not_exist")
+    cfg.agent.skills_dir = str(tmp_path / "does_not_exist")
     rt = Runtime(
         artifact_root=tmp_path / "a",
         repo_root=tmp_path / "r",
@@ -74,11 +102,8 @@ async def test_skill_load_no_library(runtime: Runtime, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_skill_load_role_scoped_refusal(tmp_path: Path) -> None:
-    rt = _runtime_with_refs(tmp_path, {
-        "mission_command.md": (
-            "---\nname: mission-command\ndescription: Brief children.\n"
-            "roles:\n  - orchestrator\n---\n\n# Mission Command\n\nbrief body\n"
-        ),
+    rt = _runtime_with_skills(tmp_path, {
+        "mission-command": ("Brief children.", "roles:\n  - orchestrator"),
     })
     worker = rt.delegate(Task(description="W"))
     res = await rt.tool_registry.execute("skill_load", "tc1", agent=worker, skill="mission-command")
@@ -88,7 +113,7 @@ async def test_skill_load_role_scoped_refusal(tmp_path: Path) -> None:
     orchestrator = rt.delegate(Task(description="O", role="orchestrator"))
     res = await rt.tool_registry.execute("skill_load", "tc2", agent=orchestrator, skill="mission-command")
     assert "status: refused" not in res.content
-    assert "brief body" in res.content
+    assert "body" in res.content
 
 
 @pytest.mark.asyncio
@@ -96,6 +121,89 @@ async def test_skill_load_is_cacheable(runtime: Runtime) -> None:
     agent = runtime.delegate(Task(description="T"))
     result = await runtime.tool_registry.execute("skill_load", "tc1", agent=agent, skill="tool-motivations")
     assert result.result_id is not None  # read-only → snapshotted behind a handle
+
+
+# -- filesystem role gate ---------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_read_refuses_role_scoped_skill_file(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "mission-command": ("Brief children.", "roles:\n  - manager"),
+    })
+    worker = rt.delegate(Task(description="W", role="worker"))
+    target = rt.skills_root / "mission-command" / "SKILL.md"
+    res = await rt.tool_registry.execute("read", "tc1", agent=worker, path=str(target))
+    assert "status: refused" in res.content
+    assert "mission-command" in res.content
+
+    manager = rt.delegate(Task(description="M", role="manager"))
+    res = await rt.tool_registry.execute("read", "tc2", agent=manager, path=str(target))
+    assert "status: refused" not in res.content
+    assert "body" in res.content
+
+
+@pytest.mark.asyncio
+async def test_read_grants_unscoped_skill_file(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "tool-motivations": ("Choose between tools.", None),
+    })
+    worker = rt.delegate(Task(description="W"))
+    target = rt.skills_root / "tool-motivations" / "SKILL.md"
+    res = await rt.tool_registry.execute("read", "tc1", agent=worker, path=str(target))
+    assert "status: refused" not in res.content
+    assert "body" in res.content  # raw read returns the file (frontmatter included)
+
+
+@pytest.mark.asyncio
+async def test_read_refuses_skill_resource_files(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "mission-command": ("Brief children.", "roles:\n  - manager"),
+    })
+    resource = rt.skills_root / "mission-command" / "extra.md"
+    resource.write_text("secret resource\n")
+    worker = rt.delegate(Task(description="W", role="worker"))
+    res = await rt.tool_registry.execute("read", "tc1", agent=worker, path=str(resource))
+    assert "status: refused" in res.content
+
+
+@pytest.mark.asyncio
+async def test_glob_filters_role_scoped_skill_files(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "mission-command": ("Brief children.", "roles:\n  - orchestrator"),
+        "tool-motivations": ("Choose between tools.", None),
+    })
+    worker = rt.delegate(Task(description="W"))
+    res = await rt.tool_registry.execute(
+        "glob", "tc1", agent=worker, pattern=str(rt.skills_root / "**/*.md")
+    )
+    assert "tool-motivations" in res.content
+    assert "mission-command" not in res.content
+
+
+@pytest.mark.asyncio
+async def test_grep_skips_role_scoped_skill_files(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "mission-command": ("Brief children.", "roles:\n  - orchestrator"),
+        "tool-motivations": ("Choose between tools.", None),
+    })
+    worker = rt.delegate(Task(description="W"))
+    res = await rt.tool_registry.execute(
+        "grep", "tc1", agent=worker, pattern="body", path=str(rt.skills_root)
+    )
+    assert "tool-motivations" in res.content
+    assert "mission-command" not in res.content
+
+
+@pytest.mark.asyncio
+async def test_write_refused_in_skills_root(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {
+        "tool-motivations": ("Choose between tools.", None),
+    })
+    worker = rt.delegate(Task(description="W"))
+    target = rt.skills_root / "tool-motivations" / "pwned.md"
+    res = await rt.tool_registry.execute("write", "tc1", agent=worker, path=str(target), content="x")
+    assert "read-only" in res.content
 
 
 # -- SkillInjectionPolicy ---------------------------------------------------
@@ -154,11 +262,8 @@ def test_observation_new_fields_have_defaults() -> None:
 
 @pytest.mark.asyncio
 async def test_policy_wired_per_agent(tmp_path: Path) -> None:
-    rt = _runtime_with_refs(tmp_path, {
-        "product_breakdown.md": (
-            "---\nname: product-breakdown\ndescription: decision records, IMP candidates\n---\n\n"
-            "# Product Breakdown\n\nbody\n"
-        ),
+    rt = _runtime_with_skills(tmp_path, {
+        "product-breakdown": ("decision records, IMP candidates", None),
     })
     agent = rt.delegate(Task(description="Update the decision log for IMP-3"))
     names = agent.reactive_policies.names()

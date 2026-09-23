@@ -23,6 +23,7 @@ from .references import (
     render_reference_index,
     render_skill_triggers,
     resolve_references_root,
+    resolve_skills_root,
 )
 from .policies.agent import AgentPolicy
 from .policies.cost import CostPolicy
@@ -80,7 +81,7 @@ def _build_reference_index(config: HarnessConfig | None) -> str:
 
 
 def _discover_skills(config: HarnessConfig | None) -> list[Skill]:
-    """Discover the skill-shaped docs in the reference library.
+    """Discover the skill-shaped docs in the skills library.
 
     Mirrors ``_build_reference_index``: the root is resolved from config the
     same way, and the library is purely additive — no directory (or an empty
@@ -89,11 +90,27 @@ def _discover_skills(config: HarnessConfig | None) -> list[Skill]:
     if config is None:
         root = None
     else:
-        root = config.agent.references_dir
+        root = config.agent.skills_dir
     try:
         return discover_skills(root)
     except Exception:
         return []
+
+
+def _resolve_skills_root(config: HarnessConfig | None) -> Path | None:
+    """Resolve the skills library root for sandbox read access.
+
+    Mirrors ``_discover_skills`` so the root the sandbox grants read access to
+    is exactly the root the skills were discovered from.
+    """
+    if config is None:
+        root = None
+    else:
+        root = config.agent.skills_dir
+    try:
+        return resolve_skills_root(root)
+    except Exception:
+        return None
 
 
 class Runtime:
@@ -181,8 +198,9 @@ class Runtime:
             warning_attempts=config.safety.spawn_limit_warning_attempts,
         )
         self._reference_root = _resolve_reference_root(config)
-        # Skills are discovered once per runtime (they live under the same
-        # references root); per-agent role filtering happens at delegate time.
+        # Skills are discovered once per runtime (they live under their own
+        # skills root); per-agent role filtering happens at delegate time.
+        self._skills_root = _resolve_skills_root(config)
         self.skill_registry = SkillRegistry(_discover_skills(config))
         refs_index = _build_reference_index(config)
         notes = list(config.agent.environment_notes if config else [])
@@ -270,11 +288,22 @@ class Runtime:
     def skills(self) -> SkillRegistry:
         """The runtime's discovered skill library (name + role lookup).
 
-        Skills are skill-shaped reference docs (``name`` + ``description``
-        frontmatter) discovered once at construction from the same references
-        root. Empty when no skill docs exist — the layer is purely additive.
+        Skills are skill-shaped instruction packages (``skills/<name>/SKILL.md``)
+        discovered once at construction from the skills root. Empty when no skill
+        docs exist — the layer is purely additive.
         """
         return self.skill_registry
+
+    @property
+    def skills_root(self) -> Path | None:
+        """The resolved skills library root, or None.
+
+        Lives with the package (``skills/``) rather than in the project workspace;
+        the sandbox grants read-only access to it so the normal file tools can
+        reach skill files and resources from any working directory. Read access
+        to role-scoped skills is additionally gated by the agent's role.
+        """
+        return self._skills_root
 
     # -- policy back-compat shims ---------------------------------------
     # Config values migrated into the composable policies (SpawnPolicy /
@@ -597,7 +626,7 @@ class Runtime:
         — so a host or diagnostic can enumerate what is installed without
         reaching into any registry's internals. This is the single source of
         truth for the extension surfaces (see investigation
-        `../../../product-breakdown/03-implementation/plugin/INVESTIGATION.md` §The count).
+        `../../../product-breakdown/03-implementation/plugin/investigation/README.md` §The count).
         """
         return {
             "tools": self.tool_registry.list_tools(),
@@ -636,7 +665,7 @@ class Runtime:
         ``expected_outputs`` (optional) lists on-disk files the agent must
         produce; they are used as the deliverable check for self-heal. If the
         run ends in failure, or finishes without producing its deliverable, a
-        bounded self-heal policy (../../../product-breakdown/02-architecture/concepts/self-healing.md) may resume it
+        bounded self-heal policy (../../../product-breakdown/02-architecture/concepts/self-healing/README.md) may resume it
         once (blunt) or spawn a fresh worker (rot). ``root_agent``: resumes an
         existing agent with the new message (``continue_with_input``). Returns
         the (possibly healed) agent; read ``agent.outcome`` / ``agent.last_report``
@@ -767,7 +796,7 @@ class Runtime:
         self._active_root = agent
         return agent
 
-    # -- self-heal (../../../product-breakdown/02-architecture/concepts/self-healing.md) ------------------------
+    # -- self-heal (../../../product-breakdown/02-architecture/concepts/self-healing/README.md) ------------------------
 
     def _heal_counts_for(self, agent_id: str) -> HealBudget:
         return self._heal_counts.setdefault(agent_id, HealBudget())
@@ -919,7 +948,7 @@ class Runtime:
         own initiative could burn the whole run budget again. The child stays
         failed and is surfaced to its parent, who decides whether to resume it
         (strategy=\"resume\"/\"fresh\") or re-delegate. Escalations are never
-        healed. See ../../../product-breakdown/02-architecture/concepts/self-healing.md.
+        healed. See ../../../product-breakdown/02-architecture/concepts/self-healing/README.md.
         """
         # No LLM → nothing to resume; leave the agent as-is.
         if not self._self_heal_mode or self._llm is None:

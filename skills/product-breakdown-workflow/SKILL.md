@@ -11,7 +11,7 @@ kept unbroken. The layer ownership and boundary rules in the repo's own
 `product-breakdown/README.md` are authoritative; this document makes them
 executable for day-to-day and agent-driven edits.
 
-> **Relationship to the skill.** `docs/references/product_breakdown_skill.md`
+> **Relationship to the skill.** `../product-breakdown/SKILL.md`
 > describes the *structure* — the seven layers, decision-record prefixes, and the
 > ADR/IMP templates. This document is the *operating workflow* for a repo that has
 > already stood up that structure. Each repo owns its exact layout; where this

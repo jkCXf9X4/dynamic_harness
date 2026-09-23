@@ -88,26 +88,56 @@ def is_hidden(path: str | Path) -> bool:
 def sandbox_root(ctx: ToolContext) -> Path:
     """The workspace an agent is allowed to operate in (read/glob/grep)."""
     return SandboxPolicy.for_context(
-        ctx.generated_root, read_only_roots=_reference_roots(ctx)
+        ctx.generated_root, read_only_roots=_read_only_roots(ctx)
     ).root
 
 
-def _reference_roots(ctx: ToolContext) -> tuple[Path, ...]:
-    """The harness's bundled reference library root(s), if any.
+def _read_only_roots(ctx: ToolContext) -> tuple[Path, ...]:
+    """The harness's bundled library roots, if any.
 
     Exposed so the sandbox can grant *read-only* access to the durable
-    reference docs regardless of the project workspace (they live with the
-    harness package, not in the cwd project).
+    reference docs and the skills library regardless of the project workspace
+    (they live with the harness package, not in the cwd project). Skills are
+    additionally role-gated via ``_skill_role_refusal``.
     """
-    root = getattr(ctx, "reference_root", None)
-    return (root,) if root is not None else ()
+    roots: list[Path] = []
+    reference = getattr(ctx, "reference_root", None)
+    if reference is not None:
+        roots.append(reference)
+    skills = getattr(ctx, "skills_root", None)
+    if skills is not None:
+        roots.append(skills)
+    return tuple(roots)
+
+
+def _skill_role_refusal(ctx: ToolContext, resolved: Path) -> str | None:
+    """Refuse access to a role-scoped skill's files for an out-of-scope agent.
+
+    The role gate is enforced across tools, not just ``skill_load``: any path
+    inside a role-scoped skill's directory is off-limits to agents whose role
+    does not match, so the raw file tools cannot bypass the scoping the trigger
+    index advertises.
+    """
+    registry = getattr(ctx, "skills", None)
+    if registry is None:
+        return None
+    skill = registry.skill_for_path(resolved)
+    if skill is None or skill.applies_to_role(ctx.role):
+        return None
+    return (
+        f"status: refused\n"
+        f"Path '{resolved}' is inside skill '{skill.name}', which is scoped to "
+        f"role(s) {', '.join(skill.roles)} and is not readable by your role "
+        f"({ctx.role or 'none'}). Delegate this work, or load the skill with "
+        f"skill_load if you are eligible."
+    )
 
 
 def resolve_safe_path(path: str, ctx: ToolContext, *, write: bool = True) -> Path:
     # Path-traversal containment lives in the host-agnostic SandboxPolicy (an
     # MCP filesystem wrapper reuses the same boundary).
     return SandboxPolicy.for_context(
-        ctx.generated_root, read_only_roots=_reference_roots(ctx)
+        ctx.generated_root, read_only_roots=_read_only_roots(ctx)
     ).resolve_safe_path(path, write=write)
 
 
@@ -116,6 +146,9 @@ async def read(*, ctx: ToolContext, path: str) -> str:
         safe = resolve_safe_path(path, ctx, write=False)
     except ValueError as e:
         return f"Error: {e}"
+    refusal = _skill_role_refusal(ctx, safe)
+    if refusal is not None:
+        return refusal
     return safe.read_text()
 
 
@@ -143,11 +176,19 @@ async def glob(*, ctx: ToolContext, pattern: str) -> str:
     if not search.is_absolute():
         search = sandbox_root(ctx) / search
     matches = _glob.glob(str(search), recursive=True)
+
+    def _allowed(m: str) -> bool:
+        try:
+            resolved = Path(m).resolve()
+        except OSError:
+            return True
+        return _skill_role_refusal(ctx, resolved) is None
+
     _filter = ctx.gitignore_filter()
-    filtered = [m for m in matches if not _filter(m) and not is_hidden(m)]
+    filtered = [m for m in matches if not _filter(m) and not is_hidden(m) and _allowed(m)]
     if filtered:
         return _json.dumps(sorted(filtered), indent=2)
-    visible = [m for m in matches if not is_hidden(m)]
+    visible = [m for m in matches if not is_hidden(m) and _allowed(m)]
     return _json.dumps(sorted(visible), indent=2)
 
 
@@ -169,6 +210,8 @@ async def grep(*, ctx: ToolContext, pattern: str, include: str | None = None, pa
         if is_hidden(f):
             continue
         if _filter(str(f)):
+            continue
+        if _skill_role_refusal(ctx, f) is not None:
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
