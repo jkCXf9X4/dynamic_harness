@@ -232,7 +232,7 @@ Example:
 |-----|---------|-------------|
 | `environment_notes` | `["Working dir is project root; run \`pytest\` from there."]` | Extra environment instructions appended to every agent's context observation (e.g. "pip is unavailable"). |
 | `references_dir` | `null` | Directory of durable, git-tracked reference docs (rationale) that survive prompt optimization. A compact index is injected into every agent's environment; the agent reads full bodies on demand. Defaults to the harness package's own `docs/references` (resolved relative to the package, not the cwd, so it works from any project folder); falls back to a cwd-relative `docs/references` when the project carries its own library. |
-| `skills_dir` | `null` | Directory of git-tracked skills — task-specific instruction packages, one directory per skill (`skills/<name>/SKILL.md` with `name` + `description` frontmatter and optional `roles`). Triggers (name + description) are injected role-filtered into each agent's system-prompt block; bodies load on demand via the `skill_load` tool; the role gate also applies to raw file access (`read`/`glob`/`grep`). Defaults to the harness package's own `skills`; falls back to a cwd-relative `skills` when the project carries its own library. |
+| `skills_dir` | `null` | Directory of skills — task-specific instruction packages, one directory per skill (`<root>/<name>/SKILL.md` with `name` + `description` frontmatter and optional `roles`). Install a generic agent-methods library (e.g. `3rd_party/agent_methods_and_tools` via its `install.py`) and point this at the installed copy, typically `.agents/skills`. Triggers (name + description) are injected role-filtered into each agent's system-prompt block; bodies load on demand via the `skill_load` tool; the role gate also applies to raw file access (`read`/`glob`/`grep`). With no explicit dir, defaults to the harness package's own `skills`, falling back to a cwd-relative `skills`. |
 | `active_turn_window` | `50` | How many recent committed turns the Context Observation lists. Must be `>= 1`. |
 | `stream_children` | `true` | When true, an agent that delegates multiple children stays responsive: it is re-admitted to its LLM loop as each child settles (report/escalate/fail) instead of blocking until ALL children finish. Lets a parent react to child events — re-delegate a failed branch, converse, cancel the rest, or report early — before its siblings are done. Cost: generally more LLM turns per parent. Set `false` to restore block-until-all semantics. |
 
@@ -243,7 +243,7 @@ Example:
   "agent": {
     "environment_notes": ["Working dir is project root; run `pytest` from there."],
     "references_dir": "docs/references",
-    "skills_dir": "skills",
+    "skills_dir": ".agents/skills",
     "active_turn_window": 50,
     "stream_children": true
   }

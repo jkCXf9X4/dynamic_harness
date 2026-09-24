@@ -25,5 +25,5 @@ output — the core mechanism that keeps contexts shallow and quality high.
 - [failure-handling.md](failure-handling.md) — recovering from failed children
 - [context-health.md](context-health.md) — observation thresholds
 
-See `../../../../skills/mission-command/SKILL.md` and
+See `../../../../3rd_party/agent_methods_and_tools/methods/mission-command/SKILL.md` and
 `../../../../docs/api/agent.md`, `runtime.md`, `tools.md`.

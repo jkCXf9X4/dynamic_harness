@@ -14,8 +14,8 @@ Seed map linking **Claim/Need → Decision Record(s) → Realizing artifact/evid
 | "Recover from failure without grinding" | DL-10 (self-healing) | `02-architecture/concepts/self-healing/README.md`, `00-intent/competitive-differentiation/README.md`, `04-verification/gap-analysis/README.md` G2 RESOLVED |
 | "Choose collaboration topology on evidence" | DL-11 (benchmark-driven verification) | `04-verification/communication-structures/{RESULTS.md, metrics-cells.json, FINDINGS.md}` |
 | "Composable CLI for automation" | DL-12 (CLI-first minimal) | `01-product/requirements/README.md` FR/NFR, `06-evolution/backlog.md` |
-| "Delegate when it pays; right-size ceremony" | DL-13 (golden delegation rule) | `02-architecture/methodology/README.md`, `skills/delegation-guidelines/SKILL.md`, `skills/tool-motivations/SKILL.md` |
-| "Child autonomy safe via intent" | DL-15 (mission-command briefs) | `skills/mission-command/SKILL.md`, `02-architecture/concepts/delegation-model/README.md`, `03-implementation/` policies (BriefPolicy) |
+| "Delegate when it pays; right-size ceremony" | DL-13 (golden delegation rule) | `02-architecture/methodology/README.md`, `3rd_party/agent_methods_and_tools/methods/delegation-guidelines/SKILL.md`, `3rd_party/agent_methods_and_tools/methods/tool-motivations/SKILL.md` |
+| "Child autonomy safe via intent" | DL-15 (mission-command briefs) | `3rd_party/agent_methods_and_tools/methods/mission-command/SKILL.md`, `02-architecture/concepts/delegation-model/README.md`, `03-implementation/` policies (BriefPolicy) |
 | "Definition state stays navigable and canonical, not accumulated" | DL-17 (node model) | `02-architecture/decisions/AD-009.md`, `product-breakdown/README.md` (Node Model), `product-breakdown/tools/check_node_size.py`, `docs/references/information_hygiene.md` |
 
 ## What Is Not Yet Traced (open work)

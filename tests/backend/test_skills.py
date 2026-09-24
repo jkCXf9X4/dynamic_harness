@@ -27,11 +27,11 @@ def _write_skill(root: Path, name: str, description: str, roles: str | None = No
     return d
 
 
-def _runtime_with_skills(tmp_path: Path, specs: dict[str, tuple[str, str | None]]) -> Runtime:
+def _runtime_with_skills(tmp_path: Path, specs: dict[str, tuple[str, str | None]], body: str = "body") -> Runtime:
     d = tmp_path / "skills"
     d.mkdir(parents=True, exist_ok=True)
     for name, (description, roles) in specs.items():
-        _write_skill(d, name, description, roles)
+        _write_skill(d, name, description, roles, body=body)
     cfg = HarnessConfig()
     cfg.agent.skills_dir = str(d)
     return Runtime(
@@ -42,8 +42,7 @@ def _runtime_with_skills(tmp_path: Path, specs: dict[str, tuple[str, str | None]
     )
 
 
-_SKILL_BODY = (
-    "---\nname: tool-motivations\ndescription: Choose between tools.\n---\n\n"
+_skill_body = (
     "# Tool Motivations\n\n## Discovery tools\n\n- **glob** — find files.\n"
 )
 
@@ -52,9 +51,10 @@ _SKILL_BODY = (
 
 
 @pytest.mark.asyncio
-async def test_skill_load_returns_body(runtime: Runtime) -> None:
-    agent = runtime.delegate(Task(description="T"))
-    result = await runtime.tool_registry.execute(
+async def test_skill_load_returns_body(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {"tool-motivations": ("Choose between tools.", None)}, body=_skill_body)
+    agent = rt.delegate(Task(description="T"))
+    result = await rt.tool_registry.execute(
         "skill_load", "tc1", agent=agent, skill="tool-motivations", token_limit=2000
     )
     assert "Error" not in result.content
@@ -77,9 +77,10 @@ async def test_skill_load_advertises_resources(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_skill_load_unknown_name(runtime: Runtime) -> None:
-    agent = runtime.delegate(Task(description="T"))
-    result = await runtime.tool_registry.execute("skill_load", "tc1", agent=agent, skill="nope")
+async def test_skill_load_unknown_name(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {"tool-motivations": ("Choose between tools.", None)})
+    agent = rt.delegate(Task(description="T"))
+    result = await rt.tool_registry.execute("skill_load", "tc1", agent=agent, skill="nope")
     assert "Error: unknown skill 'nope'" in result.content
     assert "tool-motivations" in result.content  # lists available skills
 
@@ -117,9 +118,10 @@ async def test_skill_load_role_scoped_refusal(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_skill_load_is_cacheable(runtime: Runtime) -> None:
-    agent = runtime.delegate(Task(description="T"))
-    result = await runtime.tool_registry.execute("skill_load", "tc1", agent=agent, skill="tool-motivations")
+async def test_skill_load_is_cacheable(tmp_path: Path) -> None:
+    rt = _runtime_with_skills(tmp_path, {"tool-motivations": ("Choose between tools.", None)})
+    agent = rt.delegate(Task(description="T"))
+    result = await rt.tool_registry.execute("skill_load", "tc1", agent=agent, skill="tool-motivations")
     assert result.result_id is not None  # read-only → snapshotted behind a handle
 
 

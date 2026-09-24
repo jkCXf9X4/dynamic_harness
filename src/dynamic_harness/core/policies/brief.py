@@ -1,7 +1,7 @@
 """Mission-command brief-completeness nudge as a composable policy object.
 
 The mission-command delegation methodology
-(``skills/mission-command/SKILL.md``) asks parents to brief each
+(``3rd_party/agent_methods_and_tools/methods/mission-command/SKILL.md``) asks parents to brief each
 child with at least ``intent`` + ``end_state`` (the dimensions a child needs to
 keep deciding correctly when conditions change). That guidance lives in the
 optimized system prompt, but nothing *observes* it: a parent can delegate WHAT

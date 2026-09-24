@@ -345,14 +345,16 @@ class AgentConfig(BaseModel):
     )
     skills_dir: str | None = Field(
         default=None,
-        description="Directory of git-tracked skills — task-specific instruction "
-                    "packages, one directory per skill (skills/<name>/SKILL.md with "
-                    "name + description frontmatter and optional roles). Triggers "
-                    "(name + description) are injected role-filtered into each "
+        description="Directory of skills — task-specific instruction "
+                    "packages, one directory per skill (<root>/<name>/SKILL.md with "
+                    "name + description frontmatter and optional roles). Install a "
+                    "generic library (e.g. 3rd_party/agent_methods_and_tools via its "
+                    "install.py) and point this at it, typically '.agents/skills'. "
+                    "Triggers (name + description) are injected role-filtered into each "
                     "agent's system prompt; bodies load on demand via the "
                     "skill_load tool; the role gate applies to raw file access too. "
-                    "Defaults to the harness package's own 'skills'; falls back to a "
-                    "cwd-relative 'skills' when the project carries its own library.",
+                    "With no explicit dir, defaults to the harness package's own "
+                    "'skills', falling back to a cwd-relative 'skills'.",
     )
     active_turn_window: int = Field(
         default=50, ge=1,

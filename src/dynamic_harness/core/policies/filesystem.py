@@ -61,7 +61,7 @@ class SandboxPolicy:
 
         Read-only roots are read-only *unconditionally*: a path under one is
         never writable, even when the root happens to sit inside the workspace
-        (a project's own ``skills/`` must not be mutated by its agents).
+        (an installed skills library must not be mutated by its agents).
         """
         sandbox = self.root
         p = Path(path)

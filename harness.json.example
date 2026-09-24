@@ -45,6 +45,7 @@
   "agent": {
     "environment_notes": ["Working dir is project root; run `pytest` from there."],
     "references_dir": "docs/references",
+    "skills_dir": ".agents/skills",
     "active_turn_window": 50,
     "stream_children": true
   },

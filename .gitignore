@@ -1,5 +1,8 @@
 .dynamic-harness/
 
+# Installed agent-method skills (from 3rd_party/agent_methods_and_tools via its install.py)
+.agents/
+
 
 
 # Byte-compiled / optimized / DLL files

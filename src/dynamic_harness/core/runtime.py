@@ -288,8 +288,9 @@ class Runtime:
     def skills(self) -> SkillRegistry:
         """The runtime's discovered skill library (name + role lookup).
 
-        Skills are skill-shaped instruction packages (``skills/<name>/SKILL.md``)
-        discovered once at construction from the skills root. Empty when no skill
+        Skills are skill-shaped instruction packages (``<root>/<name>/SKILL.md``)
+        discovered once at construction from the skills root (``config.agent.skills_dir``,
+        e.g. an installed generic library at ``.agents/skills``). Empty when no skill
         docs exist — the layer is purely additive.
         """
         return self.skill_registry
@@ -298,10 +299,12 @@ class Runtime:
     def skills_root(self) -> Path | None:
         """The resolved skills library root, or None.
 
-        Lives with the package (``skills/``) rather than in the project workspace;
-        the sandbox grants read-only access to it so the normal file tools can
-        reach skill files and resources from any working directory. Read access
-        to role-scoped skills is additionally gated by the agent's role.
+        Usually an installed copy of a generic agent-methods library (e.g. the
+        bundle from ``3rd_party/agent_methods_and_tools`` copied to
+        ``.agents/skills``); the sandbox grants read-only access to it so the
+        normal file tools can reach skill files and resources from any working
+        directory. Read access to role-scoped skills is additionally gated by the
+        agent's role.
         """
         return self._skills_root
 

@@ -145,12 +145,13 @@ docs/                      → Runtime-coupled content only (api/ + references/)
 │   └── …                  → one page per public module (agent, runtime, task, tools, …)
 └── README.md              → Explains the docs/ vs product-breakdown/ split
 
-skills/                    → Task-specific instruction packages (one directory per skill)
-├── delegation-guidelines/SKILL.md → When to delegate, verify, and stop; brief composition
-├── mission-command/SKILL.md       → Uppdragstaktik (mission command): why delegation briefs must carry intent, end state, constraints, and freedom of action (orchestrator-scoped)
-├── product-breakdown/SKILL.md     → Product-breakdown structure (seven layers, ADRs, IMPs) + templates/
-├── product-breakdown-workflow/SKILL.md → Executable operating rules for an established product-breakdown/
-└── tool-motivations/SKILL.md      → Why each tool exists + how to choose between them
+.agents/skills/             → Installed skills (gitignored): generic agent-method bundles
+3rd_party/agent_methods_and_tools/methods/  → Source library (submodule) — install bundles into .agents/skills
+├── caveman/                → Ultra-compressed communication mode (lite/full/ultra/wenyan)
+├── delegation-guidelines/  → When to delegate, verify, and stop; brief composition; salvage-and-retry
+├── mission-command/        → Uppdragstaktik (mission command): why delegation briefs must carry intent, end state, constraints, and freedom of action
+├── product-breakdown/      → Product-breakdown method: seven layers, flat decisions/ stream, generated registers, pb tool
+└── tool-motivations/       → Why each tool exists + how to choose between them
 ```
 
 ## Architecture Principles
@@ -339,8 +340,15 @@ directions.
 ## Skills layer
 
 Skills are task-specific instruction packages stored one directory per skill
-under `skills/` (`skills/<name>/SKILL.md` with `name` + `description` YAML
-frontmatter, optional `roles:`, and sibling resource files). They are
+(`<skills root>/<name>/SKILL.md` with `name` + `description` YAML frontmatter,
+optional `roles:`, and sibling resource files). The content is **generic**: it
+comes from the pinned submodule library `3rd_party/agent_methods_and_tools`
+(each `methods/<name>/` is a self-contained bundle), installed into the
+gitignored `./.agents/skills/` with the library's own `install.py`
+(`python3 3rd_party/agent_methods_and_tools/install.py --method <name>`), and
+wired into the runtime via `agent.skills_dir` in `harness.json` (this repo uses
+`.agents/skills`). No skill content is bundled with the harness package; other
+repos install the same library into their own skills root. Skills are
 discovered once per runtime and surfaced three ways:
 
 1. **Role-filtered triggers in the stable system-prompt block.** Each agent
@@ -363,9 +371,13 @@ root is a read-only sandbox root, and `read`/`glob`/`grep` refuse (or filter)
 any path inside a role-scoped skill the agent may not load — raw file access
 cannot bypass the scoping the trigger index advertises.
 
-Frontmatter convention: `name` (load key, defaults to the directory name),
-`description` (when-to-use trigger, kept matchable), optional `roles`
-(comma-separated or YAML list, lowercase).
+Frontmatter convention: the standard skills.sh / agent-skills YAML block —
+`name` (load key, defaults to the directory name), `description` (when-to-use
+trigger, kept matchable; use a folded `description: >` block scalar for
+multi-line text), optional `roles` (YAML list, lowercase). The frontmatter
+parser (`core/references.py::_split_frontmatter`) parses the block with
+`yaml.safe_load` first, falling back to a line-wise reader for legacy
+single-line blocks YAML would reject.
 
 ## Communication layer (`core/comms/` + `core/tools/comms.py`)
 
@@ -457,7 +469,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
 | Change agent methodology | `product-breakdown/02-architecture/methodology/README.md` |
-| Change rationale / reference library | `core/references.py` + `docs/references/` + `skills/` |
+| Change rationale / reference library | `core/references.py` + `docs/references/` + the installed skills (`3rd_party/agent_methods_and_tools/methods/` → `.agents/skills/`) |
 
 
 

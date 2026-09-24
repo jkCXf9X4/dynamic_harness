@@ -11,7 +11,7 @@ related:
   - ../../02-architecture/concepts/delegation-model/README.md
   - ../../02-architecture/concepts/artifact-system/README.md
   - ../../../docs/api/artifacts.md
-  - ../../../skills/tool-motivations/SKILL.md
+  - ../../../3rd_party/agent_methods_and_tools/methods/tool-motivations/SKILL.md
 ---
 
 # Research & Synthesis

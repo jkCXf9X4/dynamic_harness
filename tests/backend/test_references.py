@@ -225,8 +225,9 @@ def test_default_references_dir_resolves_package_relative(tmp_path: Path, monkey
     """The default library is the harness package's, not the cwd project's.
 
     Running from a separate project folder must still discover the baked-in
-    library and skills, so they resolve relative to the package rather than the
-    process working directory.
+    reference library, so it resolves relative to the package rather than the
+    process working directory. Skills are *not* bundled with the package — the
+    default skills root only resolves a project's own cwd-relative ``skills``.
     """
     monkeypatch.chdir(tmp_path)  # a random "target project" folder
     root = resolve_references_root(None)
@@ -235,12 +236,17 @@ def test_default_references_dir_resolves_package_relative(tmp_path: Path, monkey
     refs = discover_references(None)
     assert all(d.path.startswith(str(root)) for d in refs)
 
-    skills_root = resolve_skills_root(None)
-    assert skills_root is not None
-    assert skills_root.name == "skills"
-    skills = discover_skills(None)
-    assert skills
-    assert all(s.path.startswith(str(skills_root)) for s in skills)
+    # No bundled skills: the default root resolves only when a cwd-relative
+    # `skills/` library exists.
+    assert resolve_skills_root(None) is None
+    assert discover_skills(None) == []
+    d = tmp_path / "skills" / "local"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(
+        "---\nname: local\ndescription: d\n---\n\n# Local\n\nbody\n"
+    )
+    assert resolve_skills_root(None) == Path("skills")  # cwd-relative fallback
+    assert [s.name for s in discover_skills(None)] == ["local"]
 
 
 def test_explicit_references_dir_override(tmp_path: Path) -> None:
@@ -384,10 +390,94 @@ def test_render_skill_triggers_accepts_registry(tmp_path: Path) -> None:
     assert "a: da" in render_skill_triggers(reg, role=None)
 
 
-def test_default_skills_dir_discovers_bundled_skills(tmp_path: Path, monkeypatch) -> None:
-    """The bundled skills (dir-per-skill) stay discoverable from any cwd."""
+def test_default_skills_dir_empty_without_bundled_library(tmp_path: Path, monkeypatch) -> None:
+    """The package ships no bundled skills; a cwd-relative ``skills`` is picked up."""
     monkeypatch.chdir(tmp_path)
-    skills = discover_skills(None)
-    assert skills
-    assert any(s.name == "product-breakdown" for s in skills)
-    assert any(s.name == "tool-motivations" for s in skills)
+    assert discover_skills(None) == []
+
+    d = tmp_path / "skills" / "my-skill"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nname: my-skill\ndescription: d\n---\n\nbody\n")
+    assert [s.name for s in discover_skills(None)] == ["my-skill"]
+
+
+# -- standard (skills.sh / agent-skills) YAML frontmatter -------------------
+
+
+def test_discover_skills_parses_standard_folded_description(tmp_path: Path) -> None:
+    """The standard skill-set format: a folded ``description: >`` block scalar.
+    Folded scalars collapse to a single-line trigger on read."""
+    d = tmp_path / "caveman"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\nname: caveman\ndescription: >\n"
+        "  Ultra-compressed mode that cuts output tokens.\n"
+        "  Levels: lite, full, ultra.\n"
+        "---\n\n# Caveman\n\nbody\n"
+    )
+    (skill,) = discover_skills(tmp_path)
+    assert skill.name == "caveman"
+    assert skill.description == (
+        "Ultra-compressed mode that cuts output tokens. Levels: lite, full, ultra."
+    )
+
+
+def test_discover_skills_parses_standard_literal_description(tmp_path: Path) -> None:
+    """A literal ``description: |`` block scalar keeps its newlines verbatim."""
+    d = tmp_path / "lit"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\nname: lit\ndescription: |\n  line one\n  line two\n---\n\n# Lit\n\nbody\n"
+    )
+    (skill,) = discover_skills(tmp_path)
+    assert skill.description == "line one\nline two"
+
+
+def test_discover_skills_parses_standard_roles_list_and_comments(tmp_path: Path) -> None:
+    d = tmp_path / "s"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\n"
+        "# a leading comment\n"
+        "name: s\n"
+        "description: >\n"
+        "  Multi-line description.\n"
+        "# inline comment\n"
+        "roles:\n"
+        "  - orchestrator  # trailing comment\n"
+        "  - worker\n"
+        "---\n\n# S\n\nbody\n"
+    )
+    (skill,) = discover_skills(tmp_path)
+    assert skill.name == "s"
+    assert skill.description == "Multi-line description."
+    assert skill.roles == ("orchestrator", "worker")
+
+
+def test_discover_skills_falls_back_when_yaml_rejects_block(tmp_path: Path) -> None:
+    """A plain scalar containing ``: `` is invalid YAML; the line-wise reader
+    (which splits on the first colon) still recovers name/description."""
+    d = tmp_path / "legacy"
+    d.mkdir()
+    (d / "SKILL.md").write_text(
+        "---\nname: legacy\ndescription: Use for /caveman, \"be brief\" or \"less tokens\".\n---\n\nbody\n"
+    )
+    (skill,) = discover_skills(tmp_path)
+    assert skill.name == "legacy"
+    assert skill.description == 'Use for /caveman, "be brief" or "less tokens".'
+
+
+def test_discover_references_parses_standard_folded_description(tmp_path: Path) -> None:
+    p = _make_doc(
+        tmp_path,
+        "skill.md",
+        "---\n"
+        "name: x\n"
+        "description: >\n"
+        "  A multi-line folded description.\n"
+        "  Second line.\n"
+        "---\n\n# X\n\nbody\n",
+    )
+    (doc,) = discover_references(tmp_path)
+    assert doc.summary == "A multi-line folded description. Second line."
+    assert doc.title == "X"

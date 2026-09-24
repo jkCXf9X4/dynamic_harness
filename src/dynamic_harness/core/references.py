@@ -10,12 +10,15 @@ Two separate, canonical roots (each discovered independently):
 
 - **References** (``docs/references/``) — plain rationale docs, listed in a compact
   index the agent ``read``s on demand. Never role-scoped.
-- **Skills** (``skills/``) — task-specific instruction packages, one directory per
-  skill (``skills/<name>/SKILL.md`` with ``name`` + ``description`` frontmatter,
-  optional ``roles``, and sibling resource files). The ``description`` is a
-  *trigger*: a short when-to-use signal that is always visible, while the full body
-  is loaded on demand via the ``skill_load`` tool. A skill with a ``roles`` scope is
-  only listed for — and only readable by — agents whose ``role`` tag matches.
+- **Skills** (``<skills root>/<name>/SKILL.md``) — task-specific instruction
+  packages, one directory per skill, typically installed from a *generic*
+  agent-methods library (``3rd_party/agent_methods_and_tools`` → copied to
+  ``.agents/skills`` via its ``install.py``, then wired with
+  ``agent.skills_dir``). Each skill has ``name`` + ``description`` frontmatter
+  and optional ``roles``; the ``description`` is a *trigger*: a short
+  when-to-use signal that is always visible, while the full body is loaded on
+  demand via the ``skill_load`` tool. A skill with a ``roles`` scope is only
+  listed for — and only readable by — agents whose ``role`` tag matches.
 """
 
 from __future__ import annotations
@@ -23,6 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 DEFAULT_REFERENCES_DIR = "docs/references"
 DEFAULT_SKILLS_DIR = "skills"
@@ -55,11 +60,14 @@ def resolve_references_root(root: str | Path | None) -> Path | None:
 
 
 def resolve_skills_root(root: str | Path | None) -> Path | None:
-    """Effective skills root: explicit override, else the bundled library.
+    """Effective skills root: explicit override, else an on-disk ``skills``.
 
-    Mirrors ``resolve_references_root``: with ``None`` the default is the
-    package's own ``skills`` (independent of the process cwd), with a cwd-relative
-    ``skills`` fallback. Returns ``None`` when no skills exist — purely additive.
+    Skills are installed from a generic agent-methods library (e.g.
+    ``3rd_party/agent_methods_and_tools`` → ``.agents/skills``) and wired with
+    an explicit ``agent.skills_dir``. With ``None`` (no explicit dir) the root
+    resolves to a cwd-relative ``skills`` when one exists — the package itself
+    ships no bundled skills. Returns ``None`` when no skills exist — the layer
+    is purely additive.
     """
     if root is not None:
         return Path(root)
@@ -88,33 +96,63 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a leading ``---``-delimited YAML frontmatter block from the body.
 
     Returns ``({}, text)`` unchanged when no frontmatter block is present, so
-    plain markdown files are untouched. Keys are read line-wise (``key: value``)
-    until the closing ``---``; a key with an empty value collects a following
-    YAML list block (``- item`` lines) into a list. The first line of the body
-    must not be ``---``.
+    plain markdown files are untouched. The block between the delimiters is
+    parsed with ``yaml.safe_load`` — the standard skill-set format (``name`` +
+    ``description``, folded/literal block scalars, YAML lists, comments). When
+    the block is not valid YAML or does not parse to a mapping, a legacy
+    line-wise reader (``key: value`` plus a ``- item`` list block after an empty
+    value) is used as a fallback, so single-line frontmatter that YAML would
+    reject (e.g. a ``: `` inside a plain scalar) still works. The first line of
+    the body must not be ``---``.
     """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, text
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            block = "\n".join(lines[1:i])
+            meta = _parse_yaml_frontmatter(block)
+            if meta is None:
+                meta = _parse_linewise_frontmatter(lines, i)
+            return meta, "\n".join(lines[i + 1:])
+    return {}, text
+
+
+def _parse_yaml_frontmatter(block: str) -> dict[str, Any] | None:
+    """Parse a frontmatter block as YAML; ``None`` when it is not a mapping.
+
+    ``None`` signals the caller to fall back to the line-wise reader — a block
+    that is empty, malformed, or parses to a non-mapping (e.g. a bare scalar)
+    is not a usable skill/reference frontmatter.
+    """
+    if not block.strip():
+        return {}
+    try:
+        parsed = yaml.safe_load(block)
+    except yaml.YAMLError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _parse_linewise_frontmatter(lines: list[str], end: int) -> dict[str, Any]:
+    """Legacy line-wise reader: ``key: value`` lines until ``end``, with a
+    ``- item`` list block collected after an empty value."""
     meta: dict[str, Any] = {}
     i = 1
-    while i < len(lines):
+    while i < end:
         line = lines[i]
-        stripped = line.strip()
-        if stripped == "---":
-            return meta, "\n".join(lines[i + 1:])
         key, sep, value = line.partition(":")
         if sep:
             key = key.strip()
             value = value.strip()
             if (
                 not value
-                and i + 1 < len(lines)
+                and i + 1 < end
                 and lines[i + 1].strip().startswith("- ")
             ):
                 items: list[str] = []
                 j = i + 1
-                while j < len(lines) and lines[j].strip().startswith("- "):
+                while j < end and lines[j].strip().startswith("- "):
                     items.append(lines[j].strip()[2:].strip())
                     j += 1
                 if items:
@@ -123,7 +161,7 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
                     continue
             meta[key] = value
         i += 1
-    return {}, text
+    return meta
 
 
 def _first_heading(text: str) -> str:
@@ -158,7 +196,8 @@ def _normalize_roles(value: Any) -> tuple[str, ...]:
 class Skill:
     """A skill-shaped instruction doc: name + description triggers, body on demand.
 
-    Canonical storage is one directory per skill (``skills/<name>/SKILL.md``),
+    Canonical storage is one directory per skill (``<root>/<name>/SKILL.md``,
+    e.g. an installed copy of the generic library under ``.agents/skills``),
     with sibling resource files reachable via ``dir``. The ``description`` is the
     *trigger* the model matches against its task; the body is loaded via
     ``skill_load`` only when the model decides it applies. ``roles`` scopes
@@ -266,7 +305,7 @@ def discover_references(root: str | Path | None = None) -> list[ReferenceDoc]:
             filename=p.name,
             path=str(p),
             title=_first_heading(body) or frontmatter.get("name") or p.stem,
-            summary=(frontmatter.get("description") or _first_paragraph(body))[:200],
+            summary=((frontmatter.get("description") or _first_paragraph(body))[:200]).strip(),
         ))
     return docs
 

@@ -26,7 +26,7 @@ class Task(BaseModel):
     status: TaskStatus = TaskStatus.pending
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), validate_default=True)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    # Mission-command brief (skills/mission-command/SKILL.md):
+    # Mission-command brief (3rd_party/agent_methods_and_tools/methods/mission-command/SKILL.md):
     # the parent states what + why + the boundaries, then leaves the how to the child.
     intent: str | None = None        # syfte/avsikt — why this task matters; the child's decision criterion
     end_state: str | None = None     # målbild — desired final condition ("what done looks like")
