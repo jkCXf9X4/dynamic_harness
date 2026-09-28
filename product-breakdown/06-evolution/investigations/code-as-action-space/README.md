@@ -12,3 +12,7 @@ evidence analysis and the concrete design proposal are leaves.
 | Canonical record + open questions | [INVESTIGATION.md](INVESTIGATION.md) |
 | Benefit/cost evidence (CodeAct, Manus, Hermes, CodeMem, AgentFactory, …) | [benefits-and-costs.md](benefits-and-costs.md) |
 | Design proposal (hybrid: `invoke` + RPC stub + procedural skills) | [proposal.md](proposal.md) |
+| Communication variants as probe surface (IMP-001..004) | [communication-experiments.md](communication-experiments.md) |
+| Worker formation vs option load (frontier/modern asymmetry) | [worker-formation-option-load.md](worker-formation-option-load.md) |
+| Self-improving context management (memory/summaries within the commit contract) | [context-management-improvement.md](context-management-improvement.md) |
+| Build vs extend: development of the product or a new project (identity) | [build-vs-extend.md](build-vs-extend.md) |

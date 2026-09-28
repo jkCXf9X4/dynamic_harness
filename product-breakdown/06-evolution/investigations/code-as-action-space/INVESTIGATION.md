@@ -120,6 +120,24 @@ boundary*, not a new category of execution.
 - [proposal.md](proposal.md) — the hybrid design: `invoke` tool + `harness_tools`
   RPC stub (policy parity via `ToolRegistry` reuse) + procedural skill
   persistence + guard changes + benchmark measurement plan.
+- [communication-experiments.md](communication-experiments.md) — code-as-action
+  as a probe bed for communication variants (IMP-001..004): the variant matrix,
+  the three lab rules (trace-stamped, tool-comms control, settled decisions stay
+  settled), and a concrete minimal experiment.
+- [worker-formation-option-load.md](worker-formation-option-load.md) — option
+  load from cheap worker formation: expression vs intention, the
+  frontier/modern asymmetry, the four failure modes, and the rails/tiering/
+  economics mitigations.
+- [context-management-improvement.md](context-management-improvement.md) —
+  whether agents may improve their own tools/context management: three tiers
+  (procedural skills yes · own context-management yes, bounded and measured ·
+  runtime machinery no), the immutable contracts that keep commit-small
+  structural, and the five encouragements.
+- [build-vs-extend.md](build-vs-extend.md) — identity evaluation grounded in
+  VISION.md:59 ("not a code generation platform"): the hybrid capability is a
+  development; the single-tool end-state is a new project on the shared
+  skeleton; sequence = probe here → judge by the product's own success criteria
+  → route by rule.
 
 ## Investigation next steps
 
@@ -129,6 +147,16 @@ boundary*, not a new category of execution.
 - [ ] Decide open questions 1–6
 - [ ] Prototype `invoke` + RPC stub and run the benchmark comparison
       (codeact agent type vs default; batch-loop microbenchmark)
+- [ ] Run the communication variant sweep (per
+      [communication-experiments.md](communication-experiments.md))
+- [ ] Measure option-load metrics per model class (per
+      [worker-formation-option-load.md](worker-formation-option-load.md))
+- [ ] Specify level-budget enforcement + context-efficiency score (per
+      [context-management-improvement.md](context-management-improvement.md))
+- [ ] Record the identity ruling: hybrid = development; single-tool end-state =
+      new project on shared skeleton (per
+      [build-vs-extend.md](build-vs-extend.md)); VISION:59 stays governing unless
+      intent shifts via decision-log record
 - [ ] If signal → file an IMP with a task contract (roadmap register)
 - [ ] Extend near-identical detection to Python `invoke` families
 - [ ] Specify procedural-skill persistence rules (frontmatter + validation)
