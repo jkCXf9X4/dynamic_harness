@@ -47,3 +47,23 @@ summary: >
 - [x] Write the success criteria: ~7 stable interfaces + no outside
       private-state reach + zero regressions on `pytest`; stdlib conversion
       stays off the table
+- [x] Compare with the two reference plugin-centric designs — OpenCode V2
+      (domain transforms + runtime hooks) and DeepSeek Harness
+      (everything-is-a-plugin on Cordis); see
+      [design-comparison.md](design-comparison.md). Verdict: seam-first /
+      no-loader is validated; both references are the same contract economy
+      plus platform machinery.
+- [x] Compare how the references build and work with **context** to enable
+      plugin-centricity — see [context-architecture.md](context-architecture.md).
+      Verdict: both make context a contribution space (ordered, scoped,
+      disposable), matching the harness's reactive-policy shape; the single
+      material gap is per-agent registration scoping.
+- [ ] **Adopt — one registration contract.** Ordered add → `dispose()` handle
+      across tool/policy/handler/agent-class registries (narrows the seams;
+      count stays ≈7; no loader implied). Include an optional **per-agent
+      scope key** (dsh `agent.ctx` pattern), so a policy/tool/context
+      contributor can be bound to one agent; lands inside the existing
+      metric-reactive seam, not a new interface.
+- [ ] **Adopt — per-request tool snapshot.** Freeze the schema↔executor map
+      for the duration of a model request so mid-loop registry mutation cannot
+      desync model↔executor.

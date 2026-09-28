@@ -27,6 +27,8 @@ interfaces. Plugin-ready *structure* is the target; a loader is out of scope.
 - [motivation.md](motivation.md) — seed suggestion, reference model, purpose (Q1).
 - [interface-inventory.md](interface-inventory.md) — seams today + observed couplings.
 - [target.md](target.md) — the interface-economy properties.
+- [design-comparison.md](design-comparison.md) — compared designs: OpenCode V2 and DeepSeek Harness (validates direction; two lessons adopted).
+- [context-architecture.md](context-architecture.md) — how the references build and work with context; the gap is per-agent registration scoping.
 - [options.md](options.md) — loader / seam-first / two-worlds.
 - [decisions.md](decisions.md) — Q1–Q7.
 - [rulings.md](rulings.md) — rulings 1–4 (ToolContext, policy path, stdlib, tests).
