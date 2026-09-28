@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from .context import AgentContext
+from .policies.context import ContextMetricPolicy
 from .policies.interface import (
     Observation,
     PromptInjection,
@@ -244,6 +245,11 @@ class Agent:
         # delegation.
         self._inject_queue: asyncio.Queue[str] = asyncio.Queue()
         self._inject_event = asyncio.Event()
+        # Operator-requested context compaction (the CLI `/compact` command).
+        # Set from outside the run loop; consumed at the next safe point (top
+        # of an iteration) so a working agent finishes its current turn first
+        # and the summary becomes the context the next provider call sees.
+        self._compact_event = asyncio.Event()
 
         # Streaming mode (config `agent.stream_children`): when True, delegations
         # are fire-and-forget and children settle asynchronously; the run loop is
@@ -1486,6 +1492,20 @@ class Agent:
         self._inject_queue.put_nowait(message)
         self._inject_event.set()
 
+    def request_compaction(self) -> None:
+        """Ask this agent to compact its context at its next safe point.
+
+        The CLI ``/compact`` command calls this on the top (root) agent so the
+        operator can force an LLM compression of a long run's context without
+        relying on the model choosing to call the ``compress`` tool on its own.
+        The run loop performs the actual summarization at the top of its next
+        iteration — after queued user input is drained, before the next
+        provider call — so an in-flight turn is never raced and the compressed
+        summary becomes the context the next LLM call sees. A no-op (context too
+        small / no LLM) is silently skipped at that point.
+        """
+        self._compact_event.set()
+
     def _drain_inject_input(self) -> list[str]:
         """Append all queued user messages to the live context and return them."""
         msgs: list[str] = []
@@ -1496,6 +1516,34 @@ class Agent:
             for m in msgs:
                 self.context.append({"role": "user", "content": m})
         return msgs
+
+    async def _apply_compaction(self) -> None:
+        """Compress this agent's context via the LLM at a loop safe point.
+
+        The run-loop implementation of an operator ``/compact`` request (and the
+        same behaviour the ``compress`` tool performs from inside a turn): ask
+        the provider to summarise the conversation, replace the history with the
+        summary, and emit the standard COMPRESSION activity event so actors and
+        the progress gauge see it. A checkpoint is persisted right after so an
+        interrupted run resumes from the compressed state. No-op when the context
+        is too small to be worth it or no LLM is available.
+        """
+        if len(self.context.messages) < 3:
+            return
+        llm = self._llm
+        if llm is None:
+            return
+        result = await self.context.compress(llm, ContextMetricPolicy.COMPRESS_PROMPT)
+        self.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.COMPRESSION,
+            data={
+                "before": result.get("before", 0),
+                "after": result.get("after", 0),
+                "saved": result.get("saved", 0),
+            },
+        ))
+        self.persist_checkpoint()
 
     async def _run_loop(self) -> None:
         tools = self._tool_registry.openai_schemas(role=self.task.role)
@@ -1508,12 +1556,19 @@ class Agent:
             # every committed turn (and the plan) recoverable from disk.
             self.persist_checkpoint()
 
-            prompt_tokens = self.context.estimate_prompt_tokens()
-            self._telemetry.turn_started(prompt_tokens)
-
             # Surface queued mid-run input as fresh user context before taking
             # the message snapshot, so it reaches the provider this turn.
             self._drain_inject_input()
+
+            # Honor an operator-requested compaction (CLI `/compact`): compress
+            # at this safe point — after input drains, before the snapshot — so
+            # the summary becomes the starting context of the next provider call.
+            if self._compact_event.is_set():
+                self._compact_event.clear()
+                await self._apply_compaction()
+
+            prompt_tokens = self.context.estimate_prompt_tokens()
+            self._telemetry.turn_started(prompt_tokens)
 
             sent = list(self.context.messages)
             # Record the REQUEST at its actual send time (before awaiting the

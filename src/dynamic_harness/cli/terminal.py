@@ -520,7 +520,7 @@ async def _run_command(
     arg = parts[1] if len(parts) > 1 else ""
 
     if cmd == "/help":
-        console.print("[bold]Commands:[/]  /help  /tree  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /checkpoints  /resume <id>  /reset  exit/quit")
+        console.print("[bold]Commands:[/]  /help  /tree  /agents  /provenance <id>  /trace <id>  /artifacts [id]  /index  /checkpoints  /resume <id>  /reset  /compact  exit/quit")
         console.print("  /tree             — print the agent tree (id/status/messages/tokens)")
         console.print("  /provenance <id>  — task/trace/artifact/commit map for an agent")
         console.print("  /trace <id>       — path to an agent's trace.jsonl on disk")
@@ -528,6 +528,7 @@ async def _run_command(
         console.print("  /index            — write the run's index.jsonl")
         console.print("  /checkpoints      — list persisted (resumable) agent checkpoints")
         console.print("  /resume <id>      — resume an agent from its persisted checkpoint")
+        console.print("  /compact          — have the top agent compact its context (LLM summary)")
     elif cmd == "/checkpoints":
         if not runtime.checkpoint_store:
             console.print("[yellow]No checkpoint store configured on this runtime.[/]")
@@ -564,6 +565,28 @@ async def _run_command(
             _deferred_input.clear()
             runtime.reset()
             console.print("Runtime reset.")
+    elif cmd == "/compact":
+        # Intentionally left ungated by `allow_run_commands`: unlike `/reset`,
+        # it mutates only the top agent's context (never run state), so it is
+        # safe — and is mainly useful — while a run is active (_submit_input
+        # passes allow_run_commands=False for mid-run lines).
+        root = runtime.active_root()
+        if root is None:
+            console.print("[yellow]No active agent to compact — describe a task first.[/yellow]")
+            return True
+        root.request_compaction()
+        if root.task.status.value in ("completed", "failed", "escalated"):
+            console.print(
+                f"[yellow]Top agent {root.id[:8]} has finished "
+                f"({root.task.status.value}); compaction queued for the next "
+                f"continuation of this root.[/yellow]"
+            )
+        else:
+            console.print(
+                f"[bold cyan]Compaction requested for top agent {root.id[:8]} "
+                f"({root.message_count} msgs in context) — applied at its next "
+                f"safe point.[/bold cyan]"
+            )
     else:
         console.print(f"Unknown: {cmd}. Try /help")
     return True

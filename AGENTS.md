@@ -428,7 +428,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 
 ## Process (CLI / programmatic)
 
-- Default CLI = `cli/terminal.py` (prompt-only; batch + `-i` REPL prints the final outcome, and interactive sessions stream the root agent's text replies above the live prompt).
+- Default CLI = `cli/terminal.py` (prompt-only; batch + `-i` REPL prints the final outcome, and interactive sessions stream the root agent's text replies above the live prompt). Mid-run and idle slash commands include `/tree`, `/agents`, `/provenance <id>`, `/trace <id>`, `/artifacts [id]`, `/index`, `/checkpoints`, `/resume <id>`, `/reset`, and `/compact`. `/compact` calls `Agent.request_compaction()` on the top (root) agent, which the run loop honors at its next safe point — forcing a livelong run to LLM-compress its context (the same summarization the `compress` tool performs) so the operator never has to wait for the model to choose to compact on its own.
 - The `agent_system_prompt.txt` is loaded at import time into `AGENT_SYSTEM_PROMPT`.
 - Applies `harness.json` via `config.load_harness_config()`. Config is a layered deep-merge: the XDG user-global base (`~/.config/dynamic-harness/harness.json`) is applied first, then the local overlay (`./harness.json`, or explicit `--config`) overrides it per-key (sections merge field-by-field; scalars/lists replace wholesale). No files → defaults.
 - No-LLM mode: without `set_llm()`, `Agent.run()` fails with "No LLM provider configured".

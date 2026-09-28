@@ -118,6 +118,19 @@ Resume an agent with new input. Appends a user message and re-enters the tool lo
 await completed_agent.continue_with_input("What about the error handling in main.py?")
 ```
 
+### `request_compaction() -> None`
+
+Ask the agent to compact its context at its next safe point. The run loop
+performs the actual LLM summarization at the top of its next iteration — after
+queued user input is drained, before the next provider call — so an in-flight
+turn is never raced and the compressed summary becomes the context the next
+LLM call sees. This is the programmatic seam behind the CLI `/compact` command,
+which calls it on the top (root) agent so the operator can force a long run to
+compress its context without waiting for the model to choose the `compress`
+tool on its own. A no-op (context too small / no LLM) is silently skipped at
+the safe point; a request left pending while the agent is idle is honored if
+the root is later continued (interactive REPL keeps the same root).
+
 ## Delegation
 
 ### `delegate(description, agent_type=None, role=None, system_prompt=None, **metadata) -> Agent`
