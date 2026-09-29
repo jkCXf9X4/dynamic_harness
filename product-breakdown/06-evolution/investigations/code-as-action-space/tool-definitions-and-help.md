@@ -290,6 +290,61 @@ Notes on the sketch:
 This is its own design space (a delegation/capability follow-up, not the stub
 work) — sketched here so the shape is on record, deliberately out of v1.
 
+## Crash dynamics — what survives what
+
+`invoke` runs every snippet in its **own `python3` subprocess** (`start_new_session=True`),
+the exact trust parity with `bash`. A crash — uncaught exception, `os._exit`,
+`SIGSEGV`, `SIGKILL` — takes down only that process; the parent's `communicate()`
+sees EOF and returns stdout+stderr as a **normal tool result**. The agent loop and
+the runtime are untouched. Verified empirically through the harness (4 crash
+modes on one runtime + agent: uncaught-exception, `os._exit(9)`, ctypes segfault,
+self-`SIGKILL` — agent stays `running` after each, and a subsequent healthy
+`invoke` on the same agent still returns output).
+
+Per-mode model-facing behavior:
+
+| Crash mode | Tool result shows | Agent |
+|---|---|---|
+| Uncaught exception | stderr traceback (self-debugging) | continues |
+| Hard crash (`os._exit`/segfault/SIGKILL) | `(no output)` / partial stdout | continues |
+| Timeout (`invoke.timeout_ms`) | explicit "timed out, process group killed" | continues |
+| Operator kill (`kill`/reset) | — (`CancelledError` → group-kill, re-raise) | the intended kill cascade |
+
+What the boundary deliberately does **not** cover (same caveats as `bash`):
+
+- **Host side effects** — the snippet has host access by decision: `rm -rf`, write
+  anywhere the user can, daemon spawns, `os.kill` other PIDs it knows. Crash
+  isolation is not malicious/runaway isolation — that is the C1 hard-sandbox
+  hardening path, with `import_allowlist` as the v1 discipline knob.
+- **Resource exhaustion** — a malloc/fork bomb pressures the host OS; the OOM
+  killer can pick victims it considers, possibly unrelated processes.
+- **Lingering grandchildren** — a `setsid()` daemon escapes the group-kill; a
+  crashed snippet whose grandchild holds the inherited stdout pipe can stall
+  `communicate()` until the timeout fires and group-kills (rare; identical to
+  `bash`'s existing behavior).
+
+Intended permanent pin: a crash-isolation test (exception + `os._exit` + segfault
++ post-crash liveness) in `tests/backend/test_codeact.py`.
+
+## Parallelism: sizing (follow-up estimates)
+
+The run loop executes a turn's tool batch **sequentially** (`_handle_tool_calls`
+is a serial `for … await execute`), and the bridge serves requests **one at a
+time** (`_serve_harness_tools`: read → await → write). "Parallel structure with
+invoke" therefore splits into pieces with very different effort:
+
+| Piece | What | Effort | Verdict |
+|---|---|---|---|
+| **A. Parallel tool calls inside ONE snippet** | Model writes `ThreadPoolExecutor` over `read`/`grep`/`webfetch` per file; I/O overlaps. Needs: (1) thread-safe child transport — a reader thread + per-request-id response matching (`pending: dict[id, Event]`; the JSON protocol already carries ids), (2) parent serve loop → `create_task` per request, respond out of order (~15 lines; the repo-lock heuristic already serializes mutating snippets, read-only calls overlap safely). No prompt/schema/run-loop changes. | **~1.5–2 days incl. tests** | build first — the main code-as-action parallel win |
+| B. Parallel invoke snippets in ONE turn | `asyncio.gather` over the turn's tool batch. N subprocesses; touches tool-ordering semantics (terminal tools, `stream_children` gather, repo lock). | ~2+ days, risky | **skip** — redundant with A |
+| **C. Concurrent invoke workers (delegation)** | Parallel `codeact` children on the runtime's loop — structurally works today (spawn/token/wall-clock caps apply per agent). Only new work: an ergonomic fan-out helper (`harness_tools.map(...)` over N children + gather) + measurement. Separate processes = real multi-core parallelism (vs A's I/O overlap on one core). | ~0.5–1 day for the helper | build second (measurement/ergonomics) |
+
+The honest shape: "parallel instead of the serial text/tool extraction" does not
+mean replacing the extraction loop — the LLM protocol still yields text + tool
+calls per turn. It means parallelism moves **into code** (A) and **up into
+delegation** (C), leaving the loop a thin, serial relay. Recommended order: A,
+then C as ergonomics + measurement; B deliberately not built.
+
 ## Drift verification (the load-bearing piece)
 
 Because the file is checked in, drift is prevented the same way the generated
@@ -306,10 +361,17 @@ API.
   as package data vs a `docs/`-adjacent location) and whether invoke copies it or
   points `PYTHONPATH` at its directory.
 - Landing order: write the sync script + checked-in file + parity test, add the
-  read-only root, add the generic `call(name, **kwargs)` entry, switch bridge
-  calls to return `ToolResult` objects with function-wrap `return` semantics
-  (terminal intent via returned terminal results), then drop the `_STUB_SOURCE`
-  string constant and demote prints to trace.
+  read-only root, switch bridge calls to return `ToolResult` objects with
+  function-wrap `return` semantics (terminal intent via returned terminal
+  results), then drop the `_STUB_SOURCE` string constant and demote prints to
+  trace. (No generic `call` entry — the named functions ARE the customization
+  surface; new tools arrive by regeneration.)
+- Add the crash-isolation test (exception + `os._exit` + segfault + post-crash
+  liveness) to `tests/backend/test_codeact.py` — pins the §crash-dynamics table.
+- Parallelism per the sizing section: **A** (concurrent bridge calls in one
+  snippet: thread-safe child transport + task-per-request parent serve,
+  ~1.5–2 days) first; **C** (fan-out helper for concurrent invoke workers,
+  ~0.5–1 day) second; **B** (turn-batch parallelism) deliberately not built.
 - Later: `invoke.execution: inprocess` mode with real function binding + live
   `ctx` (gated behind the C1 hardening decision); procedural-skill persistence
   (proposal §3) as the home for agent-authored methods; capability tokens for
