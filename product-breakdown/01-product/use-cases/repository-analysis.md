@@ -1,4 +1,6 @@
 ---
+id: INFO-027
+type: info
 title: "Use-Case — Repository Analysis"
 category: use-case
 summary: >
@@ -9,6 +11,8 @@ related:
   - ../../02-architecture/concepts/delegation-model/README.md
   - ../../02-architecture/concepts/artifact-system/README.md
   - ../../00-intent/VISION.md
+date: 2026-09-22
+status: current
 ---
 
 # Repository Analysis

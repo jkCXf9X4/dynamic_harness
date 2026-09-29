@@ -1,3 +1,12 @@
+---
+id: INFO-112
+type: info
+title: Understanding the Output
+summary: When an agent completes, the CLI shows a compact outcome
+date: 2026-09-23
+status: current
+---
+
 # Understanding the Output
 
 ## Agent Reports

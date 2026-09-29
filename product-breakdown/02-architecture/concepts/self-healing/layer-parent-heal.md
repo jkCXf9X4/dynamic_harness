@@ -1,3 +1,12 @@
+---
+id: INFO-049
+type: info
+title: Layer 2 — Parent Heal
+summary: At the delegation boundary the runtime already runs its own automatic recovery. Separately, a parent can drive recovery explicitly via the tool — choo…
+date: 2026-09-23
+status: current
+---
+
 # Layer 2 — Parent Heal
 
 At the delegation boundary the runtime already runs its own automatic recovery.

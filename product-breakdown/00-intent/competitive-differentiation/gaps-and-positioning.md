@@ -1,4 +1,6 @@
 ---
+id: INFO-003
+type: info
 title: "Gaps and Positioning"
 category: meta
 summary: >
@@ -8,13 +10,15 @@ summary: >
 parent: "README.md"
 related:
   - ../../04-verification/gap-analysis/README.md
+date: 2026-09-23
+status: current
 ---
 
 # Gaps and Positioning
 
 ## Honest open gaps
 
-[Gap analysis](../../04-verification/gap-analysis/README.md) flags two pillars
+Gap analysis (`gap-analysis`) flags two pillars
 where enforcement is *not yet* mechanized — the weakest differentiation claims
 today:
 

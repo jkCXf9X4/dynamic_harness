@@ -1,9 +1,13 @@
 ---
+id: INFO-183
+type: info
 title: "Plugin Direction — Decisions Q1–Q7"
 category: investigation
 parent: "README.md"
 summary: >
   The seven decisions from review of the initial draft.
+date: 2026-09-28
+status: current
 ---
 
 # Decisions (from review of the initial draft)
@@ -21,6 +25,6 @@ summary: >
   `harness.json` exactly as today, no merged per-component schema.
 - **Q6 — Stdlib conversion:** NOT a prerequisite — defaults are registered
   through the same public register calls as anything else; no descriptor
-  conversion. (Resolved ruling, [rulings.md](rulings.md) ¶3.)
+  conversion. (Resolved ruling, `INFO-191` ¶3.)
 - **Q7 — Deterministic testing:** no discovery, ever — component lists are
-  explicit or default, never scanned. (Resolved ruling, [rulings.md](rulings.md) ¶4.)
+  explicit or default, never scanned. (Resolved ruling, `INFO-191` ¶4.)

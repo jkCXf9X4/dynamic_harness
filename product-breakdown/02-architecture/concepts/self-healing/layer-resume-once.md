@@ -1,3 +1,12 @@
+---
+id: INFO-050
+type: info
+title: Layer 1 — Resume-once (the escape hatch)
+summary: "Primitive: / (runtime.py:115-137, agent.py:163-171). Appends a user message and re-runs on the same agent — has no guard against a prior terminal stat…"
+date: 2026-09-23
+status: current
+---
+
 # Layer 1 — Resume-once (the escape hatch)
 
 Primitive: `Agent.continue_with_input(msg)` / `Runtime.run(msg, root_agent=...)`

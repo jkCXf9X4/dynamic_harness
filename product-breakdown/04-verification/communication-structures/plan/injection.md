@@ -1,7 +1,12 @@
 ---
+id: INFO-071
+type: info
 title: "Plan — Injection Modes and Renderer"
 category: investigation / plan
 parent: "README.md"
+summary: Both modes use the same → text renderer; only who initiates differs. This is the experiment's second variable (push cost), so it is a switch
+date: 2026-09-23
+status: current
 ---
 
 # Injection — two swappable modes, one envelope
@@ -46,4 +51,4 @@ ignore it. Contradiction with yours → escalate to the parent.
 Shared by `channel_read`, `converse`, and the digest policy so pull and push
 agree. Implemented as `render_channel_envelope` (read side) and `render_incoming`
 (delivery side) in `core/comms/message.py`. Design rationale:
-[../context-injection-design.md](../context-injection-design.md) §1–2.
+`INFO-067` §1–2.

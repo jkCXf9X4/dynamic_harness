@@ -1,3 +1,12 @@
+---
+id: INFO-056
+type: info
+title: Delegation Quality (P6, P8)
+summary: A sub-agent's description + role is its entire world (its allocated requirements)
+date: 2026-09-23
+status: current
+---
+
 # Delegation Quality (P6, P8)
 
 ### P6 — Quality Delegation Descriptions
@@ -27,5 +36,5 @@ element. One sentence: stance, scope, boundaries.
 - **Conflict:** "You are a Docs Writer. Fix the login bug." — role and task contradict
 - **Overly restrictive:** Role should not block necessary tools
 
-See [../examples/delegation_descriptions.md](../examples/delegation_descriptions.md)
+See `INFO-053`
 for concrete BAD/GOOD pairings.

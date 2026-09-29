@@ -1,4 +1,6 @@
 ---
+id: INFO-019
+type: info
 title: "NFR-1..NFR-4 — Non-functional requirements"
 category: requirement
 summary: >
@@ -7,6 +9,8 @@ summary: >
 related:
   - direction.md
   - fr-persisted-overview.md
+date: 2026-09-23
+status: current
 ---
 
 # Non-functional requirements

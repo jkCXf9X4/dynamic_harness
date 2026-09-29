@@ -1,6 +1,15 @@
+---
+id: INFO-142
+type: info
+title: Benefits and costs — code-as-action evidence
+summary: "Sources are the works mapped in INVESTIGATION.md; the headline numbers are cited inline. The paradigm's core evidence is CodeAct (ICML 2024, arXiv:240…"
+date: 2026-09-28
+status: current
+---
+
 # Benefits and costs — code-as-action evidence
 
-Sources are the works mapped in [INVESTIGATION.md](INVESTIGATION.md); the
+Sources are the works mapped in `INFO-141`; the
 headline numbers are cited inline. The paradigm's core evidence is **CodeAct**
 (ICML 2024, arXiv:2402.01030), validated in production by Manus, OpenHands,
 Hermes, and Microsoft's Agent Framework, and extended by the 2025–2026
@@ -40,4 +49,4 @@ success**; weakest for determinism and security-neutrality.
 The benefit worth chasing for this harness is **B1+B4** (context/token economics)
 composed with the existing ResultStore, plus **B7** (procedural skills) as the
 leverage play. **C1–C4** define the design constraints carried into
-[proposal.md](proposal.md).
+`INFO-146`.

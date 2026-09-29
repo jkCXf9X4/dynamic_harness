@@ -1,3 +1,12 @@
+---
+id: INFO-091
+type: info
+title: TheAgentCompany, GAIA & BigCodeBench
+summary: Plane issue-tracker, ownCloud, RocketChat backends pre-seeded; 175 tasks across software engineer, data scientist, PM, HR, finance, admin roles. Agent…
+date: 2026-09-23
+status: current
+---
+
 # TheAgentCompany, GAIA & BigCodeBench
 
 ## TheAgentCompany
@@ -14,7 +23,7 @@
   - needs 6 Docker services + 30 GB free space + network setup;
   - primary grading is LLM-based (an LLM judge reads the trajectory) — this
     clashes with the project's "every `BenchmarkTask` carries a *failable
-    ground-truth verifier*" invariant ([evaluation-and-qa](../../../01-product/use-cases/evaluation-and-qa.md)).
+    ground-truth verifier*" invariant (evaluation-and-qa (`INFO-023`)).
   - adds all that infra for signal we can get cheaper from mini-fixtures.
 - **Verdict**: skip as a *harness* task; if multi-agent-company signal is ever
   wanted, run `the-agent-company` externally and translate its deterministic

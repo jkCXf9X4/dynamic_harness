@@ -1,10 +1,19 @@
+---
+id: INFO-173
+type: info
+title: Requirements — Group, Context, Norms (REQ-1..7)
+summary: Consolidated guardrails from the B-curated deep-dive, strengthened by folding in the 8 design implications from the management-theory report (manageme…
+date: 2026-09-28
+status: current
+---
+
 # Requirements — Group, Context, Norms (REQ-1..7)
 
 Consolidated guardrails from the B-curated deep-dive, strengthened by folding in
 the 8 design implications from the management-theory report
-([management-theory/playbook.md](management-theory/playbook.md)). Theory behind
+(`INFO-168`). Theory behind
 each requirement in brackets. Continued:
-[requirements-steering.md](requirements-steering.md).
+`INFO-174`.
 
 ## Group / who may collaborate
 - **REQ-1 Explicit membership.** The collaboration group is a first-class scoped

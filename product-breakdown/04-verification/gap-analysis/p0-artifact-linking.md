@@ -1,4 +1,6 @@
 ---
+id: INFO-079
+type: info
 title: "G4 — artifact_ids are free-form; written files not linked"
 category: meta
 summary: >
@@ -6,6 +8,8 @@ summary: >
   path and the substantive file was never surfaced through read_artifact or
   provenance.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G4. `artifact_ids` are free-form strings; agent-written files are not linked to the artifact

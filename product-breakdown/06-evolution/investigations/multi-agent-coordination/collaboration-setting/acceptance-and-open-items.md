@@ -1,6 +1,15 @@
+---
+id: INFO-152
+type: info
+title: Collaboration Setting — Acceptance, Non-Goals, Open Items
+summary: "Sections 8–10 of the collaboration-setting spec. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting — Acceptance, Non-Goals, Open Items
 
-Sections 8–10 of the collaboration-setting spec. Index: [README.md](README.md).
+Sections 8–10 of the collaboration-setting spec. Index: `collaboration-setting`.
 
 ## 8. Acceptance criteria (tests)
 - **AC-1** Two children spawned with the same `team.label` are members; a third

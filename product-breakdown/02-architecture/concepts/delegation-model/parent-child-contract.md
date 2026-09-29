@@ -1,3 +1,12 @@
+---
+id: INFO-041
+type: info
+title: Parent–Child Contract
+summary: "The parent provides: (why it matters — the child's decision criterion), (the desired final condition — this is the acceptance criteria), (task boundar…"
+date: 2026-09-23
+status: current
+---
+
 # Parent–Child Contract
 
 ## Parent to Child

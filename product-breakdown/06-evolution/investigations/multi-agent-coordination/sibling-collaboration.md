@@ -1,8 +1,17 @@
+---
+id: INFO-176
+type: info
+title: "Sibling Collaboration (B-curated): Common-Parent Scoping"
+summary: "How to enable real collaboration (B) while containing its cons, by constraining peer-to-peer communication to siblings that share a common parent (\"ch…"
+date: 2026-09-28
+status: current
+---
+
 # Sibling Collaboration (B-curated): Common-Parent Scoping
 
 How to enable real collaboration (B) while containing its cons, by **constraining
 peer-to-peer communication to siblings that share a common parent** ("children of
-one parent form a team"). Decisions: [AD-002](../decisions/AD-002.md).
+one parent form a team"). Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`).
 
 ## The key idea
 "Team membership" is defined by **shared parentage** — a concept the runtime

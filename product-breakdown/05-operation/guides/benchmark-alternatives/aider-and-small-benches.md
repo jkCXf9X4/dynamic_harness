@@ -1,3 +1,12 @@
+---
+id: INFO-089
+type: info
+title: Aider Exercism / Polyglot & Single-Function Benches
+summary: "exercises; take a stub module + instructions, implement it, pass the unit tests. Also the newer benchmark (\"make the tests pass\" across 200+ files in…"
+date: 2026-09-23
+status: current
+---
+
 # Aider Exercism / Polyglot & Single-Function Benches
 
 ## Aider's Exercism / polyglot benchmarks

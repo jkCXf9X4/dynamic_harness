@@ -1,7 +1,12 @@
 ---
+id: INFO-077
+type: info
 title: "Plan — Switching Seams"
 category: investigation / plan
 parent: "README.md"
+summary: Seam A — construction. gains a section
+date: 2026-09-23
+status: current
 ---
 
 # Switching — the two seams

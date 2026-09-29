@@ -1,3 +1,12 @@
+---
+id: INFO-115
+type: info
+title: Common Issues
+summary: Ensure or is set in your shell config (e.g. ), or pass on the command line
+date: 2026-09-23
+status: current
+---
+
 # Common Issues
 
 ### "No API key" error

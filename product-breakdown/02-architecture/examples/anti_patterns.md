@@ -1,3 +1,12 @@
+---
+id: INFO-052
+type: info
+title: Anti-Patterns
+summary: The most common failure modes observed in agent behavior. All of them are methodology violations
+date: 2026-09-22
+status: current
+---
+
 # Anti-Patterns
 
 The most common failure modes observed in agent behavior. **All of them are

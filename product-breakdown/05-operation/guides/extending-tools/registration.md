@@ -1,3 +1,12 @@
+---
+id: INFO-107
+type: info
+title: Registration & Unregistration
+summary: Tools can be registered at any time, but they only become visible to agents when the agent next enters (i.e., the next tool-calling turn). For agents…
+date: 2026-09-23
+status: current
+---
+
 # Registration & Unregistration
 
 Tools can be registered at any time, but they only become visible to agents when

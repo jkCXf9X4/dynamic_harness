@@ -1,4 +1,6 @@
 ---
+id: INFO-014
+type: info
 title: "CLI Direction & Requirements — Direction"
 category: requirement
 summary: >
@@ -9,6 +11,8 @@ related:
   - ../../05-operation/guides/getting-started.md
   - ../use-cases/pipelines-and-jobs.md
   - ../../00-intent/VISION.md
+date: 2026-09-23
+status: current
 ---
 
 # Direction

@@ -1,4 +1,6 @@
 ---
+id: INFO-013
+type: info
 title: "Acceptance criteria — CLI"
 category: requirement
 summary: >
@@ -8,6 +10,8 @@ related:
   - fr-terminal.md
   - fr-persisted-overview.md
   - fr-live-surface.md
+date: 2026-09-23
+status: current
 ---
 
 # Acceptance criteria

@@ -1,3 +1,8 @@
+---
+title: Layer 05 — Operation
+summary: How do authors run, maintain, release?
+---
+
 # Layer 05 — Operation
 
 **How do authors run, maintain, release?**
@@ -16,5 +21,7 @@ The operation layer makes the build/test/benchmark/release workflow explicit and
 
 ## Contents
 
-- [runbook/](runbook/README.md) — **NEW (fills GAP-5)**: tests, install/build, benchmark CLI, comms benchmark, pre-commit, release practice
-- [guides/](guides/README.md) — getting-started, programmatic-usage, custom-agents, extending-tools, prompt-optimization, benchmark-alternatives, performance-diagnostics
+<!-- pb:index:start -->
+- [Operation Guides](guides/README.md) — Workflow-specific guides complementing the runbook
+- [Runbook — dynamic_harness (Index)](runbook/README.md) — How authors install, test, benchmark, and release. All commands run from the repo root unless noted; Python 3.10+ required. Created 2026-09-21 (fills…
+<!-- pb:index:end -->

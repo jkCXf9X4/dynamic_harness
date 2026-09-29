@@ -1,3 +1,12 @@
+---
+id: INFO-129
+type: info
+title: Feeding the Optimized Prompt Back
+summary: The application loads its default system prompt at import time
+date: 2026-09-23
+status: current
+---
+
 # Feeding the Optimized Prompt Back
 
 The application loads its default system prompt **at import time**:

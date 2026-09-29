@@ -1,3 +1,12 @@
+---
+id: INFO-144
+type: info
+title: Communication experiments via code-as-action
+summary: "Communication is the dimension where the design space is largest relative to what is built: four fixed topologies ( / / / ) against several still-open…"
+date: 2026-09-28
+status: current
+---
+
 # Communication experiments via code-as-action
 
 ## Why communication is the highest-leverage probe surface
@@ -59,7 +68,7 @@ by default. Three rules keep it an honest lab:
    surface for IMP-002/003/004 and topology futures, *not* a re-litigation of
    the DL-* / channel decisions (workspace-primary, messages-as-exception),
    introduce-not-mediate, or the L0/L1/L2 facilitation layer. A winning variant
-   gets spec'd as real mechanism through the RPC stub ([proposal.md](proposal.md))
+   gets spec'd as real mechanism through the RPC stub (`INFO-146`)
    — the stub is both the enabler (code reaches `post` / `channel_read` /
    `converse`) and the boundary (actor isolation re-imposed on demand).
 
@@ -73,12 +82,12 @@ already-written info), and churn in the variant trace vs baseline.
 
 ## Related
 
-- [proposal.md](proposal.md) — the hybrid (`invoke` + `harness_tools` RPC stub +
+- `INFO-146` — the hybrid (`invoke` + `harness_tools` RPC stub +
   procedural skills); policy parity by construction
-- [INVESTIGATION.md](INVESTIGATION.md) — the canonical record
-- Multi-agent coordination leaves: [channel-decision](../../multi-agent-coordination/channel-decision.md),
-  [channel-evidence](../../multi-agent-coordination/channel-evidence.md),
-  [introduce-not-mediate](../../multi-agent-coordination/introduce-not-mediate.md),
-  [facilitation-layer](../../multi-agent-coordination/facilitation-layer.md)
-- IMP-001..004 — [roadmap](../../roadmap.md)
-- [Communication structures plan](../../../../04-verification/communication-structures/plan/README.md)
+- `INFO-141` — the canonical record
+- Multi-agent coordination leaves: channel-decision (`product-breakdown/06-evolution/multi-agent-coordination/channel-decision.md`),
+  channel-evidence (`product-breakdown/06-evolution/multi-agent-coordination/channel-evidence.md`),
+  introduce-not-mediate (`product-breakdown/06-evolution/multi-agent-coordination/introduce-not-mediate.md`),
+  facilitation-layer (`product-breakdown/06-evolution/multi-agent-coordination/facilitation-layer.md`)
+- IMP-001..004 — roadmap (`INFO-196`)
+- Communication structures plan (`04-verification/communication-structures/plan/README.md`)

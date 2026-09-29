@@ -1,4 +1,6 @@
 ---
+id: INFO-016
+type: info
 title: "FR-4..FR-6 — Operator evaluation, session continuity, traceability"
 category: requirement
 summary: >
@@ -7,6 +9,8 @@ summary: >
 related:
   - fr-persisted-overview.md
   - direction.md
+date: 2026-09-23
+status: current
 ---
 
 # FR-4..FR-6. Operator evaluation, session continuity, traceability

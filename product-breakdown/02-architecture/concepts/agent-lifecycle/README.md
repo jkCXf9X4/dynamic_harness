@@ -1,3 +1,8 @@
+---
+title: Agent Lifecycle
+summary: "The complete lifecycle of an agent — from creation through execution to termination: task states, the tool-calling loop, safety invariants, terminatio…"
+---
+
 # Agent Lifecycle
 
 The complete lifecycle of an agent — from creation through execution to
@@ -16,11 +21,14 @@ paths, and the Agent/Runtime split.
 - Artifact/commit mechanics → [artifact-system/](../artifact-system/README.md)
 - Recovery policy → [self-healing/](../self-healing/README.md)
 
-## Contents
-- [states-and-creation.md](states-and-creation.md) — task states, transitions, agent creation
-- [run-loop.md](run-loop.md) — initialization, tool-calling loop, context observation
-- [termination.md](termination.md) — report/escalate/fail/force-fail, post-termination, resume
-- [safety-invariants.md](safety-invariants.md) — safety table and the three timeout layers
-- [usage-and-responsibilities.md](usage-and-responsibilities.md) — token tracking, Agent vs Runtime
-
 See `../../../../docs/api/agent.md`, `runtime.md`, `task.md`.
+
+## Contents
+
+<!-- pb:index:start -->
+- **INFO-029** [The Run Loop](run-loop.md) — initializes the conversation, then executes the tool-calling loop until a terminal tool fires
+- **INFO-030** [Safety Invariants](safety-invariants.md) — Three independent timeouts apply to different resource types
+- **INFO-031** [Agent States & Creation](states-and-creation.md) — Every agent's task moves through a fixed set of states, and every agent is created by the Runtime — never instantiated directly outside tests
+- **INFO-032** [Termination & Resumption](termination.md) — Three terminal paths, all triggered by tool calls, plus automatic safety force-fails. After termination the agent's history and last report stay acces…
+- **INFO-033** [Usage & Responsibilities](usage-and-responsibilities.md) — The Runtime records per-agent consumption after each LLM response
+<!-- pb:index:end -->

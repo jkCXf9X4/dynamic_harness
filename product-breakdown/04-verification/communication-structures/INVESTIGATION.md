@@ -1,6 +1,9 @@
 ---
+id: INFO-064
+type: info
 title: "Investigation — Communication Structures vs Agent Success"
 category: investigation
+date: 2026-09-22
 status: open
 summary: >
   Measurement-first comparison of four communication topologies — parent-mediated,
@@ -46,5 +49,5 @@ The experiment cannot run by toggling existing gates (there are none); it needs 
 thin, *explicit* routing layer whose only job is making "who routes what" a
 swappable decision.
 
-- Measurement design (success battery, controlled bed, open questions, success criteria): [measurement-design.md](measurement-design.md)
-- Swappable-layer plan and tool-surface design: [plan/](plan/README.md)
+- Measurement design (success battery, controlled bed, open questions, success criteria): `INFO-068`
+- Swappable-layer plan and tool-surface design: `plan`

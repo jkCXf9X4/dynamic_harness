@@ -1,10 +1,14 @@
 ---
+id: INFO-191
+type: info
 title: "Plugin Direction — Resolved Rulings 1–4"
 category: investigation
 parent: "README.md"
 summary: >
   ToolContext single+narrowed, policy-application split, no stdlib descriptor
   conversion, no discovery in tests.
+date: 2026-09-28
+status: current
 ---
 
 # Resolved rulings (Q1–Q5 filled per direction)

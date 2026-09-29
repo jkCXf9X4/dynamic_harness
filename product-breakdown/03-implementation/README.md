@@ -1,3 +1,8 @@
+---
+title: Layer 03 — Implementation
+summary: With what concrete assets is it realized?
+---
+
 # Layer 03 — Implementation
 
 **With what concrete assets is it realized?**
@@ -19,7 +24,9 @@ The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async acto
 
 ## Contents
 
-- [plugin/](plugin/README.md) — [investigation/](plugin/investigation/README.md) (Q1–Q7 rulings, interface economy direction, "no loader, ever")
+<!-- pb:index:start -->
+
+<!-- pb:index:end -->
 
 ## Pointers (assets that stay at repo root)
 

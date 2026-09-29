@@ -1,3 +1,12 @@
+---
+id: INFO-138
+type: info
+title: Setup & Test
+summary: "API key: (or OpenAI key) — read from the environment"
+date: 2026-09-23
+status: current
+---
+
 # Setup & Test
 
 ## Environment & Config
@@ -15,7 +24,7 @@ pip install -e .
 uv sync
 ```
 
-Entry point: `dynamic-harness` → `dynamic_harness.cli.terminal:main`. Programmatic: `python -m dynamic_harness` or the `Harness` API (see [guides/programmatic-usage](../guides/programmatic-usage/README.md)).
+Entry point: `dynamic-harness` → `dynamic_harness.cli.terminal:main`. Programmatic: `python -m dynamic_harness` or the `Harness` API (see `programmatic-usage`).
 
 ## Tests
 

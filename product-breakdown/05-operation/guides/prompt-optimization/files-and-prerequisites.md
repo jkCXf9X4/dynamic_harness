@@ -1,3 +1,12 @@
+---
+id: INFO-130
+type: info
+title: Files & Prerequisites
+summary: uses DeepSeek flash and keeps the list to route around providers that cannot handle tool calling
+date: 2026-09-23
+status: current
+---
+
 # Files & Prerequisites
 
 ## Files Involved

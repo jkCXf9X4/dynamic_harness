@@ -1,4 +1,6 @@
 ---
+id: INFO-009
+type: info
 title: "Host — OpenCode"
 category: meta
 summary: >
@@ -8,6 +10,8 @@ summary: >
 parent: "README.md"
 related:
   - fit-matrix.md
+date: 2026-09-23
+status: current
 ---
 
 # OpenCode (anomalyco/opencode + opencode.ai)

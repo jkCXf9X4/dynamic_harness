@@ -1,3 +1,12 @@
+---
+id: INFO-063
+type: info
+title: Findings — real-LLM communication comparison (P4)
+summary: Probe status is appended LIVE under ; full metric tables are produced by into /
+date: 2026-09-22
+status: current
+---
+
 # Findings — real-LLM communication comparison (P4)
 
 Probe status is appended LIVE under `## Probe log`; full metric tables are

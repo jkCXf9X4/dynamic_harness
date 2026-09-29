@@ -1,3 +1,12 @@
+---
+id: INFO-053
+type: info
+title: "Delegation Descriptions: Good vs Bad"
+summary: Concrete examples of delegation descriptions. A sub-agent's description + role is its entire world — write it with care
+date: 2026-09-22
+status: current
+---
+
 # Delegation Descriptions: Good vs Bad
 
 Concrete examples of delegation descriptions. A sub-agent's description + role is its entire world — write it with care.

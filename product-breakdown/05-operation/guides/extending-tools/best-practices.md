@@ -1,3 +1,12 @@
+---
+id: INFO-102
+type: info
+title: Best Practices
+summary: A well-shaped tool is cheap for the LLM to select, call, and recover from. Keep the schema and description as tight as the implementation
+date: 2026-09-23
+status: current
+---
+
 # Best Practices
 
 A well-shaped tool is cheap for the LLM to select, call, and recover from.

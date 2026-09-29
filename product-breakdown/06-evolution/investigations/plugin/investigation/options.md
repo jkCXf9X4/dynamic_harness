@@ -1,10 +1,14 @@
 ---
+id: INFO-190
+type: info
 title: "Plugin Direction — Design Space / Options"
 category: investigation
 parent: "README.md"
 summary: >
   Three options weighed: loader (out of scope), seam-first refactor
   (recommended), two-worlds (out of scope here).
+date: 2026-09-28
+status: current
 ---
 
 # Design space / options to weigh

@@ -1,3 +1,12 @@
+---
+id: INFO-042
+type: info
+title: Streaming Delegation (opt-in)
+summary: "By default delegation is all-or-nothing: a parent that delegates several children blocks until every child settles (the batch gather), so it cannot ac…"
+date: 2026-09-23
+status: current
+---
+
 # Streaming Delegation (opt-in)
 
 By default delegation is **all-or-nothing**: a parent that delegates several

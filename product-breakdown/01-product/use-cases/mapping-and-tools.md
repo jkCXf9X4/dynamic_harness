@@ -1,3 +1,12 @@
+---
+id: INFO-025
+type: info
+title: Mapping a Use-Case to the Architecture
+summary: Every use-case family is built from the same load-bearing concepts
+date: 2026-09-23
+status: current
+---
+
 # Mapping a Use-Case to the Architecture
 
 Every use-case family is built from the same load-bearing concepts:

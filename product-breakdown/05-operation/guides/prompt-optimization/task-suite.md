@@ -1,3 +1,12 @@
+---
+id: INFO-134
+type: info
+title: The Task Suite (One Front)
+summary: All tasks live in and are consumed by every entry point
+date: 2026-09-23
+status: current
+---
+
 # The Task Suite (One Front)
 
 All tasks live in `src/dynamic_harness/benchmark/tasks.py` and are consumed by

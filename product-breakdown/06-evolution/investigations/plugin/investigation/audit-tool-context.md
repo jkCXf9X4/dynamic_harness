@@ -1,10 +1,14 @@
 ---
+id: INFO-181
+type: info
 title: "Plugin Direction — Tool-Call Contract Breadth Audit"
 category: investigation
 parent: "README.md"
 summary: >
   Member-by-member consumers of ToolContext, the trimming rule, and the
   narrowing proposals.
+date: 2026-09-28
+status: current
 ---
 
 # 1. Tool call contract (`ToolDef` / `ToolResult` / `ToolContext` + `ToolRegistry`)

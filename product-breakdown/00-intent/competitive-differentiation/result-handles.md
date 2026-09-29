@@ -1,4 +1,6 @@
 ---
+id: INFO-005
+type: info
 title: "Result Handles — Caching Behind Opaque Read-Only Handles"
 category: meta
 summary: >
@@ -6,6 +8,8 @@ summary: >
   result_read pages it and result_bash pipes it to a shell's stdin, never
   re-executing the producing tool.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # Result Handles

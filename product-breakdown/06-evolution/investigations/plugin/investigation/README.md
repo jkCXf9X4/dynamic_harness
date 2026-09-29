@@ -21,22 +21,24 @@ interfaces. Plugin-ready *structure* is the target; a loader is out of scope.
 ## Excludes
 - Runtime-coupled API docs → `../../../../docs/api/`; external porting / MCP transport → `../../../00-intent/platform-evaluation.md`.
 
+Decisions: [AD-007](../../../02-architecture/decisions/AD-007.md); DL-8, DL-9.
+
 ## Contents
 
-- [goal.md](goal.md) — the structural goal and today-vs-target table.
-- [motivation.md](motivation.md) — seed suggestion, reference model, purpose (Q1).
-- [interface-inventory.md](interface-inventory.md) — seams today + observed couplings.
-- [target.md](target.md) — the interface-economy properties.
-- [design-comparison.md](design-comparison.md) — compared designs: OpenCode V2 and DeepSeek Harness (validates direction; two lessons adopted).
-- [context-architecture.md](context-architecture.md) — how the references build and work with context; the gap is per-agent registration scoping.
-- [options.md](options.md) — loader / seam-first / two-worlds.
-- [decisions.md](decisions.md) — Q1–Q7.
-- [rulings.md](rulings.md) — rulings 1–4 (ToolContext, policy path, stdlib, tests).
-- [interface-set.md](interface-set.md) — the ~7 target common interfaces.
-- [audit-tool-context.md](audit-tool-context.md) — ToolContext member→consumer audit.
-- [audit-policies.md](audit-policies.md) — policy-seam consumers.
-- [audit-other-seams.md](audit-other-seams.md) — event bus, LLM, registry, data types.
-- [next-steps.md](next-steps.md) — investigation progress checklist.
-- [success-criteria.md](success-criteria.md) — measurement criteria.
-
-Decisions: [AD-007](../../../02-architecture/decisions/AD-007.md); DL-8, DL-9.
+<!-- pb:index:start -->
+- **INFO-179** [Plugin Direction — Remaining Seams Breadth Audit + Trim](audit-other-seams.md) — Event bus, LLM provider, agent-class registry, data types, and the trimmed target.
+- **INFO-180** [Plugin Direction — Policy-Seam Breadth Audit](audit-policies.md) — Consumers of each decision policy, and how the shared/domain split holds.
+- **INFO-181** [Plugin Direction — Tool-Call Contract Breadth Audit](audit-tool-context.md) — Member-by-member consumers of ToolContext, the trimming rule, and the narrowing proposals.
+- **INFO-182** [Plugin Direction — Context: How the References Build and Use It](context-architecture.md) — Context is the real test of plugin-centricity: who contributes to the model's context, in what order, with what scope, and how it is observed. OpenCode V2 and DeepSeek Harness both make context a contribution space, not a shared object; the harness's reactive-policy seam is the same shape — the gap is per-agent registration scoping.
+- **INFO-183** [Plugin Direction — Decisions Q1–Q7](decisions.md) — The seven decisions from review of the initial draft.
+- **INFO-184** [Plugin Direction — Compared Designs: OpenCode V2 and DeepSeek Harness](design-comparison.md) — The two reference plugin-centric architectures, mapped onto the ~7-interface target; what validates seam-first/no-loader, and the two lessons worth adopting (one registration contract, per-request tool snapshot).
+- **INFO-185** [Plugin Direction — The Step Being Investigated](goal.md) — Establish and minimize the common interfaces between internal components and decouple/isolate them; plugin-ready structure, not plugin infrastructure.
+- **INFO-186** [Plugin Direction — Current Interface Inventory](interface-inventory.md) — The seams that exist today and the observed couplings that make them incidental rather than minimal.
+- **INFO-187** [Plugin Direction — Target Common-Interface Set (~7)](interface-set.md) — The seven interfaces that constitute the target; success means the count holds while couplings are removed.
+- **INFO-188** [Plugin Direction — Motivating Context](motivation.md) — The seed suggestion, the reactive-policy reference model, and the purpose ruling: internal-structure enablement; external porting out of scope.
+- **INFO-189** [Plugin Direction — Investigation Next Steps](next-steps.md) — The completed checklist that carried the direction from question to implemented pilot seam.
+- **INFO-190** [Plugin Direction — Design Space / Options](options.md) — Three options weighed: loader (out of scope), seam-first refactor (recommended), two-worlds (out of scope here).
+- **INFO-191** [Plugin Direction — Resolved Rulings 1–4](rulings.md) — ToolContext single+narrowed, policy-application split, no stdlib descriptor conversion, no discovery in tests.
+- **INFO-192** [Plugin Direction — Success Criteria](success-criteria.md) — Six measurable criteria for the interface-economy direction.
+- **INFO-193** [Plugin Direction — Target Definition](target.md) — Interface economy: a small, stable set of narrow contracts. Six properties.
+<!-- pb:index:end -->

@@ -1,7 +1,16 @@
+---
+id: INFO-163
+type: info
+title: Facilitative Leader — Core Theories (Netflix, Hackman, McChrystal)
+summary: "Section 3.1–3.3 of the management-theory survey. Index: README.md. Continued: facilitative-leader-safety.md"
+date: 2026-09-28
+status: current
+---
+
 # Facilitative Leader — Core Theories (Netflix, Hackman, McChrystal)
 
-Section 3.1–3.3 of the management-theory survey. Index: [README.md](README.md).
-Continued: [facilitative-leader-safety.md](facilitative-leader-safety.md).
+Section 3.1–3.3 of the management-theory survey. Index: `management-theory`.
+Continued: `INFO-164`.
 
 ## 3.1 Context over control (Netflix)
 **Source.** Netflix Culture Memo (<https://jobs.netflix.com/culture>), "People

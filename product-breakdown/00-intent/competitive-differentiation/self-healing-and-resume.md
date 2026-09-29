@@ -1,4 +1,6 @@
 ---
+id: INFO-006
+type: info
 title: "Self-Healing and Resume"
 category: meta
 summary: >
@@ -8,6 +10,8 @@ summary: >
 parent: "README.md"
 related:
   - ../../02-architecture/concepts/self-healing.md
+date: 2026-09-23
+status: current
 ---
 
 # Self-Healing and Resume

@@ -1,3 +1,12 @@
+---
+id: INFO-031
+type: info
+title: Agent States & Creation
+summary: Every agent's task moves through a fixed set of states, and every agent is created by the Runtime — never instantiated directly outside tests
+date: 2026-09-23
+status: current
+---
+
 # Agent States & Creation
 
 Every agent's task moves through a fixed set of states, and every agent is

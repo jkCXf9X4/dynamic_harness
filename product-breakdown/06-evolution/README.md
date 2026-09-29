@@ -1,3 +1,8 @@
+---
+title: Layer 06 — Evolution
+summary: What controlled changes come next?
+---
+
 # Layer 06 — Evolution
 
 **What controlled changes come next?**
@@ -29,10 +34,13 @@ Other open candidates are listed in the [roadmap.md](roadmap.md) register (IMP-0
 
 ## Contents
 
-- [roadmap.md](roadmap.md) — **NEW (fills GAP-4)**: IMP-style register of open work from the multi-agent INVESTIGATION next-steps, unresolved suggestions, and open gap-analysis gaps; replaces the stale `docs/roadmap/LIVE_CAPITAL_READINESS.md` pointer
-- [backlog.md](backlog.md) — raw suggestion log with DONE/RESOLVED/PICKED UP markers and disposition notes (moved from `breakdown/development/__undeveloped_sugestions__.md`)
-- [investigations/](investigations/README.md) — design-space investigations feeding the roadmap register (e.g. `watchdog.md`, `watchdog_w3_utilization.md`)
-- [selected/](selected/README.md) — completed/selected IMP records `IMP-NNN.md` (created in a parallel track)
+<!-- pb:index:start -->
+- **INFO-139** [Undeveloped suggestions — superseded](__undeveloped_sugestions__.md) — This file is the pre-move original of the raw suggestion log. It is superseded by , the canonical log (same items, updated paths, and DONE/RESOLVED/PI…
+- **INFO-140** [Backlog — raw suggestion log](backlog.md) — Raw idea/suggestion log for the evolution layer (moved from ). Disposition markers: DONE / RESOLVED / PICKED UP (with target); unmarked items are open…
+- **INFO-196** [Roadmap — dynamic_harness](roadmap.md) — IMP-style register of open work. Created 2026-09-21 (fills review GAP-4 — the repo previously had no roadmap; the suggestions file pointed at , a path…
+- [Investigations](investigations/README.md) — Design-space investigations feeding the roadmap register
+- [Selected IMPs](selected/README.md) — Filed improvement records. An IMP is a scoped candidate needing a task contract — not implementation approval. The roadmap is the full register (IMP-0…
+<!-- pb:index:end -->
 
 ## Rules
 

@@ -1,7 +1,12 @@
 ---
+id: INFO-076
+type: info
 title: "Plan — Implementation Success Criteria"
 category: investigation / plan
 parent: "README.md"
+summary: comms tools' schemas never change across cells. guards as every other cell; its measured cost is the verdict. under the default topology. shows two re…
+date: 2026-09-23
+status: current
 ---
 
 # Success criteria

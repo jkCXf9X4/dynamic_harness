@@ -1,3 +1,12 @@
+---
+id: INFO-038
+type: info
+title: Context Health Monitoring
+summary: The agent loop includes a Context Observation before each turn
+date: 2026-09-23
+status: current
+---
+
 # Context Health Monitoring
 
 The agent loop includes a Context Observation before each turn:

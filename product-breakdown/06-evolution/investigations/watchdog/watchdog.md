@@ -1,3 +1,12 @@
+---
+id: INFO-194
+type: info
+title: Investigation — a cheap, robust watchdog for the harness runtime
+summary: "Status: Investigation (findings only, no code change). Source: backlog hang/timeout items (\"hangs at a \", \"bash commands not completing and killing ag…"
+date: 2026-09-28
+status: current
+---
+
 # Investigation — a cheap, robust watchdog for the harness runtime
 
 Status: Investigation (findings only, no code change). Source: backlog hang/timeout items ("hangs at a `tool_result`", "bash commands not completing and killing agents", "main orchestrator still times out", "sub-orchestrators must not time out"), the comms deadlock (`../../04-verification/communication-structures/FINDINGS.md`), and a review of the current safety layers.

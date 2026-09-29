@@ -1,10 +1,14 @@
 ---
+id: INFO-081
+type: info
 title: "G1 — VERIFY is prompt discipline, not a mechanism"
 category: meta
 summary: >
   P0: the mandatory VERIFY step and plan acceptance criteria are never
   mechanically checked; blind synthesis is undetectable.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G1. VERIFY is prompt discipline, not a mechanism; acceptance criteria are never checked

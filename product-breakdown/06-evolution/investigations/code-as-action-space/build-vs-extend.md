@@ -1,3 +1,13 @@
+---
+id: INFO-143
+type: info
+title: Build vs extend — is this a development of the product, or a new project?
+summary: The code-as-action paradigm (single tool; the agent sets up and manages tools, worker groups, memory, and communication from Python) presents complex—…
+date: 2026-09-28
+status: current
+pb_exempt: true
+---
+
 # Build vs extend — is this a development of the product, or a new project?
 
 ## The question
@@ -23,7 +33,7 @@ inverts. Mapping the paradigm against the nine core principles:
 | "Agents use tool calls, not generated code" (:59) | One tool whose action *is* generated code | **Direct contradiction** |
 | Fresh-context economics, 3×3-turn > 20-turn monolith (:10–13, :44) | Long-horizon single-agent sessions are the paradigm's economics | Tension — rescued only by the delegate caps + worker formation |
 | Context encapsulation, runtime-owned graph (:38) | Agents set up own worker groups / choose comms topology | Tension — caps hold the gate; orchestration style moves to the agent |
-| Disposable workers, state in artifacts (:46) | Agent-authored memory / context management | **Compatible** — bounded by the tier-2 contract in [context-management-improvement.md](context-management-improvement.md) |
+| Disposable workers, state in artifacts (:46) | Agent-authored memory / context management | **Compatible** — bounded by the tier-2 contract in `INFO-145` |
 | Artifact-driven, progressive disclosure, ~300 not 30,000 tokens (:40–43) | Only `print()` enters context | **Reinforces** (B1/B4) |
 | Compulsory verify-before-synthesize (:29) | Execution feedback grounds verification | Helps, no conflict |
 
@@ -33,7 +43,7 @@ thing the product explicitly disclaims.
 ## Verdict: development as a mode; new project as the end-state
 
 **1. The hybrid capability is a development.** An `invoke` tool + `harness_tools`
-stub + procedural-skills pipeline ([proposal.md](proposal.md)) is additive: it
+stub + procedural-skills pipeline (`INFO-146`) is additive: it
 extends the surface, keeps every invariant (spawn caps, artifact/commit path,
 terminal contracts, loop guards), and is framed as an *optional agent type*, not
 a rebranding. `bash` is already a do-anything tool — `invoke` is the same
@@ -81,10 +91,10 @@ and bash-shaped guards into a paradigm they oppose.
    (recommended until evidence flips it), or — only if the intent genuinely
    shifts — amend it via a decision-log record. No implicit contradiction: until
    then the `codeact` agent type remains an *experiment type*, never the
-   default. Existing assets ([benefits-and-costs.md](benefits-and-costs.md),
-   [communication-experiments.md](communication-experiments.md),
-   [worker-formation-option-load.md](worker-formation-option-load.md),
-   [context-management-improvement.md](context-management-improvement.md)) stay
+   default. Existing assets (`INFO-142`,
+   `INFO-144`,
+   `INFO-147`,
+   `INFO-145`) stay
    as the evidence record either way.
 
 ## Bottom line
@@ -95,6 +105,6 @@ found it elsewhere on the shared skeleton if the measurement says so.
 
 ## Related
 
-- [VISION.md](../../../00-intent/VISION.md) — the identity this evaluation is grounded in
-- [proposal.md](proposal.md) — the hybrid prototype this sequences with
-- [INVESTIGATION.md](INVESTIGATION.md) — the canonical record
+- `INFO-001` — the identity this evaluation is grounded in
+- `INFO-146` — the hybrid prototype this sequences with
+- `INFO-141` — the canonical record

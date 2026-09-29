@@ -1,6 +1,15 @@
+---
+id: INFO-156
+type: info
+title: Collaboration Setting — Lifecycle and State Transitions
+summary: "Section 4 of the collaboration-setting spec. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting — Lifecycle and State Transitions
 
-Section 4 of the collaboration-setting spec. Index: [README.md](README.md).
+Section 4 of the collaboration-setting spec. Index: `collaboration-setting`.
 
 ```
 FORMING                       founder spawns children with team.label

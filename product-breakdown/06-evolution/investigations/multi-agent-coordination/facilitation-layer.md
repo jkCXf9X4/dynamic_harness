@@ -1,11 +1,20 @@
+---
+id: INFO-160
+type: info
+title: "Facilitation Layer: Facilitation Yes, Facilitator Agent No"
+summary: Should the collaboration channel have a facilitator to mitigate negative effects, or stay pure child-to-child? Theory resolves this as a three-layer s…
+date: 2026-09-28
+status: current
+---
+
 # Facilitation Layer: Facilitation Yes, Facilitator Agent No
 
 Should the collaboration channel have a **facilitator** to mitigate negative
 effects, or stay **pure child-to-child**? Theory resolves this as a three-layer
 stack in which the "facilitator" is almost entirely *mechanical structure*, with
 a *sparse* arbitration role only at conflict. Decisions:
-[AD-004](../decisions/AD-004.md). Ostrom evidence:
-[ostrom-principles.md](ostrom-principles.md).
+AD-004 (`product-breakdown/06-evolution/investigations/decisions/AD-004.md`). Ostrom evidence:
+`INFO-172`.
 
 ## The three layers (recommended)
 - **L0 — Pure peer-to-peer (steady state).** Workspace reads/writes + bounded

@@ -1,10 +1,14 @@
 ---
+id: INFO-082
+type: info
 title: "G3 — Progressive disclosure is data, not an interface"
 category: meta
 summary: >
   P0 (resolved): read_artifact returned every view at once and raw_data was dead,
   so the lazy-load economics were unachievable in the tool loop.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G3. Progressive disclosure is data, not an interface; `raw_data` is dead

@@ -1,6 +1,15 @@
+---
+id: INFO-154
+type: info
+title: Collaboration Setting — Capability Facets and Scope
+summary: "Section 3 of the collaboration-setting spec. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting — Capability Facets and Scope
 
-Section 3 of the collaboration-setting spec. Index: [README.md](README.md).
+Section 3 of the collaboration-setting spec. Index: `collaboration-setting`.
 
 ## 3.1 MEMBER facet (universal; active iff introduced)
 - Read team artifacts — `workspace_read` — path must resolve under

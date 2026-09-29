@@ -1,10 +1,19 @@
+---
+id: INFO-161
+type: info
+title: "Parent Role: Introduce, Don't Mediate"
+summary: Evaluating whether the parent should inject the child IDs (introduce siblings to each other) when it deems it beneficial — while not overseeing the ex…
+date: 2026-09-28
+status: current
+---
+
 # Parent Role: Introduce, Don't Mediate
 
 Evaluating whether the parent should **inject the child IDs** (introduce
 siblings to each other) when it deems it beneficial — while *not* overseeing the
 exchanges that follow. Verdict: **yes, this is the right shape of B**, and close
 to fully supported by existing plumbing. Decisions:
-[AD-002](../decisions/AD-002.md).
+AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`).
 
 ## The mechanism: `introduce`, a one-time context injection
 The parent does not relay content. It performs a single cheap act — giving each

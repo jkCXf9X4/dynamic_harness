@@ -1,3 +1,12 @@
+---
+id: INFO-051
+type: info
+title: The Layered Policy
+summary: Wall-clock timeouts never self-heal. A timed-out agent ( is false > for it — the context is fine, the run simply exhausted its wall-clock budget) > is…
+date: 2026-09-23
+status: current
+---
+
 # The Layered Policy
 
 | Layer | Trigger (diagnosis) | Action | Loop budget |

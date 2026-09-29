@@ -1,3 +1,8 @@
+---
+title: Layer 01 — Product
+summary: What is delivered, out of scope?
+---
+
 # Layer 01 — Product
 
 **What is delivered, out of scope?**
@@ -46,5 +51,7 @@ Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analys
 
 ## Contents
 
-- [requirements/](requirements/README.md) — **CLI sub-spec**: [FR-1…FR-6](requirements/fr-terminal.md) (prompt-only terminal, persisted overview, always-available input, streaming replies), [NFR-1…NFR-4](requirements/nfr.md) (composability), and [acceptance](requirements/acceptance.md). The runtime's product definition above is the canonical "what"; this doc set pins the terminal surface.
-- [use-cases/](use-cases/README.md) — 7 use-case families (repository-analysis, change-and-validation, documentation-and-knowledge, research-and-synthesis, pipelines-and-jobs, evaluation-and-qa, embedding-and-integration) + [fitness filter](use-cases/fitness-filter.md).
+<!-- pb:index:start -->
+- [Requirements — CLI Sub-Spec (Index)](requirements/README.md) — Requirements governing the delivered terminal surface and the persisted overview (DL-12). The runtime's product definition lives in ; this folder pins…
+- [Use-Cases — Index](use-cases/README.md) — Deduced taxonomy of plausible use-cases for Dynamic Harness, grounded in the concepts and the actual tools/runtime. Each family links to the capabilities it relies on; the fitness filter decides whether a task belongs here at all.
+<!-- pb:index:end -->

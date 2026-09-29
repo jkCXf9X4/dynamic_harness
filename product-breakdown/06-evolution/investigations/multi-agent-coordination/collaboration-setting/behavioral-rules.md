@@ -1,6 +1,15 @@
+---
+id: INFO-153
+type: info
+title: Collaboration Setting — Behavioral Rules
+summary: "Section 5 of the collaboration-setting spec. Index: README.md. Operationalizes the channel + facilitation decisions"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting — Behavioral Rules
 
-Section 5 of the collaboration-setting spec. Index: [README.md](README.md).
+Section 5 of the collaboration-setting spec. Index: `collaboration-setting`.
 Operationalizes the channel + facilitation decisions.
 
 ## 5.1 Channel selection — workspace first, message on equivocality

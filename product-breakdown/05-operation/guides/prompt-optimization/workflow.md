@@ -1,3 +1,12 @@
+---
+id: INFO-135
+type: info
+title: What This Does
+summary: Given the baseline prompt , an orchestrator agent runs a two-round A/B test
+date: 2026-09-23
+status: current
+---
+
 # What This Does
 
 Given the baseline prompt (`src/dynamic_harness/core/agent_system_prompt.txt`),

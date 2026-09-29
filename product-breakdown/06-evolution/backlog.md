@@ -1,6 +1,15 @@
+---
+id: INFO-140
+type: info
+title: Backlog — raw suggestion log
+summary: "Raw idea/suggestion log for the evolution layer (moved from ). Disposition markers: DONE / RESOLVED / PICKED UP (with target); unmarked items are open…"
+date: 2026-09-22
+status: current
+---
+
 # Backlog — raw suggestion log
 
-Raw idea/suggestion log for the evolution layer (moved from `breakdown/development/__undeveloped_sugestions__.md`). Disposition markers: **DONE** / **RESOLVED** / **PICKED UP** (with target); unmarked items are open. Canonical open work is tracked in [`roadmap.md`](roadmap.md); this file is the raw record, not the register.
+Raw idea/suggestion log for the evolution layer (moved from `breakdown/development/__undeveloped_sugestions__.md`). Disposition markers: **DONE** / **RESOLVED** / **PICKED UP** (with target); unmarked items are open. Canonical open work is tracked in `roadmap.md` (`INFO-196`); this file is the raw record, not the register.
 
 ## Open
 

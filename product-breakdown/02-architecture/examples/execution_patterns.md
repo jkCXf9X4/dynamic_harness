@@ -1,3 +1,12 @@
+---
+id: INFO-054
+type: info
+title: "Execution Patterns: Good vs Bad"
+summary: The difference between grinding through work yourself and orchestrating sub-agents. One approach burns tokens and degrades focus; the other stays lean…
+date: 2026-09-22
+status: current
+---
+
 # Execution Patterns: Good vs Bad
 
 The difference between grinding through work yourself and orchestrating sub-agents. One approach burns tokens and degrades focus; the other stays lean and verified.

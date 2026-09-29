@@ -1,4 +1,6 @@
 ---
+id: INFO-015
+type: info
 title: "FR-3 — Live interactive surface"
 category: requirement
 summary: >
@@ -7,6 +9,8 @@ summary: >
   agent's text replies stream above the prompt.
 related:
   - direction.md
+date: 2026-09-23
+status: current
 ---
 
 # FR-3. Live interactive surface

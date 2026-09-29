@@ -1,3 +1,12 @@
+---
+id: INFO-036
+type: info
+title: Progressive Disclosure
+summary: In a naive agent framework, a child agent might return 30,000 tokens of raw findings to its parent. The parent's context window fills with data it may…
+date: 2026-09-23
+status: current
+---
+
 # Progressive Disclosure
 
 ## The Problem: Context Bloat

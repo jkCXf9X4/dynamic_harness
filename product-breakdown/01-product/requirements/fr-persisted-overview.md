@@ -1,4 +1,6 @@
 ---
+id: INFO-017
+type: info
 title: "FR-2 — Persisted overview"
 category: requirement
 summary: >
@@ -7,6 +9,8 @@ summary: >
 related:
   - direction.md
   - ../use-cases/pipelines-and-jobs.md
+date: 2026-09-23
+status: current
 ---
 
 # FR-2. Persisted overview

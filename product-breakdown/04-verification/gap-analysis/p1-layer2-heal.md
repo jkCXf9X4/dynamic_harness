@@ -1,10 +1,14 @@
 ---
+id: INFO-085
+type: info
 title: "G7 — Self-heal Layer 2 is not a distinct mechanism"
 category: meta
 summary: >
   P1 (partial): the parent boundary reuses the root's shared _recover, so the
   documented separate Layer 2 tier is a naming question, not a mechanism.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G7. Self-heal Layer 2 is not a distinct mechanism
@@ -28,6 +32,6 @@ boundary, or implement a distinct parent-side diagnosis + `converse` heal path,
 and fix the G2 deliverable check.
 
 **Status (G2 done):** the G2 deliverable check is fixed (see
-[G2](p0-delegate-heal.md)); the parent boundary now heals prose-completions too.
+G2 (`INFO-080`)); the parent boundary now heals prose-completions too.
 Whether this counts as a distinct "Layer 2" is a naming question — the mechanism
 is the shared `_recover`.

@@ -1,6 +1,9 @@
 ---
+id: INFO-068
+type: info
 title: "Measurement Design — Communication Topology Comparison"
 category: investigation
+date: 2026-09-23
 status: open
 summary: >
   How the communication-topology comparison is measured: five success axes, the

@@ -1,4 +1,6 @@
 ---
+id: INFO-020
+type: info
 title: "Use-Case — Change & Validation"
 category: use-case
 summary: >
@@ -9,6 +11,8 @@ related:
   - ../../02-architecture/concepts/delegation-model/README.md
   - ../../02-architecture/concepts/agent-lifecycle/README.md
   - ../../02-architecture/concepts/self-healing/README.md
+date: 2026-09-22
+status: current
 ---
 
 # Change & Validation

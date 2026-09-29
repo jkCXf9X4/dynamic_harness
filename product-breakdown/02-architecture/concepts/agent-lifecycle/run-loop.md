@@ -1,3 +1,12 @@
+---
+id: INFO-029
+type: info
+title: The Run Loop
+summary: initializes the conversation, then executes the tool-calling loop until a terminal tool fires
+date: 2026-09-23
+status: current
+---
+
 # The Run Loop
 
 `await agent.run()` initializes the conversation, then executes the tool-calling

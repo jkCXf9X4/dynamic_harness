@@ -1,3 +1,12 @@
+---
+id: INFO-092
+type: info
+title: Principles for Adding Any Benchmark
+summary: "assertion, not by prose\" (per-benchmark patch + is good; LLM-judged grading is not). consumes → reproducibility and baseline comparability. suite is a…"
+date: 2026-09-23
+status: current
+---
+
 # Principles for Adding Any Benchmark
 
 1. The task's `verify()` must be **failable and ground-truth** — "pass by

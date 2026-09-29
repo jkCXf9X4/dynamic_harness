@@ -1,4 +1,6 @@
 ---
+id: INFO-023
+type: info
 title: "Use-Case — Evaluation & QA"
 category: use-case
 summary: >
@@ -10,6 +12,8 @@ related:
   - ../../../docs/api/repository.md
   - ../../05-operation/guides/prompt-optimization/README.md
   - ../../05-operation/guides/benchmark-alternatives/README.md
+date: 2026-09-22
+status: current
 ---
 
 # Evaluation & QA

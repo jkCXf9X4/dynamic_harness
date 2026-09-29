@@ -1,8 +1,17 @@
+---
+id: INFO-159
+type: info
+title: Collaboration Setting = Hackman's Conditions per Layer
+summary: "A concrete \"collaboration setting\" object (a team workspace opened by the founding parent) maps 1:1 onto Hackman's five conditions — the first two bei…"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting = Hackman's Conditions per Layer
 
 A concrete "collaboration setting" object (a team workspace opened by the
 founding parent) maps 1:1 onto Hackman's five conditions — the first two being
-the *non-negotiable* core. Decisions: [AD-005](../decisions/AD-005.md).
+the *non-negotiable* core. Decisions: AD-005 (`product-breakdown/06-evolution/investigations/decisions/AD-005.md`).
 
 ## Hackman condition → realization
 1. **A real team** — membership is bounded and explicit: `collaborate_with=[...]`

@@ -1,9 +1,18 @@
+---
+id: INFO-150
+type: info
+title: "Channel Decision: Workspace-Primary, Messages-as-Exception"
+summary: The collaboration channel is a shared, scoped workspace as the primary substrate; peer messages are the scarce, bounded exception used only for equivo…
+date: 2026-09-28
+status: current
+---
+
 # Channel Decision: Workspace-Primary, Messages-as-Exception
 
 The collaboration channel is a shared, scoped workspace as the primary
 substrate; peer messages are the scarce, bounded exception used only for
-*equivocal* coordination. Decisions: [AD-003](../decisions/AD-003.md). Theory
-anchors: [channel-evidence.md](channel-evidence.md).
+*equivocal* coordination. Decisions: AD-003 (`product-breakdown/06-evolution/investigations/decisions/AD-003.md`). Theory
+anchors: `INFO-151`.
 
 ## Decision rules
 1. **To share a result, a finding, or a constraint → write/read the workspace.**

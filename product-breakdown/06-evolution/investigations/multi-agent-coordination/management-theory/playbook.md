@@ -1,6 +1,15 @@
+---
+id: INFO-168
+type: info
+title: "Playbook: The \"Introduce, Don't Mediate\" Parent"
+summary: "Sections 6–7 of the management-theory survey. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Playbook: The "Introduce, Don't Mediate" Parent
 
-Sections 6–7 of the management-theory survey. Index: [README.md](README.md).
+Sections 6–7 of the management-theory survey. Index: `management-theory`.
 
 ## The parent's facilitative job has exactly four moves
 1. **Set up the group (Hackman: real team).** Membership is explicit and bounded:
@@ -26,8 +35,8 @@ Sections 6–7 of the management-theory survey. Index: [README.md](README.md).
 
 ## Design implications to take into the spec
 These are the *mechanical* conclusions that flow into the B-curated spec
-(guardrails in [../requirements-group.md](../requirements-group.md) and
-[../requirements-steering.md](../requirements-steering.md)):
+(guardrails in `INFO-173` and
+`INFO-174`):
 1. **`introduce` ships only metadata + why**: sibling ID, one-line rationale,
    scope-norm reminder. Never a payload.
 2. **Norms are policy objects, not prompt text** (mirroring

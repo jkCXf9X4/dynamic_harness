@@ -1,3 +1,12 @@
+---
+id: INFO-104
+type: info
+title: "Example: Database Tool"
+summary: `python import sqlite3
+date: 2026-09-23
+status: current
+---
+
 # Example: Database Tool
 
 ```python

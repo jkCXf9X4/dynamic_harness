@@ -1,7 +1,12 @@
 ---
+id: INFO-074
+type: info
 title: "Plan — Implementation Phases"
 category: investigation / plan
 parent: "README.md"
+summary: , + / / , , the four backends , and the config→backend factory . Watermarks are in-memory per-(agent, topic) on the backend (no separate tracker class…
+date: 2026-09-23
+status: current
 ---
 
 # Implementation phases (each independently testable)

@@ -1,10 +1,14 @@
 ---
+id: INFO-080
+type: info
 title: "G2 — Delegation-boundary heal misses prose-completed children"
 category: meta
 summary: >
   P0 (resolved): the delegate boundary healed only on failure, so a child that
   completed in prose with no deliverable was never recovered.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G2. Delegation-boundary heal misses prose-completed children

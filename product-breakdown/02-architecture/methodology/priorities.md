@@ -1,3 +1,12 @@
+---
+id: INFO-058
+type: info
+title: Priority Hierarchy
+summary: Output decomposition plan before any tool call. Skipping this and jumping to glob/grep is the 1 cause of context bloat
+date: 2026-09-23
+status: current
+---
+
 # Priority Hierarchy
 
 ### P0 — Decompose First
@@ -51,5 +60,5 @@ glob()/grep() is the #1 cause of context bloat.
 - Failed child → task incomplete. Retry or escalate.
 - Every delegation must include a role.
 
-See [../examples/anti_patterns.md](../examples/anti_patterns.md) for the nine
+See `INFO-052` for the nine
 failure modes these priorities prevent.

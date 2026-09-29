@@ -1,3 +1,12 @@
+---
+id: INFO-195
+type: info
+title: "Investigation — W3 utilization: what the monitor-thread watchdog can actually do"
+summary: "Status: Investigation (follows ; no code change). Scope: the design surface of W3 — the daemon monitor thread + liveness probe — and the concrete ways…"
+date: 2026-09-28
+status: current
+---
+
 # Investigation — W3 utilization: what the monitor-thread watchdog can actually do
 
 Status: Investigation (follows `watchdog.md`; no code change). Scope: the design surface of W3 — the daemon monitor thread + `call_soon_threadsafe` liveness probe — and the concrete ways to utilize it. Part of the W1→W5 cascade (see `watchdog.md` §5: L1 tool-bound → W1 whole-run guard → **W3** → W5 external supervisor).

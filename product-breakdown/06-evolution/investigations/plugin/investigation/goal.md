@@ -1,10 +1,14 @@
 ---
+id: INFO-185
+type: info
 title: "Plugin Direction — The Step Being Investigated"
 category: investigation
 parent: "README.md"
 summary: >
   Establish and minimize the common interfaces between internal components and
   decouple/isolate them; plugin-ready structure, not plugin infrastructure.
+date: 2026-09-28
+status: current
 ---
 
 # The step being investigated
@@ -14,7 +18,7 @@ extracted into host-agnostic decision objects, a metric-reactive registry that
 already calls itself "the plugin seam", an event bus, an LLM provider ABC. Each
 surface is individually extensible in code — but the seams are *incidental*:
 their shapes differ, their breadth varies, and components still reach across
-them (see [interface-inventory.md](interface-inventory.md)).
+them (see `INFO-186`).
 
 This working item investigates a **structural goal, not a mechanism**:
 

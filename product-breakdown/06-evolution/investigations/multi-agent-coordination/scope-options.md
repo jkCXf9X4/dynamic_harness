@@ -1,9 +1,18 @@
+---
+id: INFO-175
+type: info
+title: Collaboration Scope Options (A/B/C)
+summary: Three candidate scopes for moving from complicated decomposition to complex coordination. A is REJECTED; work continues on B and C. Either a parent re…
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Scope Options (A/B/C)
 
 Three candidate scopes for moving from complicated decomposition to complex
 coordination. **A is REJECTED**; work continues on **B** and **C**. Either a
 parent relays (A), siblings message each other (B), or a bounded shared workspace
-with a chair (C). Full decision: [AD-001](../decisions/AD-001.md).
+with a chair (C). Full decision: AD-001 (`product-breakdown/06-evolution/investigations/decisions/AD-001.md`).
 
 ## A. Stay parent-mediated (enhance `stream_children` + `converse`) — REJECTED
 All child↔child interaction is relayed through the parent. The parent holds

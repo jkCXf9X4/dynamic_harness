@@ -1,4 +1,6 @@
 ---
+id: INFO-007
+type: info
 title: "Host — DeepSeek Harness (dsh)"
 category: meta
 summary: >
@@ -8,6 +10,8 @@ summary: >
 parent: "README.md"
 related:
   - fit-matrix.md
+date: 2026-09-23
+status: current
 ---
 
 # DeepSeek Harness (deepseek-ai/deepseek-harness, "dsh")

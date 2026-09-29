@@ -1,3 +1,12 @@
+---
+id: INFO-040
+type: info
+title: Failure Handling
+summary: Never ignore failed children and synthesize partial results. A failed child means the task is incomplete
+date: 2026-09-23
+status: current
+---
+
 # Failure Handling
 
 | Failure | Recovery |
@@ -11,5 +20,5 @@
 Never ignore failed children and synthesize partial results. A failed child
 means the task is incomplete.
 
-See [self-healing/](../self-healing/README.md) for the runtime recovery policy
+See `self-healing` for the runtime recovery policy
 and the `resume`/`kill` tools.

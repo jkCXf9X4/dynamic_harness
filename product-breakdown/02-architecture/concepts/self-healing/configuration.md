@@ -1,3 +1,12 @@
+---
+id: INFO-045
+type: info
+title: Configuration & Integration
+summary: A conservative budget beside the existing safety knobs
+date: 2026-09-23
+status: current
+---
+
 # Configuration & Integration
 
 ## Configuration

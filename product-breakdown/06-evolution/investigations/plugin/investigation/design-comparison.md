@@ -1,4 +1,6 @@
 ---
+id: INFO-184
+type: info
 title: "Plugin Direction — Compared Designs: OpenCode V2 and DeepSeek Harness"
 category: investigation
 parent: "README.md"
@@ -6,6 +8,9 @@ summary: >
   The two reference plugin-centric architectures, mapped onto the ~7-interface
   target; what validates seam-first/no-loader, and the two lessons worth
   adopting (one registration contract, per-request tool snapshot).
+date: 2026-09-28
+status: current
+pb_exempt: true
 ---
 
 # Compared designs: OpenCode V2 and DeepSeek Harness
@@ -132,4 +137,4 @@ at the contract level OpenCode V2 and dsh are building the same interface
 economy the harness is, and their extra machinery is only justified by
 multi-tenant distribution. Adopt lesson 1 (registration contract) and lesson 2
 (tool snapshot) as forward work; keep everything else as ruled. See
-[next-steps.md](next-steps.md).
+`INFO-189`.

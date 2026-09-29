@@ -1,3 +1,12 @@
+---
+id: INFO-057
+type: info
+title: Core Philosophy
+summary: Maximize output quality while minimizing cost through disciplined task decomposition, strict context encapsulation, and a mandatory analyze → implemen…
+date: 2026-09-23
+status: current
+---
+
 # Core Philosophy
 
 Maximize output quality while minimizing cost through disciplined task

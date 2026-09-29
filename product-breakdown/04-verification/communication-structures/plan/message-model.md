@@ -1,7 +1,12 @@
 ---
+id: INFO-073
+type: info
 title: "Plan — CommsMessage Model"
 category: investigation / plan
 parent: "README.md"
+summary: Plan — CommsMessage Model
+date: 2026-09-23
+status: current
 ---
 
 # CommsMessage — the typed envelope

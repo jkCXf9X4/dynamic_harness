@@ -1,3 +1,12 @@
+---
+id: INFO-098
+type: info
+title: "Full Example: Retry Agent"
+summary: An agent that automatically retries on failure up to N times
+date: 2026-09-23
+status: current
+---
+
 # Full Example: Retry Agent
 
 An agent that automatically retries on failure up to N times:

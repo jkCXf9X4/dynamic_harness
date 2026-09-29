@@ -1,3 +1,12 @@
+---
+id: INFO-122
+type: info
+title: Custom Agent Classes
+summary: `python from dynamic_harness.core.agent import Agent
+date: 2026-09-23
+status: current
+---
+
 # Custom Agent Classes
 
 ```python
@@ -18,5 +27,5 @@ agent = runtime.delegate(
 await agent.run()
 ```
 
-See [custom agents](../custom-agents/README.md) for override points, custom
+See custom agents (`custom-agents`) for override points, custom
 system prompts, and safety limits.

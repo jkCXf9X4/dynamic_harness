@@ -1,3 +1,12 @@
+---
+id: INFO-034
+type: info
+title: Relationship to Commits
+summary: Every artifact is linked to a commit in the Repository
+date: 2026-09-23
+status: current
+---
+
 # Relationship to Commits
 
 Every artifact is linked to a commit in the Repository:

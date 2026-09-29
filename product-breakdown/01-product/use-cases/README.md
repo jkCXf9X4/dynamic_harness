@@ -46,3 +46,17 @@ shared decomposition model and tool vocabulary behind every family, see
 | [Pipelines & jobs](pipelines-and-jobs.md) | Batch extraction/transformation, long resumable jobs | `bash`/`write` per item → `prune`/`restore` → checkpoint/resume |
 | [Evaluation & QA](evaluation-and-qa.md) | Benchmark suite, prompt A/B, failure triage | deterministic verifiers, fresh-Runtime runs |
 | [Embedding & integration](embedding-and-integration.md) | Library use, custom agents/tools, product workflows | `Harness`/`Runtime` API + custom registry |
+
+## Contents
+
+<!-- pb:index:start -->
+- **INFO-020** [Use-Case — Change & Validation](change-and-validation.md) — Work that modifies a codebase and must be proven correct: bug fixes with verification, test-authoring for coverage, cross-cutting refactors, and small self-contained code generation.
+- **INFO-021** [Use-Case — Documentation & Knowledge](documentation-and-knowledge.md) — Generate or refresh documentation from a codebase, map an API surface, and curate a durable reference library — read→summarize→write flows and progressive disclosure, with the reference library as content not scaffolding.
+- **INFO-022** [Use-Case — Embedding & Integration](embedding-and-integration.md) — Dynamic Harness as a library inside a product or pipeline: the Harness / Runtime API, custom agent classes, custom tools, and event-handler wiring.
+- **INFO-023** [Use-Case — Evaluation & QA](evaluation-and-qa.md) — Dogfooding the runtime as its own QA lab: run the deterministic benchmark suite, A/B-test system prompts, triage failures, and audit provenance — a first-class use-case thanks to the failable verifiers.
+- **INFO-024** [Use-Case Fitness Filter](fitness-filter.md) — Not everything is a good Dynamic Harness use-case. The framework is not a chatbot, not a shared-memory assistant, and not a code-generation platform.…
+- **INFO-025** [Mapping a Use-Case to the Architecture](mapping-and-tools.md) — Every use-case family is built from the same load-bearing concepts
+- **INFO-026** [Use-Case — Pipelines & Long Jobs](pipelines-and-jobs.md) — Batch extraction/transformation over many files, and long multi-step jobs: the manyfiles pattern (one item at a time, write each result), prune/restore, and checkpoint/resume that makes an interrupted overnight job recoverable.
+- **INFO-027** [Use-Case — Repository Analysis](repository-analysis.md) — Inventory, audit, and understand an existing codebase: security review, code quality, TODO/debt inventory, structure mapping. The canonical read-heavy family — discovery, parallel delegation, progressive disclosure, read-only.
+- **INFO-028** [Use-Case — Research & Synthesis](research-and-synthesis.md) — Gather external information and synthesize it into a durable, source-cited artifact: competitive research, feature/API documentation, and comparison write-ups. Exercises `webfetch` and parallel sub-agents, with careful discipline around the fetcher's restrictions and the "summary is a preview, the artifact is the truth" rule.
+<!-- pb:index:end -->

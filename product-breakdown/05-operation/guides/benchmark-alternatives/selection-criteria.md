@@ -1,3 +1,12 @@
+---
+id: INFO-093
+type: info
+title: Selection Criteria & Decision Summary
+summary: Reviews the benchmark landscape against three questions specific to this codebase
+date: 2026-09-23
+status: current
+---
+
 # Selection Criteria & Decision Summary
 
 Reviews the benchmark landscape against three questions specific to this
@@ -28,4 +37,4 @@ codebase:
 
 External benchmarks that **don't fit** should not be added to the default
 `ALL_TASKS` — keep them as opt-in `scripts/` pipelines (see
-[built-in-suite.md](built-in-suite.md)).
+`INFO-090`).

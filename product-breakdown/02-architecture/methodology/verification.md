@@ -1,3 +1,12 @@
+---
+id: INFO-061
+type: info
+title: Verification Protocol
+summary: For each child after returns
+date: 2026-09-23
+status: current
+---
+
 # Verification Protocol
 
 For each child after `delegate()` returns:

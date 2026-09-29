@@ -1,7 +1,12 @@
 ---
+id: INFO-078
+type: info
 title: "Plan — Tool Surface"
 category: investigation / plan
 parent: "README.md"
+summary: Registered once in ; every tool is a thin wrapper over methods delegating to (the backend). No tool knows which backend is live
+date: 2026-09-23
+status: current
 ---
 
 # The tool surface — one vocabulary across all cells

@@ -1,9 +1,13 @@
 ---
+id: INFO-180
+type: info
 title: "Plugin Direction — Policy-Seam Breadth Audit"
 category: investigation
 parent: "README.md"
 summary: >
   Consumers of each decision policy, and how the shared/domain split holds.
+date: 2026-09-28
+status: current
 ---
 
 # 2. Policy seams (decision objects + reactive)

@@ -1,6 +1,15 @@
+---
+id: INFO-167
+type: info
+title: Mechanisms and Rituals for Facilitating Communication
+summary: "Section 4 of the management-theory survey. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Mechanisms and Rituals for Facilitating Communication
 
-Section 4 of the management-theory survey. Index: [README.md](README.md).
+Section 4 of the management-theory survey. Index: `management-theory`.
 
 ## 4.1 Boundary-spanning leadership
 Managers and dedicated boundary-spanners monitor what crosses the team's

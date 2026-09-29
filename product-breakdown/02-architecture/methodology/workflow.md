@@ -1,3 +1,12 @@
+---
+id: INFO-062
+type: info
+title: Mandatory Workflow
+summary: Mandatory Workflow
+date: 2026-09-23
+status: current
+---
+
 # Mandatory Workflow
 
 ```

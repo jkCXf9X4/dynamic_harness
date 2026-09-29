@@ -1,9 +1,18 @@
+---
+id: INFO-178
+type: info
+title: "Simplicity Review: The Spine — Links + Delivery + Pointers"
+summary: The collaboration-setting spec over-modeled. The advanced features (team object, charter, norms, sanctions, workspace, arbitration ladder) are policy…
+date: 2026-09-28
+status: current
+---
+
 # Simplicity Review: The Spine — Links + Delivery + Pointers
 
 The collaboration-setting spec over-modeled. The advanced features (team object,
 charter, norms, sanctions, workspace, arbitration ladder) are **policy layers
 that can sit on a much smaller spine** — and the spine is mostly *existing
-machinery*. Decisions: [AD-006](../decisions/AD-006.md).
+machinery*. Decisions: AD-006 (`product-breakdown/06-evolution/investigations/decisions/AD-006.md`).
 
 ## The spine (three primitives, all present today)
 1. **Links** — ONE new structure: a runtime registry of authorized peer pairs.

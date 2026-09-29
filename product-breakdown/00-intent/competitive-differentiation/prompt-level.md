@@ -1,4 +1,6 @@
 ---
+id: INFO-004
+type: info
 title: "Prompt-Level — Shared with the Field"
 category: meta
 summary: >
@@ -8,6 +10,8 @@ summary: >
 parent: "README.md"
 related:
   - ../../02-architecture/concepts/delegation-model.md
+date: 2026-09-23
+status: current
 ---
 
 # Prompt-Level — Shared with the Field
@@ -37,4 +41,4 @@ are fire-and-forget and the parent is re-admitted to its loop as each child
 settles (`[child settled]` injected), letting it react to one child before
 siblings finish — re-delegate a failed branch, cancel stragglers, or report
 early. The cost trade-off is documented in
-[delegation-model](../../02-architecture/concepts/delegation-model.md).
+delegation-model (`product-breakdown/02-architecture/concepts/delegation-model.md`).

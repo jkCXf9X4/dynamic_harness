@@ -1,7 +1,16 @@
+---
+id: INFO-169
+type: info
+title: References and Term Mapping
+summary: "Section 8 + appendix of the management-theory survey. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # References and Term Mapping
 
 Section 8 + appendix of the management-theory survey. Index:
-[README.md](README.md).
+`management-theory`.
 
 ## Verified online (fetched for this report)
 - Netflix — *Culture Memo*, "People over Process: Context not control; Highly

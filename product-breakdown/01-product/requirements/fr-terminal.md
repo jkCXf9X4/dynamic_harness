@@ -1,4 +1,6 @@
 ---
+id: INFO-018
+type: info
 title: "FR-1 — Prompt-only terminal"
 category: requirement
 summary: >
@@ -6,6 +8,8 @@ summary: >
   and renders no live dashboard.
 related:
   - direction.md
+date: 2026-09-23
+status: current
 ---
 
 # FR-1. Prompt-only terminal

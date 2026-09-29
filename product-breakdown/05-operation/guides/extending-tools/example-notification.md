@@ -1,3 +1,12 @@
+---
+id: INFO-105
+type: info
+title: "Example: Notification Tool"
+summary: `python import json
+date: 2026-09-23
+status: current
+---
+
 # Example: Notification Tool
 
 ```python

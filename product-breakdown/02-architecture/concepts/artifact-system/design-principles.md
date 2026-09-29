@@ -1,3 +1,12 @@
+---
+id: INFO-035
+type: info
+title: Design Principles
+summary: Write to disk, not memory — state is durable, not ephemeral
+date: 2026-09-23
+status: current
+---
+
 # Design Principles
 
 1. **Write to disk, not memory** — state is durable, not ephemeral

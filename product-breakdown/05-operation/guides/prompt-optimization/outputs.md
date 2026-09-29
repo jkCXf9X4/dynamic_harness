@@ -1,3 +1,12 @@
+---
+id: INFO-131
+type: info
+title: Outputs
+summary: After a full run, contains
+date: 2026-09-23
+status: current
+---
+
 # Outputs
 
 After a full run, `.optimize_benchmarks/` contains:

@@ -1,3 +1,8 @@
+---
+title: Layer 02 — Architecture
+summary: How are deliverables, evidence, and work organized?
+---
+
 # Layer 02 — Architecture
 
 **How are deliverables, evidence, and work organized?**
@@ -17,12 +22,13 @@ The architecture is the ISO/IEC 15288 systems-engineering shape applied to agent
 - Scope/capabilities → `01-product/`
 - Future features → `06-evolution/`
 
+The strongest rationale artifacts in this layer — the multi-agent INVESTIGATION and the verifier's evidence chain in `04-verification/` — are preserved as-is; the layer structure *wraps* them, it does not replace them.
+
 ## Contents
 
-- [methodology/](methodology/README.md) — mandatory workflow, golden delegation rule, priorities, verification, anti-patterns (P0–P6)
-- [concepts/](concepts/README.md) — [delegation-model](concepts/delegation-model/README.md), [artifact-system](concepts/artifact-system/README.md), [agent-lifecycle](concepts/agent-lifecycle/README.md), [self-healing](concepts/self-healing/README.md)
-- [examples/](examples/README.md) — worked execution patterns
-- [decisions/](decisions/README.md) — ADR decision records (AD-001…AD-009; see `product-breakdown/decision-log.md`)
-- [multi-agent-coordination/](multi-agent-coordination/README.md) — topology design space (REQ-1…15), [collaboration setting](multi-agent-coordination/collaboration-setting/README.md), [management theory](multi-agent-coordination/management-theory/README.md)
-
-The strongest rationale artifacts in this layer — the multi-agent INVESTIGATION and the verifier's evidence chain in `04-verification/` — are preserved as-is; the layer structure *wraps* them, it does not replace them.
+<!-- pb:index:start -->
+- [Agent Methodology](methodology/README.md) — The guidelines governing how every agent decomposes, delegates, verifies, synthesizes, and terminates. Derived from VISION.md and the agent system pro…
+- [Architecture Concepts](concepts/README.md) — The load-bearing model concepts. Each is a folder of single-concern leaves
+- [Worked Examples](examples/README.md) — Concrete good-vs-bad examples that make the methodology operational
+- [decisions](decisions/README.md)
+<!-- pb:index:end -->

@@ -1,3 +1,12 @@
+---
+id: INFO-114
+type: info
+title: Terminal Commands
+summary: Slash commands available in the interactive terminal
+date: 2026-09-23
+status: current
+---
+
 # Terminal Commands
 
 Slash commands available in the interactive terminal:

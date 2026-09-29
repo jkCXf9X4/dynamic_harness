@@ -1,3 +1,12 @@
+---
+id: INFO-097
+type: info
+title: Agent with Custom State
+summary: `python from collections import Counter
+date: 2026-09-23
+status: current
+---
+
 # Agent with Custom State
 
 ```python

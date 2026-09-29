@@ -1,6 +1,9 @@
 ---
+id: INFO-148
+type: info
 title: "Investigation — Complicated → Complex: Multi-Agent Coordination"
 category: investigation
+date: 2026-09-28
 status: open
 summary: >
   Direction work (before implementation) for moving from parallel decomposition
@@ -33,24 +36,24 @@ multiple children that can *communicate* and *solve together*.
 - Self-heal layers documented — `../concepts/self-healing/README.md`
 
 ## Key open questions
-See [open-questions.md](open-questions.md) — scope of "solve together",
+See `INFO-171` — scope of "solve together",
 cost/context floor, verification as mechanism, failure steering, termination.
 
 ## Design conclusions (canonical leaves)
-- [scope-options.md](scope-options.md) — the A/B/C design space; option A rejected.
-- [sibling-collaboration.md](sibling-collaboration.md) — B-curated: common-parent scoping, mechanism, patterns.
-- [sibling-scoping.md](sibling-scoping.md) — mitigations of B's cons + residual concerns.
-- [requirements-group.md](requirements-group.md) — REQ-1..7 (group, context, norms).
-- [requirements-steering.md](requirements-steering.md) — REQ-8..15 (steering, safety, commons).
-- [introduce-not-mediate.md](introduce-not-mediate.md) — parent introduces, never relays; signals not content.
-- [introduce-risks.md](introduce-risks.md) — risks/convergence of the introduce model.
-- [channel-decision.md](channel-decision.md) — workspace-primary, messages-as-exception.
-- [channel-evidence.md](channel-evidence.md) — the theory anchors behind the channel decision.
-- [facilitation-layer.md](facilitation-layer.md) — L0/L1/L2, no facilitator agent.
-- [ostrom-principles.md](ostrom-principles.md) — commons-governance evidence.
-- [capability-scope.md](capability-scope.md) — founding boundary-scoped, participation universal.
-- [collaboration-setting-model.md](collaboration-setting-model.md) — Hackman's conditions per layer + facets.
-- [spine.md](spine.md) — the three-primitive spine; spec demoted to the advanced layer.
+- `INFO-175` — the A/B/C design space; option A rejected.
+- `INFO-176` — B-curated: common-parent scoping, mechanism, patterns.
+- `INFO-177` — mitigations of B's cons + residual concerns.
+- `INFO-173` — REQ-1..7 (group, context, norms).
+- `INFO-174` — REQ-8..15 (steering, safety, commons).
+- `INFO-161` — parent introduces, never relays; signals not content.
+- `INFO-162` — risks/convergence of the introduce model.
+- `INFO-150` — workspace-primary, messages-as-exception.
+- `INFO-151` — the theory anchors behind the channel decision.
+- `INFO-160` — L0/L1/L2, no facilitator agent.
+- `INFO-172` — commons-governance evidence.
+- `INFO-149` — founding boundary-scoped, participation universal.
+- `INFO-159` — Hackman's conditions per layer + facets.
+- `INFO-178` — the three-primitive spine; spec demoted to the advanced layer.
 
 ## Investigation next steps
 - [x] Read `../concepts/delegation-model/README.md` + `../concepts/self-healing/README.md` end-to-end

@@ -1,3 +1,12 @@
+---
+id: INFO-065
+type: info
+title: Communication comparison — real-LLM run
+summary: When
+date: 2026-09-22
+status: current
+---
+
 # Communication comparison — real-LLM run
 
 - When: `2026-09-18 12:25 UTC`

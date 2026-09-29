@@ -1,4 +1,6 @@
 ---
+id: INFO-026
+type: info
 title: "Use-Case — Pipelines & Long Jobs"
 category: use-case
 summary: >
@@ -10,6 +12,8 @@ related:
   - ../../02-architecture/concepts/artifact-system/README.md
   - ../../02-architecture/concepts/self-healing/README.md
   - ../../02-architecture/examples/execution_patterns.md
+date: 2026-09-22
+status: current
 ---
 
 # Pipelines & Long Jobs

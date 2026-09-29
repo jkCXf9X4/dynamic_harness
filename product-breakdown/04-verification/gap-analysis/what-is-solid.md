@@ -1,9 +1,13 @@
 ---
+id: INFO-088
+type: info
 title: "Gap Analysis — What Is Actually Solid"
 category: meta
 summary: >
   The capabilities that demonstrably back the use-cases, before the gaps.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # What Is Actually Solid

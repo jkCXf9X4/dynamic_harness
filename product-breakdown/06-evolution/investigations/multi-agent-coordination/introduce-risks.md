@@ -1,7 +1,16 @@
+---
+id: INFO-162
+type: info
+title: "Introduce: Risks, Cons, and the B-vs-C Picture"
+summary: "Honest risks of the introduce model and how it changes the B-vs-C decision. Decisions: AD-002, AD-003"
+date: 2026-09-28
+status: current
+---
+
 # Introduce: Risks, Cons, and the B-vs-C Picture
 
 Honest risks of the introduce model and how it changes the B-vs-C decision.
-Decisions: [AD-002](../decisions/AD-002.md), [AD-003](../decisions/AD-003.md).
+Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`), AD-003 (`product-breakdown/06-evolution/investigations/decisions/AD-003.md`).
 
 ## Risks and the honest cons
 - **Mis-connection.** The parent's judgment runs on summaries; it can introduce
@@ -33,4 +42,4 @@ model. The decision becomes:
 
 Both keep the parent in the **enabler** seat ("context over control"); neither
 requires the parent to oversee content. The channel question is resolved in
-[channel-decision.md](channel-decision.md).
+`INFO-150`.

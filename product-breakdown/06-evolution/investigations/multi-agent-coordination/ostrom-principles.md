@@ -1,3 +1,12 @@
+---
+id: INFO-172
+type: info
+title: Ostrom's Commons Governance (Evidence for Facilitation)
+summary: "Elinor Ostrom's Nobel-winning analysis of long-lived shared-resource groups (\"common-pool resources\") is the direct analogue of a shared artifact work…"
+date: 2026-09-28
+status: current
+---
+
 # Ostrom's Commons Governance (Evidence for Facilitation)
 
 Elinor Ostrom's Nobel-winning analysis of long-lived shared-resource groups

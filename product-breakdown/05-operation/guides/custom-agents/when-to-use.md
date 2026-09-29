@@ -1,3 +1,12 @@
+---
+id: INFO-101
+type: info
+title: When to Use Custom Agents
+summary: Logging/metrics — override with pre/post hooks
+date: 2026-09-23
+status: current
+---
+
 # When to Use Custom Agents
 
 - **Logging/metrics** — override `run()` with pre/post hooks.

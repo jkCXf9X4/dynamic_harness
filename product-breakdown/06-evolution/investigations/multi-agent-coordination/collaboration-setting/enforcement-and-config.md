@@ -1,6 +1,15 @@
+---
+id: INFO-155
+type: info
+title: Collaboration Setting — Enforcement Points and Config
+summary: "Sections 6–7 of the collaboration-setting spec. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting — Enforcement Points and Config
 
-Sections 6–7 of the collaboration-setting spec. Index: [README.md](README.md).
+Sections 6–7 of the collaboration-setting spec. Index: `collaboration-setting`.
 
 ## 6. Enforcement points in the codebase
 - Capability distribution — `core/agent.py` — `Agent.collaboration:

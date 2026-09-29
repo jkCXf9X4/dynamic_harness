@@ -1,3 +1,12 @@
+---
+id: INFO-124
+type: info
+title: No-LLM Mode & Error Handling
+summary: If you skip , agents enter no-LLM mode
+date: 2026-09-23
+status: current
+---
+
 # No-LLM Mode & Error Handling
 
 ## No-LLM Mode

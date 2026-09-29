@@ -1,4 +1,6 @@
 ---
+id: INFO-021
+type: info
 title: "Use-Case — Documentation & Knowledge"
 category: use-case
 summary: >
@@ -10,6 +12,8 @@ related:
   - ../../02-architecture/concepts/self-healing/README.md
   - ../../../docs/api/artifacts.md
   - ../../02-architecture/methodology/README.md
+date: 2026-09-22
+status: current
 ---
 
 # Documentation & Knowledge

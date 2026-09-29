@@ -1,3 +1,13 @@
+---
+id: INFO-146
+type: info
+title: Proposal — hybrid code-as-action surface
+summary: RPC stub below) must route through so every code-driven action passes the same policies the tools enforce today — sandbox roots, spawn caps, plan/chec…
+date: 2026-09-28
+status: current
+pb_exempt: true
+---
+
 # Proposal — hybrid code-as-action surface
 
 ## Positions

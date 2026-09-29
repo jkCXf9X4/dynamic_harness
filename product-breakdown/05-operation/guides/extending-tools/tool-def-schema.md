@@ -1,3 +1,12 @@
+---
+id: INFO-108
+type: info
+title: Tool Definition Schema
+summary: The uses standard JSON Schema
+date: 2026-09-23
+status: current
+---
+
 # Tool Definition Schema
 
 The `ToolDef` uses standard JSON Schema:

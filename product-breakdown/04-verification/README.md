@@ -1,3 +1,8 @@
+---
+title: Layer 04 — Verification
+summary: How do we know it satisfies requirements?
+---
+
 # Layer 04 — Verification
 
 **How do we know it satisfies requirements?**
@@ -18,8 +23,10 @@ Verification is evidence-first, matching the repo's "verify before synthesize" e
 
 ## Contents
 
-- [gap-analysis/](gap-analysis/README.md) — G1–G13 with severity + status; open: G1 (mechanical verification), G7 (Layer-2 heal naming), G8 (cost control), G9, G11–G13
-- [communication-structures/](communication-structures/README.md) — [INVESTIGATION](communication-structures/INVESTIGATION.md), [plan/](communication-structures/plan/README.md), [FINDINGS](communication-structures/FINDINGS.md), [RESULTS](communication-structures/RESULTS.md), [context-injection-design](communication-structures/context-injection-design.md), `metrics-cells.json` (the auditable evidence chain for DL-6/DL-7/DL-11)
+<!-- pb:index:start -->
+- [Communication Structures — Evidence Chain](communication-structures/README.md) — The auditable INVESTIGATION → PLAN → FINDINGS → RESULTS flow (with raw ) that empirically compared four communication topologies on a fixed collaborat…
+- [Gap Analysis — Concepts & Use-Cases vs Implementation](gap-analysis/README.md) — Honest audit of what the concepts (VISION, delegation model, artifact system, self-healing) and use-cases promise versus what the runtime and tools deliver: missing machinery, dead plumbing, and doc drift, each labeled P0/P1/P2 with evidence, the use-case it breaks, a fix direction, and status.
+<!-- pb:index:end -->
 
 ## Tests
 

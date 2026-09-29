@@ -1,4 +1,6 @@
 ---
+id: INFO-012
+type: info
 title: "Verdict and Recommendation"
 category: meta
 summary: >
@@ -9,6 +11,8 @@ parent: "README.md"
 related:
   - fit-matrix.md
   - ../competitive-differentiation/README.md
+date: 2026-09-23
+status: current
 ---
 
 # Verdict and Recommendation

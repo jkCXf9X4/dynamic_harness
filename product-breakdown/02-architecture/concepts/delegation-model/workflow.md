@@ -1,3 +1,12 @@
+---
+id: INFO-044
+type: info
+title: The Mandatory Workflow
+summary: Every agent except a leaf follows
+date: 2026-09-23
+status: current
+---
+
 # The Mandatory Workflow
 
 Every agent except a leaf follows:

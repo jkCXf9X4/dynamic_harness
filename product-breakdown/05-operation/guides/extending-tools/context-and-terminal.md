@@ -1,3 +1,12 @@
+---
+id: INFO-103
+type: info
+title: ToolContext & Terminal Tools
+summary: The parameter gives access to everything a tool is allowed to see — it is a narrow public façade, so tools cannot reach into agent/runtime private sta…
+date: 2026-09-23
+status: current
+---
+
 # ToolContext & Terminal Tools
 
 ## Accessing Runtime Services

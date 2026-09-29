@@ -1,4 +1,6 @@
 ---
+id: INFO-008
+type: info
 title: "Fit Against the Five Mechanisms"
 category: meta
 summary: >
@@ -7,6 +9,8 @@ summary: >
 parent: "README.md"
 related:
   - portability-thesis.md
+date: 2026-09-23
+status: current
 ---
 
 # Fit Against the Five Mechanisms

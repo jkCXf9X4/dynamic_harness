@@ -1,3 +1,12 @@
+---
+id: INFO-055
+type: info
+title: "Task Framing: Root-Level Tasks"
+summary: The quality of the root task description directly determines the entire agent tree's behavior. A vague root task produces wandering agents; a precise…
+date: 2026-09-22
+status: current
+---
+
 # Task Framing: Root-Level Tasks
 
 The quality of the root task description directly determines the entire agent tree's behavior. A vague root task produces wandering agents; a precise root task produces focused, verifiable output.

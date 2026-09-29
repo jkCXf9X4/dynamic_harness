@@ -1,6 +1,9 @@
 ---
+id: INFO-067
+type: info
 title: "Analysis — Injecting Communication into Agent Context"
 category: investigation / analysis
+date: 2026-09-22
 status: open
 summary: >
   How communication enters an agent's context: inject typed envelopes, not raw
@@ -12,8 +15,8 @@ parent: "INVESTIGATION.md"
 # Injecting communication into agent context
 
 Injection mechanics only. Channel pollution containment, directory, and creation
-rules are in [channel-context-design.md](channel-context-design.md); the concrete
-tool surface is the plan ([PLAN](plan/README.md)).
+rules are in `INFO-066`; the concrete
+tool surface is the plan (PLAN (`plan`)).
 
 ## 1. Inject envelopes, not content
 
@@ -45,7 +48,7 @@ call (cost multiplier = remaining turns) — the budget justifying envelopes.
 
 The agent won't *miss* injected content; the failures are treating an irrelevant
 post as an instruction and paying the multiplier for irrelevant tokens. Fix both
-with a **typed envelope** (concrete renderer: [plan/injection.md](plan/injection.md)):
+with a **typed envelope** (concrete renderer: `INFO-071`):
 
 - **`kind` is load-bearing.** `instruction` (parent/context — binding) vs
   `notification` (channel — advisory, ignorable); the envelope *names* the

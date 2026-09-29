@@ -1,3 +1,12 @@
+---
+id: INFO-117
+type: info
+title: Live-Run Profiling
+summary: The scaler is a synthetic micro-benchmark. To capture what a real, live run actually did — real LLM latency, event handling, CLI overheads — re-run th…
+date: 2026-09-23
+status: current
+---
+
 # Live-Run Profiling
 
 The scaler is a synthetic micro-benchmark. To capture what a *real, live* run

@@ -1,15 +1,19 @@
 ---
+id: INFO-188
+type: info
 title: "Plugin Direction — Motivating Context"
 category: investigation
 parent: "README.md"
 summary: >
   The seed suggestion, the reactive-policy reference model, and the purpose
   ruling: internal-structure enablement; external porting out of scope.
+date: 2026-09-28
+status: current
 ---
 
 # Why this matters (motivating context)
 
-The seed suggestion (from [`../../../06-evolution/backlog.md`](../../../06-evolution/backlog.md)):
+The seed suggestion (from `product-breakdown/06-evolution/06-evolution/backlog.md`):
 
 > Most policies react to some metric and inject or alter the prompt in some
 > way — can you see if you can create a common interface for these to further

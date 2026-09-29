@@ -1,6 +1,15 @@
+---
+id: INFO-170
+type: info
+title: "Synthesis: What the Theory Says"
+summary: "Section 5 of the management-theory survey. Index: README.md. One line per theory: key idea → leadership act → agent design principle"
+date: 2026-09-28
+status: current
+---
+
 # Synthesis: What the Theory Says
 
-Section 5 of the management-theory survey. Index: [README.md](README.md). One
+Section 5 of the management-theory survey. Index: `management-theory`. One
 line per theory: key idea → leadership act → agent design principle.
 
 - **Information theory (Shannon)** — relays add noise & latency → keep hops

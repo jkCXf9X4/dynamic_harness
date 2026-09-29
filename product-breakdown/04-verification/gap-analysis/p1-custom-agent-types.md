@@ -1,10 +1,14 @@
 ---
+id: INFO-084
+type: info
 title: "G6 — Custom agent classes cannot be spawned by the LLM"
 category: meta
 summary: >
   P1 (resolved): the delegate tool accepted no agent_type, so a parent in a live
   tree could not choose a registered specialist class.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G6. Custom agent classes cannot be spawned by the LLM

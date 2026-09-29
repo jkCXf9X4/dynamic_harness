@@ -1,4 +1,6 @@
 ---
+id: INFO-010
+type: info
 title: "Host — Pi"
 category: meta
 summary: >
@@ -8,6 +10,8 @@ summary: >
 parent: "README.md"
 related:
   - fit-matrix.md
+date: 2026-09-23
+status: current
 ---
 
 # Pi (earendil-works/pi-mono / pi.dev)

@@ -1,3 +1,12 @@
+---
+id: INFO-110
+type: info
+title: Your First Task
+summary: Your First Task
+date: 2026-09-23
+status: current
+---
+
 # Your First Task
 
 ## Interactive Terminal (default)
@@ -18,7 +27,7 @@ conversation.
 
 The final outcome prints at the end; everything else — agent tree, status, and
 event stream — is persisted to files under the run directory (see
-[output.md](output.md)).
+`INFO-112`).
 
 ## Single-Shot Mode
 

@@ -1,3 +1,12 @@
+---
+id: INFO-128
+type: info
+title: Customizing the Benchmark
+summary: To add, remove, or change a task, edit and register it in . Each task is a subclass with a failable ground-truth that compares the agent's output arti…
+date: 2026-09-23
+status: current
+---
+
 # Customizing the Benchmark
 
 To add, remove, or change a task, edit `src/dynamic_harness/benchmark/tasks.py`

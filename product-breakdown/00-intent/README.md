@@ -1,3 +1,8 @@
+---
+title: Layer 00 — Intent
+summary: Why does the project exist, who is it for?
+---
+
 # Layer 00 — Intent
 
 **Why does the project exist, who is it for?**
@@ -22,6 +27,8 @@ This layer is the "why". It holds the founding thesis (fresh context is cheaper 
 
 ## Contents
 
-- [VISION.md](VISION.md) — vision statement, 15288 foundation, core attributes, pillars, "What This Is NOT", success criteria
-- [competitive-differentiation/](competitive-differentiation/README.md) — why this differs (deterministic safety machinery, blunt-vs-rot self-healing, fresh-context economics)
-- [platform-evaluation/](platform-evaluation/README.md) — portability thesis: the core worth porting (~25-tool tool-execution + spawn layer)
+<!-- pb:index:start -->
+- [Competitive Differentiation](competitive-differentiation/README.md) — What separates Dynamic Harness from other agent harnesses (CrewAI, LangGraph, AutoGen, OpenAI Agents SDK, Claude Code, MCP-based tools): the mechanically-enforced guarantees that survive model disobedience, separated from prompt-level advice shared with the field.
+- **INFO-001** [VISION](VISION.md) — Dynamic Harness is a recursive agent runtime that maximizes LLM output quality while minimizing cost — by enforcing disciplined task decomposition, st…
+- [Platform Evaluation: Porting the Harness Elsewhere](platform-evaluation/README.md) — Feasibility assessment for re-implementing Dynamic Harness' mechanically enforced guarantees as add-ons on top of an existing agent platform (OpenCode, Pi, DeepSeek Harness) instead of building tools and scaffolding from scratch, grounded in each platform's documented extension API as of 2026-09.
+<!-- pb:index:end -->

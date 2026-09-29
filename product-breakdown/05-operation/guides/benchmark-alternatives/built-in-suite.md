@@ -1,3 +1,12 @@
+---
+id: INFO-090
+type: info
+title: The Built-in Benchmark — What It Already Probes
+summary: The default suite ( — deterministic, failable, in-config, no Docker)
+date: 2026-09-23
+status: current
+---
+
 # The Built-in Benchmark — What It Already Probes
 
 The default `ALL_TASKS` suite (`src/dynamic_harness/benchmark/tasks.py` —

@@ -1,3 +1,12 @@
+---
+id: INFO-145
+type: info
+title: Self-improving context management
+summary: Should the agent be enabled to improve upon its own tools and context management — memory, summaries, compression, or similar — and how does that stay…
+date: 2026-09-28
+status: current
+---
+
 # Self-improving context management
 
 ## The question
@@ -10,7 +19,7 @@ with the commit structure that keeps each level of context small?
 
 | Tier | What it means here | Verdict |
 |---|---|---|
-| 1. New capabilities as procedural skills | A validated routine is persisted as a skill (`type: procedural`) | **Yes — already in [proposal.md](proposal.md) §3.** Additive, plain-text, reviewable; no invariant touched |
+| 1. New capabilities as procedural skills | A validated routine is persisted as a skill (`type: procedural`) | **Yes — already in `INFO-146` §3.** Additive, plain-text, reviewable; no invariant touched |
 | 2. Authoring its own context management | The agent writes its own summarizer / prune strategy / compress cadence / memory format, *used within its own loop* | **Yes — bounded by the contract, chosen by measurement** (below) |
 | 3. Altering runtime machinery | Editing config, policies, summarization thresholds, repository/commit semantics, safety knobs | **No — that is the decision-log's job.** An agent that owns its own safety/commit machinery stops being an actor in the harness and becomes the harness; unbounded self-modification is where the system stops being auditable |
 
@@ -20,7 +29,7 @@ management to the agent — `compress`, `prune`/`restore`, `usage` are deliberat
 today: the agent can *use* them, never *change* their behavior. Enabling
 improvement means letting the agent author its own routines and **compete them
 against the defaults on the same measured metrics** — the same delta-discipline
-this investigation applies everywhere ([proposal.md](proposal.md) §5).
+this investigation applies everywhere (`INFO-146` §5).
 
 ## The discipline: improve the *production* of small layers, never the *contract* that enforces smallness
 
@@ -55,7 +64,7 @@ These contracts stay runtime-owned no matter what the agent writes:
    summarizer/pruner is a `type: context-management` skill; it survives only if
    the benchmark context-efficiency score (solve task at ≤ turns / tokens /
    level-size) improves — the CodeMem/AgentFactory "survivors only" selection,
-   wired to the [proposal.md](proposal.md) §5 gate.
+   wired to the `INFO-146` §5 gate.
 4. **Pair smallness with verification.** Smallness-as-hiding is the real hazard
    (a worker's self-written summary can drift toward "looks done"). The existing
    pairing — immutable commits + parents verify-before-synthesize + `restore` /
@@ -70,8 +79,8 @@ observable in telemetry and gated by the benchmark-delta method.
 
 ## Related
 
-- [proposal.md](proposal.md) — hybrid design; §3 procedural skills, §5 decision gate
-- [worker-formation-option-load.md](worker-formation-option-load.md) — option
+- `INFO-146` — hybrid design; §3 procedural skills, §5 decision gate
+- `INFO-147` — option
   load from cheap capability; rails/tiering/economics
-- [benefits-and-costs.md](benefits-and-costs.md) — B7 self-evolution evidence
-- [INVESTIGATION.md](INVESTIGATION.md) — canonical record
+- `INFO-142` — B7 self-evolution evidence
+- `INFO-141` — canonical record

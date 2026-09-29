@@ -1,7 +1,16 @@
+---
+id: INFO-164
+type: info
+title: Facilitative Leader — Safety & Brokerage (TMS, Aristotle, Edmondson, Servant)
+summary: "Section 3.4–3.7 of the management-theory survey. Index: README.md. Previous: facilitative-leader-core.md"
+date: 2026-09-28
+status: current
+---
+
 # Facilitative Leader — Safety & Brokerage (TMS, Aristotle, Edmondson, Servant)
 
-Section 3.4–3.7 of the management-theory survey. Index: [README.md](README.md).
-Previous: [facilitative-leader-core.md](facilitative-leader-core.md).
+Section 3.4–3.7 of the management-theory survey. Index: `management-theory`.
+Previous: `INFO-163`.
 
 ## 3.4 Transactive memory systems (Wegner): "who knows what"
 **Source.** Daniel M. Wegner (1985; transactive memory and the "group mind" line).

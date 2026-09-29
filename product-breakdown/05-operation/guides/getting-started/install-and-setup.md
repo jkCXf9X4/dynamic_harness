@@ -1,3 +1,12 @@
+---
+id: INFO-111
+type: info
+title: Install & Environment
+summary: Python 3.10 or later
+date: 2026-09-23
+status: current
+---
+
 # Install & Environment
 
 ## Prerequisites

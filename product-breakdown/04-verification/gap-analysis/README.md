@@ -25,16 +25,18 @@ real-world run), or **P2** (quality-of-life / accuracy).
 
 ## Contents
 
-- [what-is-solid.md](what-is-solid.md) — the capabilities that demonstrably back the use-cases
-- [p0-mechanical-verification.md](p0-mechanical-verification.md) — G1 (open)
-- [p0-delegate-heal.md](p0-delegate-heal.md) — G2 (resolved)
-- [p0-progressive-disclosure.md](p0-progressive-disclosure.md) — G3 (resolved)
-- [p0-artifact-linking.md](p0-artifact-linking.md) — G4 (resolved)
-- [p1-sandbox-paths.md](p1-sandbox-paths.md) — G5 (resolved)
-- [p1-custom-agent-types.md](p1-custom-agent-types.md) — G6 (resolved)
-- [p1-layer2-heal.md](p1-layer2-heal.md) — G7 (partial)
-- [p1-budget-plumbing.md](p1-budget-plumbing.md) — G8 (open)
-- [p2-quality.md](p2-quality.md) — G9–G13
+<!-- pb:index:start -->
+- **INFO-079** [G4 — artifact_ids are free-form; written files not linked](p0-artifact-linking.md) — P0 (resolved): two disjoint stores meant a parent could not resolve a raw file path and the substantive file was never surfaced through read_artifact or provenance.
+- **INFO-080** [G2 — Delegation-boundary heal misses prose-completed children](p0-delegate-heal.md) — P0 (resolved): the delegate boundary healed only on failure, so a child that completed in prose with no deliverable was never recovered.
+- **INFO-081** [G1 — VERIFY is prompt discipline, not a mechanism](p0-mechanical-verification.md) — P0: the mandatory VERIFY step and plan acceptance criteria are never mechanically checked; blind synthesis is undetectable.
+- **INFO-082** [G3 — Progressive disclosure is data, not an interface](p0-progressive-disclosure.md) — P0 (resolved): read_artifact returned every view at once and raw_data was dead, so the lazy-load economics were unachievable in the tool loop.
+- **INFO-083** [G8 — Budgeting / cost-control is dead plumbing](p1-budget-plumbing.md) — P1 (open): BudgetRequest plumbing exists but no tool exposes it and no spend cap is enforced, so a run cannot be budgeted or stopped at a token ceiling.
+- **INFO-084** [G6 — Custom agent classes cannot be spawned by the LLM](p1-custom-agent-types.md) — P1 (resolved): the delegate tool accepted no agent_type, so a parent in a live tree could not choose a registered specialist class.
+- **INFO-085** [G7 — Self-heal Layer 2 is not a distinct mechanism](p1-layer2-heal.md) — P1 (partial): the parent boundary reuses the root's shared _recover, so the documented separate Layer 2 tier is a naming question, not a mechanism.
+- **INFO-086** [G5 — Sandbox rejects documented /tmp write patterns](p1-sandbox-paths.md) — P1 (resolved): examples told agents to write to /tmp, which the sandbox always rejects, while the default CLI sandbox was the user's whole CWD.
+- **INFO-087** [P2 Gaps — G9–G13](p2-quality.md) — Quality-of-life / accuracy gaps: runtime cost reporting, message_count accumulation, doc/tool-count drift, agent-side provenance, and per-process heal budgets.
+- **INFO-088** [Gap Analysis — What Is Actually Solid](what-is-solid.md) — The capabilities that demonstrably back the use-cases, before the gaps.
+<!-- pb:index:end -->
 
 ## Register
 

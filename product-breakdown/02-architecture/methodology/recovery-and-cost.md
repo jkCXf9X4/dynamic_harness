@@ -1,8 +1,17 @@
+---
+id: INFO-059
+type: info
+title: Failure Recovery & Cost
+summary: "See delegation-guidelines skill → \"The Kill → Inspect → Retry loop\" for the full salvage-and-retry protocol. Short version"
+date: 2026-09-23
+status: current
+---
+
 # Failure Recovery & Cost
 
 ## Failure Recovery
 
-See [delegation-guidelines skill](../../../3rd_party/agent_methods_and_tools/methods/delegation-guidelines/SKILL.md) →
+See delegation-guidelines skill (`3rd_party/agent_methods_and_tools/methods/delegation-guidelines/SKILL.md`) →
 "The Kill → Inspect → Retry loop" for the full salvage-and-retry protocol.
 Short version:
 

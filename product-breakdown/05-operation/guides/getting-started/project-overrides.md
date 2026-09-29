@@ -1,3 +1,12 @@
+---
+id: INFO-113
+type: info
+title: Project-Local Overrides
+summary: Copy the template into the project and edit only the keys you need — they override the common base
+date: 2026-09-23
+status: current
+---
+
 # Project-Local Overrides
 
 Copy the template into the project and edit only the keys you need — they
@@ -31,5 +40,5 @@ communicated both up-front and as the agent runs, without adding a per-turn
 observation message.
 
 Every setting — safety, self-heal, agent, and more — is documented in the
-[Configuration Reference](../../../../docs/api/config.md), with defaults and the
+Configuration Reference (`docs/api/config.md`), with defaults and the
 `0`/`null` "cap disabled" convention.

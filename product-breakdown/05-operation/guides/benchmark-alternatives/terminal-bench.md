@@ -1,3 +1,12 @@
+---
+id: INFO-095
+type: info
+title: Terminal-Bench
+summary: shipped as Docker images with a task dir (, a and gold solution to verify). The agent interacts through a shell; success = the task's own passes again…
+date: 2026-09-23
+status: current
+---
+
 # Terminal-Bench
 
 - **What**: benchmark of terminal-computing tasks ("use the terminal to do X"),

@@ -1,10 +1,14 @@
 ---
+id: INFO-086
+type: info
 title: "G5 — Sandbox rejects documented /tmp write patterns"
 category: meta
 summary: >
   P1 (resolved): examples told agents to write to /tmp, which the sandbox always
   rejects, while the default CLI sandbox was the user's whole CWD.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G5. Sandbox rejects the documented `/tmp/...` write patterns

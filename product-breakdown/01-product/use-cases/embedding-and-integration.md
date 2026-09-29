@@ -1,4 +1,6 @@
 ---
+id: INFO-022
+type: info
 title: "Use-Case — Embedding & Integration"
 category: use-case
 summary: >
@@ -9,6 +11,8 @@ related:
   - ../../05-operation/guides/programmatic-usage/README.md
   - ../../05-operation/guides/custom-agents/README.md
   - ../../05-operation/guides/extending-tools/README.md
+date: 2026-09-22
+status: current
 ---
 
 # Embedding & Integration

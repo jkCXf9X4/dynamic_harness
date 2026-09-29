@@ -1,3 +1,12 @@
+---
+id: INFO-120
+type: info
+title: Run the Built-in Scaler First
+summary: Run the Built-in Scaler First
+date: 2026-09-23
+status: current
+---
+
 # Run the Built-in Scaler First
 
 ```

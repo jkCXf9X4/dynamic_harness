@@ -1,3 +1,12 @@
+---
+id: INFO-100
+type: info
+title: System Prompt & Safety Limits
+summary: Pass a custom system prompt when constructing
+date: 2026-09-23
+status: current
+---
+
 # System Prompt & Safety Limits
 
 ## Custom System Prompt

@@ -1,3 +1,12 @@
+---
+id: INFO-046
+type: info
+title: Design Rationale
+summary: Self-healing recovers an agent run that did not produce its intended deliverable without restarting the whole task. The goal is to salvage healthy wor…
+date: 2026-09-23
+status: current
+---
+
 # Design Rationale
 
 Self-healing recovers an agent run that did not produce its intended deliverable
@@ -20,7 +29,7 @@ So self-healing must **not** be a blanket "always resume the same agent." It is 
   identical calls, max iterations) → **start a fresh worker** over the same task
   (freshness fixes rot; on-disk artifacts preserve progress).
 - If the agent hit its **wall-clock budget** (`safety.timeout_seconds`) → it is
-  **never self-healed** (see [layered-policy.md](layered-policy.md)); the parent
+  **never self-healed** (see `INFO-051`); the parent
   decides.
 - If the failure is structural (task impossible, bad spec) → **escalate**.
 

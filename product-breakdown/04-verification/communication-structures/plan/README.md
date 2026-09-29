@@ -20,18 +20,21 @@ in `core/comms/digest.py`; **P3 (collaboration bed)** in `benchmark/comms.py` +
 `tests/backend/test_comms_benchmark.py`. **P4 (the real-LLM run)** is started —
 see [FINDINGS.md](../FINDINGS.md) and [RESULTS.md](../RESULTS.md).
 
+Open investigation questions and the measurement battery are canonical in
+
+[../measurement-design.md](../measurement-design.md).
+
 ## Contents
 
-- [layer-shape.md](layer-shape.md) — why a layer, the package tree, and the topology→backend mapping
-- [message-model.md](message-model.md) — `CommsMessage`, the typed envelope
-- [backend-and-channel-policy.md](backend-and-channel-policy.md) — `CommsBackend` routing + `ChannelPolicy` authority
-- [tool-surface.md](tool-surface.md) — the one tool vocabulary and subscription semantics
-- [injection.md](injection.md) — pull vs push-digest modes and the renderer
-- [switching.md](switching.md) — config section and the environment-note seam
-- [comparison-bed.md](comparison-bed.md) — the benchmark bed
-- [phases.md](phases.md) — P0–P4 implementation phases
-- [risks.md](risks.md) — risks and decisions to confirm
-- [success-criteria.md](success-criteria.md) — implementation success criteria
-
-Open investigation questions and the measurement battery are canonical in
-[../measurement-design.md](../measurement-design.md).
+<!-- pb:index:start -->
+- **INFO-069** [Plan — CommsBackend and ChannelPolicy](backend-and-channel-policy.md) — `python class CommsBackend: base class; subclasses vary only the routing decision name: str channels_enabled: bool
+- **INFO-070** [Plan — Comparison Bed](comparison-bed.md) — Reuses the existing benchmark infrastructure; the cell is the parameter
+- **INFO-071** [Plan — Injection Modes and Renderer](injection.md) — Both modes use the same → text renderer; only who initiates differs. This is the experiment's second variable (push cost), so it is a switch
+- **INFO-072** [Plan — Why a Layer, the Package, and Topology Mapping](layer-shape.md) — The verified baseline ("What already exists") is one implicit router — reaches any agent by ID , gated only by target status. There is no parent-media…
+- **INFO-073** [Plan — CommsMessage Model](message-model.md) — Plan — CommsMessage Model
+- **INFO-074** [Plan — Implementation Phases](phases.md) — , + / / , , the four backends , and the config→backend factory . Watermarks are in-memory per-(agent, topic) on the backend (no separate tracker class…
+- **INFO-075** [Plan — Risks and Decisions to Confirm](risks.md) — cells 3/4 are pull-first. The field + environment note must prevent a model from waiting on a notification. If cells 3/4 want blocking too, add a para…
+- **INFO-076** [Plan — Implementation Success Criteria](success-criteria.md) — comms tools' schemas never change across cells. guards as every other cell; its measured cost is the verdict. under the default topology. shows two re…
+- **INFO-077** [Plan — Switching Seams](switching.md) — Seam A — construction. gains a section
+- **INFO-078** [Plan — Tool Surface](tool-surface.md) — Registered once in ; every tool is a thin wrapper over methods delegating to (the backend). No tool knows which backend is live
+<!-- pb:index:end -->

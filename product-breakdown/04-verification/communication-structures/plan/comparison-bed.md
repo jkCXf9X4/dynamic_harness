@@ -1,7 +1,12 @@
 ---
+id: INFO-070
+type: info
 title: "Plan — Comparison Bed"
 category: investigation / plan
 parent: "README.md"
+summary: Reuses the existing benchmark infrastructure; the cell is the parameter
+date: 2026-09-23
+status: current
 ---
 
 # The comparison bed
@@ -16,7 +21,7 @@ Reuses the existing benchmark infrastructure; the **cell is the parameter**:
 | Determinism | Tests' mock-agent pattern (`tests/conftest.py` `AgentTest`) | `_FixedLLM` stub in `test_comms_benchmark.py`: two replicates → identical metrics |
 | Workspace | `stage_workspace` (`benchmark/runner.py:33`) | Minimal collab workspace helper in the test (`resources/_collab` + `.optimize_benchmarks`) |
 
-Battery axes (canonical in [../measurement-design.md](../measurement-design.md)):
+Battery axes (canonical in `INFO-068`):
 completion, quality (mechanical verifier), cost, context health (peak/final
 footprint + push-multiplier), contention. Replicate count and variance budget
 agreed before calling a loser on noise.

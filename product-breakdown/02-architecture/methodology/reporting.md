@@ -1,3 +1,12 @@
+---
+id: INFO-060
+type: info
+title: Report Format
+summary: Report Format
+date: 2026-09-23
+status: current
+---
+
 # Report Format
 
 ```

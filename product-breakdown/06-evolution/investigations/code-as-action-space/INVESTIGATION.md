@@ -1,6 +1,9 @@
 ---
+id: INFO-141
+type: info
 title: "Investigation — Code-as-Action: the single invoke(code) tool"
 category: investigation
+date: 2026-09-28
 status: open
 summary: >
   Design-space investigation into the code-as-action paradigm: giving the agent a
@@ -12,6 +15,7 @@ summary: >
   and a skills layer that is procedural-memory-shaped. Recommendation: the model
   contract may collapse to (at most) one code tool, but the runtime keeps its
   rich, policy-enforcing surface behind an RPC stub — see proposal.md.
+pb_exempt: true
 ---
 
 # Direction: Code-as-Action — the single `invoke(code)` tool
@@ -116,24 +120,24 @@ boundary*, not a new category of execution.
 
 ## Design conclusions (canonical leaves)
 
-- [benefits-and-costs.md](benefits-and-costs.md) — the evidence mapping.
-- [proposal.md](proposal.md) — the hybrid design: `invoke` tool + `harness_tools`
+- `INFO-142` — the evidence mapping.
+- `INFO-146` — the hybrid design: `invoke` tool + `harness_tools`
   RPC stub (policy parity via `ToolRegistry` reuse) + procedural skill
   persistence + guard changes + benchmark measurement plan.
-- [communication-experiments.md](communication-experiments.md) — code-as-action
+- `INFO-144` — code-as-action
   as a probe bed for communication variants (IMP-001..004): the variant matrix,
   the three lab rules (trace-stamped, tool-comms control, settled decisions stay
   settled), and a concrete minimal experiment.
-- [worker-formation-option-load.md](worker-formation-option-load.md) — option
+- `INFO-147` — option
   load from cheap worker formation: expression vs intention, the
   frontier/modern asymmetry, the four failure modes, and the rails/tiering/
   economics mitigations.
-- [context-management-improvement.md](context-management-improvement.md) —
+- `INFO-145` —
   whether agents may improve their own tools/context management: three tiers
   (procedural skills yes · own context-management yes, bounded and measured ·
   runtime machinery no), the immutable contracts that keep commit-small
   structural, and the five encouragements.
-- [build-vs-extend.md](build-vs-extend.md) — identity evaluation grounded in
+- `INFO-143` — identity evaluation grounded in
   VISION.md:59 ("not a code generation platform"): the hybrid capability is a
   development; the single-tool end-state is a new project on the shared
   skeleton; sequence = probe here → judge by the product's own success criteria
@@ -148,14 +152,14 @@ boundary*, not a new category of execution.
 - [ ] Prototype `invoke` + RPC stub and run the benchmark comparison
       (codeact agent type vs default; batch-loop microbenchmark)
 - [ ] Run the communication variant sweep (per
-      [communication-experiments.md](communication-experiments.md))
+      `INFO-144`)
 - [ ] Measure option-load metrics per model class (per
-      [worker-formation-option-load.md](worker-formation-option-load.md))
+      `INFO-147`)
 - [ ] Specify level-budget enforcement + context-efficiency score (per
-      [context-management-improvement.md](context-management-improvement.md))
+      `INFO-145`)
 - [ ] Record the identity ruling: hybrid = development; single-tool end-state =
       new project on shared skeleton (per
-      [build-vs-extend.md](build-vs-extend.md)); VISION:59 stays governing unless
+      `INFO-143`); VISION:59 stays governing unless
       intent shifts via decision-log record
 - [ ] If signal → file an IMP with a task contract (roadmap register)
 - [ ] Extend near-identical detection to Python `invoke` families

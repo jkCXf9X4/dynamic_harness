@@ -1,3 +1,12 @@
+---
+id: INFO-133
+type: info
+title: How to Run
+summary: Clean the benchmark state, then run the optimization
+date: 2026-09-23
+status: current
+---
+
 # How to Run
 
 Clean the benchmark state, then run the optimization:

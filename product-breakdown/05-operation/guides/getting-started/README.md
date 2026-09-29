@@ -16,17 +16,22 @@ related:
 Quick start for running Dynamic Harness end to end. Read in order; each leaf is
 one step.
 
+Next: [agent methodology](../../../02-architecture/methodology/README.md),
+
+[programmatic usage](../programmatic-usage/README.md),
+
+[custom agents](../custom-agents/README.md),
+
+[custom tools](../extending-tools/README.md).
+
 ## Contents
 
-- [install-and-setup.md](install-and-setup.md) — prerequisites, install, API key.
-- [configuration.md](configuration.md) — layered `harness.json` and the common base.
-- [project-overrides.md](project-overrides.md) — per-project overrides and `max_agent_tokens`.
-- [first-run.md](first-run.md) — interactive terminal, single-shot, no-LLM mode.
-- [output.md](output.md) — agent reports, persisted overview, task tree.
-- [terminal-commands.md](terminal-commands.md) — slash commands.
-- [troubleshooting.md](troubleshooting.md) — common issues.
-
-Next: [agent methodology](../../../02-architecture/methodology/README.md),
-[programmatic usage](../programmatic-usage/README.md),
-[custom agents](../custom-agents/README.md),
-[custom tools](../extending-tools/README.md).
+<!-- pb:index:start -->
+- **INFO-109** [Configuration](configuration.md) — Settings (model, base URL, provider blacklist, safety limits) live in a . Config is layered so one common base can be shared across projects and overr…
+- **INFO-110** [Your First Task](first-run.md) — Your First Task
+- **INFO-111** [Install & Environment](install-and-setup.md) — Python 3.10 or later
+- **INFO-112** [Understanding the Output](output.md) — When an agent completes, the CLI shows a compact outcome
+- **INFO-113** [Project-Local Overrides](project-overrides.md) — Copy the template into the project and edit only the keys you need — they override the common base
+- **INFO-114** [Terminal Commands](terminal-commands.md) — Slash commands available in the interactive terminal
+- **INFO-115** [Common Issues](troubleshooting.md) — Ensure or is set in your shell config (e.g. ), or pass on the command line
+<!-- pb:index:end -->

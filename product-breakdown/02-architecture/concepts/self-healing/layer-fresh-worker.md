@@ -1,3 +1,12 @@
+---
+id: INFO-048
+type: info
+title: Layer 3 — Fresh Worker
+summary: "Trigger: context rot — fired, reached, wall-clock timeout, or repeated Layer-1 misses. Resuming here would replay the poisoned context. Instead, re-de…"
+date: 2026-09-23
+status: current
+---
+
 # Layer 3 — Fresh Worker
 
 Trigger: **context rot** — `repeated_call_limit` fired, `max_iterations`

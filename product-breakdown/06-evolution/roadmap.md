@@ -1,3 +1,12 @@
+---
+id: INFO-196
+type: info
+title: Roadmap — dynamic_harness
+summary: IMP-style register of open work. Created 2026-09-21 (fills review GAP-4 — the repo previously had no roadmap; the suggestions file pointed at , a path…
+date: 2026-09-22
+status: current
+---
+
 # Roadmap — dynamic_harness
 
 IMP-style register of open work. Created 2026-09-21 (fills review GAP-4 — the repo previously had no roadmap; the suggestions file pointed at `docs/roadmap/LIVE_CAPITAL_READINESS.md`, a path that **does not exist** — that stale pointer is replaced by this file). Status values per IMP lifecycle: `Proposed | Selected | Completed | Superseded`. Source of items: the multi-agent INVESTIGATION next-steps, the unresolved backlog items (`06-evolution/backlog.md`, moved from `breakdown/development/__undeveloped_sugestions__.md`), and the open gaps in `04-verification/gap-analysis/README.md`. Selected IMPs are filed at `06-evolution/selected/IMP-NNN.md` with a task contract; this register is the index.

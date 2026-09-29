@@ -1,10 +1,14 @@
 ---
+id: INFO-083
+type: info
 title: "G8 — Budgeting / cost-control is dead plumbing"
 category: meta
 summary: >
   P1 (open): BudgetRequest plumbing exists but no tool exposes it and no spend
   cap is enforced, so a run cannot be budgeted or stopped at a token ceiling.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # G8. Budgeting / cost-control is dead plumbing

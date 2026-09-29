@@ -1,4 +1,6 @@
 ---
+id: INFO-182
+type: info
 title: "Plugin Direction — Context: How the References Build and Use It"
 category: investigation
 parent: "README.md"
@@ -8,11 +10,14 @@ summary: >
   and DeepSeek Harness both make context a contribution space, not a shared
   object; the harness's reactive-policy seam is the same shape — the gap is
   per-agent registration scoping.
+date: 2026-09-28
+status: current
+pb_exempt: true
 ---
 
 # Context: how OpenCode V2 and DeepSeek Harness build and work with it
 
-Companion to [design-comparison.md](design-comparison.md), focused on one axis:
+Companion to `INFO-184`, focused on one axis:
 **how each reference builds context and lets plugins work with it** — because
 context is the shared, model-visible state of an agent runtime, so a
 plugin-centric architecture is decided by who contributes to context, in what
@@ -155,4 +160,4 @@ context, policies contribute through one narrow channel, the host applies. The
 single material gap is **scope**: dsh and OpenCode bind contributions to an
 agent/session, the harness binds to the runtime. That lands on the existing
 seam as part of the registration-contract work (see
-[next-steps.md](next-steps.md)).
+`INFO-189`).

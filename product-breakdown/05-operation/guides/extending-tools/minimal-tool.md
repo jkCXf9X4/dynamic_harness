@@ -1,3 +1,12 @@
+---
+id: INFO-106
+type: info
+title: Minimal Custom Tool
+summary: `python from dynamic_harness.core.tools import ToolDef, ToolRegistry
+date: 2026-09-23
+status: current
+---
+
 # Minimal Custom Tool
 
 ```python

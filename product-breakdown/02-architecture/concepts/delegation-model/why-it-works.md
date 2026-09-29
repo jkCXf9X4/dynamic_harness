@@ -1,3 +1,12 @@
+---
+id: INFO-043
+type: info
+title: Why Recursive Decomposition Works
+summary: A delegation costs 3K tokens overhead. Doing it yourself for 3+ turns at 2K+ tokens/turn is both more expensive and lower quality
+date: 2026-09-23
+status: current
+---
+
 # Why Recursive Decomposition Works
 
 ## Fresh Context Economics

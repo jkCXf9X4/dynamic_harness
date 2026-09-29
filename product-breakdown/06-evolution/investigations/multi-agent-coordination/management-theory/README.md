@@ -1,3 +1,8 @@
+---
+title: Management Theory — Communication & Facilitation
+summary: The theory survey behind the multi-agent coordination design (parent introduces siblings, children collaborate directly). Every theory is followed by…
+---
+
 # Management Theory — Communication & Facilitation
 
 The theory survey behind the multi-agent coordination design (parent introduces
@@ -13,11 +18,14 @@ destroys throughput, context, and motivation. This is the same conclusion that
 rejected option A and validates the "introduce, don't mediate" model.
 
 ## Contents
-- [information-and-transaction-costs.md](information-and-transaction-costs.md) — Shannon, Coase/Williamson, Simon (§1)
-- [leadership-pathologies.md](leadership-pathologies.md) — micromanagement, Conway inverse (§2)
-- [facilitative-leader-core.md](facilitative-leader-core.md) — Netflix, Hackman, McChrystal (§3.1–3.3)
-- [facilitative-leader-safety.md](facilitative-leader-safety.md) — TMS, Project Aristotle, Edmondson, servant/network (§3.4–3.7)
-- [mechanisms-and-rituals.md](mechanisms-and-rituals.md) — boundary spanning, dissent, rituals, pairing (§4)
-- [synthesis.md](synthesis.md) — one line per theory: key idea → design principle (§5)
-- [playbook.md](playbook.md) — the four moves + design implications (§6–7)
-- [references.md](references.md) — sources + term mapping (§8 + appendix)
+
+<!-- pb:index:start -->
+- **INFO-163** [Facilitative Leader — Core Theories (Netflix, Hackman, McChrystal)](facilitative-leader-core.md) — Section 3.1–3.3 of the management-theory survey. Index: README.md. Continued: facilitative-leader-safety.md
+- **INFO-164** [Facilitative Leader — Safety & Brokerage (TMS, Aristotle, Edmondson, Servant)](facilitative-leader-safety.md) — Section 3.4–3.7 of the management-theory survey. Index: README.md. Previous: facilitative-leader-core.md
+- **INFO-165** [Information Theory, Transaction Costs, Bounded Rationality](information-and-transaction-costs.md) — Section 1 of the management-theory survey. Index: README.md
+- **INFO-166** [Leadership Pathologies to Avoid](leadership-pathologies.md) — Section 2 of the management-theory survey. Index: README.md
+- **INFO-167** [Mechanisms and Rituals for Facilitating Communication](mechanisms-and-rituals.md) — Section 4 of the management-theory survey. Index: README.md
+- **INFO-168** [Playbook: The "Introduce, Don't Mediate" Parent](playbook.md) — Sections 6–7 of the management-theory survey. Index: README.md
+- **INFO-169** [References and Term Mapping](references.md) — Section 8 + appendix of the management-theory survey. Index: README.md
+- **INFO-170** [Synthesis: What the Theory Says](synthesis.md) — Section 5 of the management-theory survey. Index: README.md. One line per theory: key idea → leadership act → agent design principle
+<!-- pb:index:end -->

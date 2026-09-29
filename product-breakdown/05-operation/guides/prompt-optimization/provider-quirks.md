@@ -1,3 +1,12 @@
+---
+id: INFO-132
+type: info
+title: Rate Limits & Provider Quirks
+summary: mid-run with . Use a paid/served model for full runs. calls. If the orchestrator returns empty output instead of tool calls, a guessed provider is ref…
+date: 2026-09-23
+status: current
+---
+
 # Rate Limits & Provider Quirks
 
 - Free-tier models (e.g. `:free` suffixes) hit per-minute rate limits and abort

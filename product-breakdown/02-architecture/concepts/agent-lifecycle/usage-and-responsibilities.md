@@ -1,3 +1,12 @@
+---
+id: INFO-033
+type: info
+title: Usage & Responsibilities
+summary: The Runtime records per-agent consumption after each LLM response
+date: 2026-09-23
+status: current
+---
+
 # Usage & Responsibilities
 
 ## Token Usage Tracking

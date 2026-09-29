@@ -1,3 +1,12 @@
+---
+id: INFO-118
+type: info
+title: Repeatable Protocol (When You Fix Something)
+summary: Any performance claim needs a before/after on the same inputs; otherwise the scaler's superlinear shape may be noise. Keep the measurements attached t…
+date: 2026-09-23
+status: current
+---
+
 # Repeatable Protocol (When You Fix Something)
 
 Any performance claim needs a before/after on the same inputs; otherwise the

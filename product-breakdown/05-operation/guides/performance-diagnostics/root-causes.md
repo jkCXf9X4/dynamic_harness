@@ -1,3 +1,12 @@
+---
+id: INFO-119
+type: info
+title: Two Axes, Two Root Causes
+summary: "(default 50) is often read as \"only the last 50 turns reach the model\". It does not. It only limits which turns are listed in the Context Observation…"
+date: 2026-09-23
+status: current
+---
+
 # Two Axes, Two Root Causes
 
 ## H1 — The prompt sent to the LLM is NOT bounded (conversation-length axis)

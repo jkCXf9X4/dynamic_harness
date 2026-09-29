@@ -1,6 +1,15 @@
+---
+id: INFO-157
+type: info
+title: Collaboration Setting — Object Model
+summary: "Section 2 of the collaboration-setting spec. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Collaboration Setting — Object Model
 
-Section 2 of the collaboration-setting spec. Index: [README.md](README.md).
+Section 2 of the collaboration-setting spec. Index: `collaboration-setting`.
 
 All models follow project conventions: `from __future__ import annotations`,
 Pydantic, 12-char uuid4 hex ids (`uuid4().hex[:12]`).

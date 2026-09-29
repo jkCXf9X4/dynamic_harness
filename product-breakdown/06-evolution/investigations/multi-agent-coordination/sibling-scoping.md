@@ -1,7 +1,16 @@
+---
+id: INFO-177
+type: info
+title: "Sibling Scoping: Mitigations and Residual Concerns"
+summary: "How common-parent scoping mitigates each of option B's cons, and what it does not fix. Decisions: AD-002"
+date: 2026-09-28
+status: current
+---
+
 # Sibling Scoping: Mitigations and Residual Concerns
 
 How common-parent scoping mitigates each of option B's cons, and what it does
-not fix. Decisions: [AD-002](../decisions/AD-002.md).
+not fix. Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`).
 
 ## How common-parent scoping mitigates each of B's cons
 - **Violates context encapsulation (cross-branch contamination)** — contamination

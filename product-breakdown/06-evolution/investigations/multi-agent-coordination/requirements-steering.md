@@ -1,6 +1,15 @@
+---
+id: INFO-174
+type: info
+title: Requirements — Steering, Safety, Commons (REQ-8..15)
+summary: Continued from requirements-group.md. Theory behind each requirement in brackets
+date: 2026-09-28
+status: current
+---
+
 # Requirements — Steering, Safety, Commons (REQ-8..15)
 
-Continued from [requirements-group.md](requirements-group.md). Theory behind each
+Continued from `INFO-173`. Theory behind each
 requirement in brackets.
 
 ## Steering and safety (parent = broker, not content reader)

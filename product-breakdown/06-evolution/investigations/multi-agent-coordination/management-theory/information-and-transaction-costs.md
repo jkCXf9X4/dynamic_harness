@@ -1,6 +1,15 @@
+---
+id: INFO-165
+type: info
+title: Information Theory, Transaction Costs, Bounded Rationality
+summary: "Section 1 of the management-theory survey. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Information Theory, Transaction Costs, Bounded Rationality
 
-Section 1 of the management-theory survey. Index: [README.md](README.md).
+Section 1 of the management-theory survey. Index: `management-theory`.
 
 ## 1.1 Information theory: noise in the channel
 Claude Shannon's information theory (1948) defines communication as signal

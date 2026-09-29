@@ -1,6 +1,9 @@
 ---
+id: INFO-066
+type: info
 title: "Analysis — Channel Context Design (pollution, discovery, creation)"
 category: investigation / analysis
+date: 2026-09-23
 status: open
 summary: >
   Containing shared-channel pollution with a per-agent watermark log (not a
@@ -12,8 +15,8 @@ parent: "INVESTIGATION.md"
 
 # Channel context design
 
-Companion to [context-injection-design.md](context-injection-design.md); the
-implementation is the plan ([PLAN](plan/README.md)).
+Companion to `INFO-067`; the
+implementation is the plan (PLAN (`plan`)).
 
 ## One shared channel: contain the pollution
 

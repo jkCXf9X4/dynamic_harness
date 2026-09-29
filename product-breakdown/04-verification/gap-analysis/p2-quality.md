@@ -1,4 +1,6 @@
 ---
+id: INFO-087
+type: info
 title: "P2 Gaps — G9–G13"
 category: meta
 summary: >
@@ -6,6 +8,8 @@ summary: >
   accumulation, doc/tool-count drift, agent-side provenance, and per-process heal
   budgets.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # P2 — Quality-of-life / accuracy

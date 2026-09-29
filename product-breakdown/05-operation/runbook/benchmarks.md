@@ -1,3 +1,12 @@
+---
+id: INFO-136
+type: info
+title: Benchmark Runners
+summary: Benchmark Runners
+date: 2026-09-23
+status: current
+---
+
 # Benchmark Runners
 
 ## Prompt Benchmark CLI (metric-driven)
@@ -10,7 +19,7 @@ python -m dynamic_harness.benchmark.run --report profile
 
 Compares prompts against all tasks from the single canonical task source `src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`), ranked by a weighted rubric; metrics written to `.optimize_benchmarks/metrics.json` / `.md`. Variants are read from a JSON file mapping `prompt_id -> system_prompt text` (or null = seed). Needs `OPENROUTER_API_KEY` + `harness.json` pointing at a tool-calling model (default: deepseek flash with a `provider_ignore` list).
 
-Related optimization runners (see [guides/prompt-optimization](../guides/prompt-optimization/README.md)):
+Related optimization runners (see `prompt-optimization`):
 
 ```bash
 python scripts/run_optimize.py      # two-round A/B prompt optimization
@@ -35,4 +44,4 @@ python -m dynamic_harness.benchmark.profile_scaling          # full grid
 python -m dynamic_harness.benchmark.profile_scaling --quick  # fast sanity pass
 ```
 
-Mock-LLM scaler isolating four axes (checkpoint cost, bytes/token sent per turn, CLI snapshot cost, end-to-end). See [guides/performance-diagnostics](../guides/performance-diagnostics/README.md).
+Mock-LLM scaler isolating four axes (checkpoint cost, bytes/token sent per turn, CLI snapshot cost, end-to-end). See `performance-diagnostics`.

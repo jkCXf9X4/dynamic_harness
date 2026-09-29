@@ -1,10 +1,14 @@
 ---
+id: INFO-189
+type: info
 title: "Plugin Direction — Investigation Next Steps"
 category: investigation
 parent: "README.md"
 summary: >
   The completed checklist that carried the direction from question to
   implemented pilot seam.
+date: 2026-09-28
+status: current
 ---
 
 # Investigation next steps
@@ -13,7 +17,7 @@ summary: >
       interfaces); loader/late-injection explicitly out of scope
 - [x] Record decisions Q1–Q5 (purpose / minimal manifest / crash loudly /
       default safety / code-only config)
-- [x] Resolve the open questions into rulings ([rulings.md](rulings.md)): ToolContext
+- [x] Resolve the open questions into rulings (`INFO-191`): ToolContext
       single+narrowed, policy application split (registry-delegated shared /
       tool-embedded domain), no stdlib descriptor conversion, no discovery in
       tests, ~7 common-interface target set
@@ -23,8 +27,8 @@ summary: >
       implemented as `Runtime.installed_components()` + `EventBus.handler_counts()`
       (single introspection surface, no registry-internal reach)
 - [x] List every common interface + its consumers + its breadth — see
-      [audit-tool-context.md](audit-tool-context.md), [audit-policies.md](audit-policies.md),
-      [audit-other-seams.md](audit-other-seams.md): ~7 contracts hold; `ToolContext`
+      `INFO-181`, `INFO-180`,
+      `INFO-179`: ~7 contracts hold; `ToolContext`
       maps member-by-member; the single-consumer authority cluster is the only
       latent split point; `message_count` is dead surface
 - [x] Audit the observed couplings: `ToolContext` façade surface, `compress`
@@ -50,11 +54,11 @@ summary: >
 - [x] Compare with the two reference plugin-centric designs — OpenCode V2
       (domain transforms + runtime hooks) and DeepSeek Harness
       (everything-is-a-plugin on Cordis); see
-      [design-comparison.md](design-comparison.md). Verdict: seam-first /
+      `INFO-184`. Verdict: seam-first /
       no-loader is validated; both references are the same contract economy
       plus platform machinery.
 - [x] Compare how the references build and work with **context** to enable
-      plugin-centricity — see [context-architecture.md](context-architecture.md).
+      plugin-centricity — see `INFO-182`.
       Verdict: both make context a contribution space (ordered, scoped,
       disposable), matching the harness's reactive-policy shape; the single
       material gap is per-agent registration scoping.

@@ -1,4 +1,6 @@
 ---
+id: INFO-028
+type: info
 title: "Use-Case — Research & Synthesis"
 category: use-case
 summary: >
@@ -12,6 +14,8 @@ related:
   - ../../02-architecture/concepts/artifact-system/README.md
   - ../../../docs/api/artifacts.md
   - ../../../3rd_party/agent_methods_and_tools/methods/tool-motivations/SKILL.md
+date: 2026-09-22
+status: current
 ---
 
 # Research & Synthesis
@@ -68,7 +72,7 @@ fetch proxy.
   external feature/API docs; comparison with a checkable source.
 - **Strain**: a "fetch 50 listings" job bloats even a fresh sub-agent — split
   per page/source and return extracts only; a large harvest is a pipeline job
-  (see [pipelines-and-jobs.md](pipelines-and-jobs.md)) needing `prune`/`restore`
+  (see `INFO-026`) needing `prune`/`restore`
   to avoid rot.
 - **Not a fit**: unstructured "give me opinions" with no citation ground-truth —
   the outcome is unverifiable prose.

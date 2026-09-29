@@ -1,3 +1,12 @@
+---
+id: INFO-039
+type: info
+title: When to Delegate
+summary: Before every tool call, an agent decides
+date: 2026-09-23
+status: current
+---
+
 # When to Delegate
 
 ## The Decision Tree

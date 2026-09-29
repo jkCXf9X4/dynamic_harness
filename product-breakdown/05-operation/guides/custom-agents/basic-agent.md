@@ -1,3 +1,12 @@
+---
+id: INFO-096
+type: info
+title: Basic Custom Agent
+summary: `python from dynamic_harness.core.agent import Agent
+date: 2026-09-23
+status: current
+---
+
 # Basic Custom Agent
 
 ```python

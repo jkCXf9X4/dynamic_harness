@@ -20,10 +20,12 @@ automated pipelines.
 
 ## Contents
 
-- [runtime-setup.md](runtime-setup.md) — minimal example, Runtime arguments, session reset.
-- [delegation-patterns.md](delegation-patterns.md) — sequential, parallel, task-graph inspection.
-- [events-and-usage.md](events-and-usage.md) — lifecycle handlers and token tracking.
-- [artifacts-and-repository.md](artifacts-and-repository.md) — reading artifacts and commits.
-- [custom-agent-classes.md](custom-agent-classes.md) — registering named agent types.
-- [integration-example.md](integration-example.md) — complete end-to-end example.
-- [error-handling.md](error-handling.md) — no-LLM mode and failure/escalation checks.
+<!-- pb:index:start -->
+- **INFO-121** [Artifacts & Repository](artifacts-and-repository.md) — `python
+- **INFO-122** [Custom Agent Classes](custom-agent-classes.md) — `python from dynamic_harness.core.agent import Agent
+- **INFO-123** [Delegation Patterns](delegation-patterns.md) — `python
+- **INFO-124** [No-LLM Mode & Error Handling](error-handling.md) — If you skip , agents enter no-LLM mode
+- **INFO-125** [Events & Usage](events-and-usage.md) — Register callbacks for agent lifecycle events
+- **INFO-126** [Complete Integration Example](integration-example.md) — `python import asyncio from pathlib import Path from dynamic_harness.core.runtime import Runtime from dynamic_harness.core.task import Task from dynam…
+- **INFO-127** [Runtime Setup](runtime-setup.md) — `python import asyncio from pathlib import Path from dynamic_harness.core.runtime import Runtime from dynamic_harness.core.task import Task from dynam…
+<!-- pb:index:end -->

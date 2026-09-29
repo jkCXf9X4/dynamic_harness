@@ -1,7 +1,12 @@
 ---
+id: INFO-069
+type: info
 title: "Plan — CommsBackend and ChannelPolicy"
 category: investigation / plan
 parent: "README.md"
+summary: `python class CommsBackend: base class; subclasses vary only the routing decision name: str channels_enabled: bool
+date: 2026-09-23
+status: current
 ---
 
 # CommsBackend — the swappable router

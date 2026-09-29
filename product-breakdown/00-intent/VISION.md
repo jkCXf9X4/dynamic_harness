@@ -1,3 +1,12 @@
+---
+id: INFO-001
+type: info
+title: VISION
+summary: Dynamic Harness is a recursive agent runtime that maximizes LLM output quality while minimizing cost — by enforcing disciplined task decomposition, st…
+date: 2026-09-22
+status: current
+---
+
 # VISION
 
 ## Vision

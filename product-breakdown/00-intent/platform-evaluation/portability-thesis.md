@@ -1,4 +1,6 @@
 ---
+id: INFO-011
+type: info
 title: "Portability Thesis"
 category: meta
 summary: >
@@ -6,6 +8,8 @@ summary: >
   host's tool-execution and spawn layer as a thin per-host adapter over a
   language-neutral core.
 parent: "README.md"
+date: 2026-09-23
+status: current
 ---
 
 # Portability Thesis

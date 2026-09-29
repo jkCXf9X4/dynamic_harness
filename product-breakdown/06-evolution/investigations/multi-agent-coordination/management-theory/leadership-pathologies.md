@@ -1,6 +1,15 @@
+---
+id: INFO-166
+type: info
+title: Leadership Pathologies to Avoid
+summary: "Section 2 of the management-theory survey. Index: README.md"
+date: 2026-09-28
+status: current
+---
+
 # Leadership Pathologies to Avoid
 
-Section 2 of the management-theory survey. Index: [README.md](README.md).
+Section 2 of the management-theory survey. Index: `management-theory`.
 
 ## 2.1 Micromanagement
 Micromanagement = controlling the *how* of work rather than aligning on the

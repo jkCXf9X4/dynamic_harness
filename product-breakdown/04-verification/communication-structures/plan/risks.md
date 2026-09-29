@@ -1,7 +1,12 @@
 ---
+id: INFO-075
+type: info
 title: "Plan — Risks and Decisions to Confirm"
 category: investigation / plan
 parent: "README.md"
+summary: cells 3/4 are pull-first. The field + environment note must prevent a model from waiting on a notification. If cells 3/4 want blocking too, add a para…
+date: 2026-09-23
+status: current
 ---
 
 # Risks and decisions to confirm
@@ -24,4 +29,4 @@ parent: "README.md"
 6. **Subscription must stay a signal, not a gate.** If agents game open pull
    reads, the fallback is requiring a subscription for `channel_read` — a
    deliberate second experiment, not a silent tweak; keep pull open for the first
-   pass (see [tool-surface.md](tool-surface.md)).
+   pass (see `INFO-078`).

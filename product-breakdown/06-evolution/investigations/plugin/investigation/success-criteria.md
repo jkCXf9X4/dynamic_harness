@@ -1,15 +1,19 @@
 ---
+id: INFO-192
+type: info
 title: "Plugin Direction — Success Criteria"
 category: investigation
 parent: "README.md"
 summary: >
   Six measurable criteria for the interface-economy direction.
+date: 2026-09-28
+status: current
 ---
 
 # Success criteria (measurement)
 
 1. **The count holds ≈7.** The common-interface set in
-   [interface-set.md](interface-set.md) does not grow while couplings are
+   `INFO-187` does not grow while couplings are
    removed — refactors narrow or trade shapes, never add contracts.
 2. **No outside private-state reach.** No module outside `Agent` touches
    `agent._*` (audit `rg "\._agent\b"` in `core/tools/` + `core/tool_context.py`

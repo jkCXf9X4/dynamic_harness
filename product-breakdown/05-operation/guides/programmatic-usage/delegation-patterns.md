@@ -1,3 +1,12 @@
+---
+id: INFO-123
+type: info
+title: Delegation Patterns
+summary: `python
+date: 2026-09-23
+status: current
+---
+
 # Delegation Patterns
 
 ## Sequential Tasks

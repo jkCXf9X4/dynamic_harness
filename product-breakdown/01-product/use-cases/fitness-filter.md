@@ -1,3 +1,12 @@
+---
+id: INFO-024
+type: info
+title: Use-Case Fitness Filter
+summary: Not everything is a good Dynamic Harness use-case. The framework is not a chatbot, not a shared-memory assistant, and not a code-generation platform.…
+date: 2026-09-23
+status: current
+---
+
 # Use-Case Fitness Filter
 
 Not everything is a good Dynamic Harness use-case. The framework is **not** a

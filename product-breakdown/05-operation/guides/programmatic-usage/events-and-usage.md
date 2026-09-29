@@ -1,3 +1,12 @@
+---
+id: INFO-125
+type: info
+title: Events & Usage
+summary: Register callbacks for agent lifecycle events
+date: 2026-09-23
+status: current
+---
+
 # Events & Usage
 
 ## Event Handlers

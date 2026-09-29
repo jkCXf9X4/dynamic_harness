@@ -1,7 +1,12 @@
 ---
+id: INFO-072
+type: info
 title: "Plan — Why a Layer, the Package, and Topology Mapping"
 category: investigation / plan
 parent: "README.md"
+summary: The verified baseline ("What already exists") is one implicit router — reaches any agent by ID , gated only by target status. There is no parent-media…
+date: 2026-09-23
+status: current
 ---
 
 # Why a layer, the package, and topology mapping

@@ -1,7 +1,16 @@
+---
+id: INFO-171
+type: info
+title: Open Questions (before implementation)
+summary: "The questions the investigation must resolve before the multi-agent coordination design is implemented. Record: INVESTIGATION.md"
+date: 2026-09-28
+status: current
+---
+
 # Open Questions (before implementation)
 
 The questions the investigation must resolve before the multi-agent coordination
-design is implemented. Record: [INVESTIGATION.md](INVESTIGATION.md).
+design is implemented. Record: `INFO-148`.
 
 1. **Scope of "solve together."** True peer/sibling communication does NOT exist.
    The actor model isolates agents (know only parent + children + task). Is the

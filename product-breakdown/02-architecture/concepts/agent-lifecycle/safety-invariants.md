@@ -1,3 +1,12 @@
+---
+id: INFO-030
+type: info
+title: Safety Invariants
+summary: Three independent timeouts apply to different resource types
+date: 2026-09-23
+status: current
+---
+
 # Safety Invariants
 
 | Mechanism | Default | Effect |

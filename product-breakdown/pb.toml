@@ -1,0 +1,22 @@
+# product-breakdown — this repo's overrides of the standard defaults.
+# Standard: 3rd_party/agent_methods_and_tools/methods/product-breakdown/
+# The tool is at .agents/skills/product-breakdown/scripts/pb (installed skill).
+
+[nodes]
+# Legacy nodes kept out of the current-standard checks:
+#  - the hand-maintained registers (decision log / traceability map) predate
+#    the generated registers and are migrated as a follow-up;
+#  - 02-architecture/decisions/ is the older per-layer ADR layout, migrated to
+#    the flat `decisions/` stream as a follow-up (the ADRs carry minimal
+#    front-matter so their ids still resolve from prose).
+exempt = ["design-choice-log.md", "decision-log.md", "traceability-map.md", "02-architecture/decisions"]
+
+[ids]
+# IMP candidates keep their Evolution handles (IMP-NNN) as stable ids.
+prefixes = { info = "INFO", decision = "DEC", eval = "EVAL", imp = "IMP" }
+# Leaf/status vocabulary incl. the repo's investigation-doc statuses.
+leaf_statuses = ["current", "draft", "superseded", "proposed", "accepted", "open"]
+# IMP-007…IMP-015 are Proposed in 06-evolution/selected/README.md but not yet
+# filed (6 of them are cited from roadmap/watchdog); reserve the handles so
+# those forward references resolve. They register with no path.
+reserved_ids = ["IMP-007", "IMP-008", "IMP-009", "IMP-010", "IMP-011", "IMP-012", "IMP-013", "IMP-014", "IMP-015"]

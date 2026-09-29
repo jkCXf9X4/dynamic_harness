@@ -1,3 +1,12 @@
+---
+id: INFO-116
+type: info
+title: Live Diagnosis & Deployment Axes
+summary: "children) and watch total wall time go superlinear. Keep LLM the same. field (agent.py:702) should be constant if context is truly bounded; if it clim…"
+date: 2026-09-23
+status: current
+---
+
 # Live Diagnosis & Deployment Axes
 
 ## Checklist for a Live (LLM) Run — Attribution Before Guesswork
@@ -28,7 +37,7 @@
   flattens).
 - **CLI / REPL, many short-lived agents** → H2 first (build the tree once per
   event, stop re-sorting all commits per node — sort once, or index by agent id).
-  **Done** — see [root-causes.md](root-causes.md); re-run the scaler to confirm
+  **Done** — see `INFO-119`; re-run the scaler to confirm
   it stays flat.
 
 ## Interpret the Scaler Honestly
