@@ -373,12 +373,57 @@ class AgentConfig(BaseModel):
     )
 
 
+class InvokeConfig(BaseModel):
+    """Knobs for the code-as-action ``invoke`` tool (v1 probe surface).
+
+    v1 deliberately holds *trust parity with ``bash``*: the code runs as a
+    subprocess with host access per the harness's existing deliberate decision
+    (``core/tools/process.py``). Hard sandboxing is a later, config-gated
+    hardening (see the code-as-action investigation, proposal §1/§4). Every
+    action the code takes through the ``harness_tools`` RPC stub routes through
+    ``ToolRegistry.execute()``, so the existing policies (sandbox roots, spawn
+    caps, comms routing, budget lines) apply unchanged.
+    """
+
+    timeout_ms: int = Field(
+        default=60000, ge=1000,
+        description="Default subprocess timeout for an ``invoke`` call, in "
+                    "milliseconds (shorter than bash's 120 s by design — a code "
+                    "snippet is a smaller unit of work). The tool's explicit "
+                    "``timeout`` parameter overrides it per call.",
+    )
+    stdout_cap: int | None = Field(
+        default=None, ge=1,
+        description="Maximum stdout bytes returned to the model for one invoke "
+                    "call. None or 0 = uncapped (parity with bash: FULL output "
+                    "is captured and paged via result_read). When set and "
+                    "exceeded, the returned text is sliced to the cap with a "
+                    "truncation note; the bytes beyond the cap are NOT "
+                    "retained, so paging only covers the capped window.",
+    )
+    stderr_cap: int | None = Field(
+        default=None, ge=1,
+        description="Same as ``stdout_cap`` but for stderr. None/0 = uncapped.",
+    )
+    import_allowlist: list[str] | None = Field(
+        default=None,
+        description="Optional allow-list of importable top-level modules. None "
+                    "or empty = off (parity with bash — any import runs). When "
+                    "set, a static source scan REFUSES the invoke (returns an "
+                    "error, nothing executes) if the code imports a module "
+                    "outside the list. This is the v1 control knob for "
+                    "code-not-data / import discipline, defaulted off so the "
+                    "probe measures the unconstrained surface first.",
+    )
+
+
 class HarnessConfig(BaseModel):
     llm: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     self_heal: SelfHealConfig = Field(default_factory=SelfHealConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     communication: CommsConfig = Field(default_factory=CommsConfig)
+    invoke: InvokeConfig = Field(default_factory=InvokeConfig)
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:

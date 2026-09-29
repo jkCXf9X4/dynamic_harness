@@ -284,6 +284,43 @@ through the backend when a topology is active. See
 
 ---
 
+## `invoke` — code-as-action knobs (hybrid probe surface)
+
+Trust parity with `bash` in v1: the snippet runs as a subprocess with host
+access per the harness's existing deliberate decision; hard sandboxing is a
+later, config-gated hardening (see
+`../../product-breakdown/06-evolution/investigations/code-as-action-space/proposal.md` §1/§4).
+Every action the code takes through `harness_tools` routes through
+`ToolRegistry.execute()`, so the same policies apply unchanged.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `timeout_ms` | `60000` | Default subprocess timeout for one `invoke` call, in milliseconds (shorter than `bash`'s 120 s — a snippet is a smaller unit of work). The tool's explicit `timeout` parameter overrides it. Must be `>= 1000`. |
+| `stdout_cap` | `null` | Max stdout bytes returned to the model for one call. `null`/`0` = uncapped — FULL output is captured and paged via `result_read` (bash parity). When set and exceeded, the returned text is sliced to the cap with a truncation note; bytes beyond are NOT retained, so paging only covers the capped window. |
+| `stderr_cap` | `null` | Same as `stdout_cap` for stderr. `null`/`0` = uncapped. |
+| `import_allowlist` | `null` | Optional allow-list of importable top-level modules. `null`/`[]` = off (parity with bash — any import runs). When set, a static source scan REFUSES the call (returns an error, nothing executes) if the code imports a module outside the list. The v1 control knob for code-not-data / import discipline, defaulted off so the probe measures the unconstrained surface first. |
+
+Example — bound output and restrict imports:
+
+```json
+{
+  "invoke": {
+    "timeout_ms": 30000,
+    "stdout_cap": 8192,
+    "import_allowlist": ["json", "os", "re", "pathlib"]
+  }
+}
+```
+
+The `codeact` agent type (the single-`invoke` measurement cell) is registered
+programmatically — `from dynamic_harness import register_codeact;
+register_codeact(runtime)` then delegate with `agent_type="codeact"` — and
+benchmarked against the default agent via
+`python -m dynamic_harness.benchmark.run_codeact` (applies the proposal §5
+decision gate).
+
+---
+
 ## Setting `0` vs `null` — disabling a cap
 
 For the cap-facing keys, the runtime normalizes the internal value to `None` when it is

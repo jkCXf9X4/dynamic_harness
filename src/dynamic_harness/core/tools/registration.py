@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from . import agents as _agents
 from . import artifacts as _artifacts
+from . import code as _code
 from . import comms as _comms
 from . import context as _context
 from . import filesystem as _filesystem
@@ -20,6 +21,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_filesystem.TOOL_GLOB_DEF, _filesystem.glob)
     registry.register(_filesystem.TOOL_GREP_DEF, _filesystem.grep)
     registry.register(_process.TOOL_BASH_DEF, _process.bash)
+    registry.register(_code.TOOL_INVOKE_DEF, _code.invoke)
     registry.register(_network.TOOL_WEBFETCH_DEF, _network.webfetch)
     registry.register(_filesystem.TOOL_EDIT_DEF, _filesystem.edit)
     registry.register(_agents.TOOL_DELEGATE_DEF, _agents.delegate)

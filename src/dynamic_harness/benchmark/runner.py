@@ -89,12 +89,15 @@ async def run_one(
     collector: MetricsCollector,
     workspace: Path | None = None,
     system_prompt: str | None = None,
+    agent_type: str | None = None,
     keep_workspace: bool = False,
 ) -> RunOutcome:
     """Run ``task`` (task description fixed) with an optional variant system prompt.
 
     ``system_prompt`` None → SEED (default agent system prompt).
     ``system_prompt`` set  → variant override.
+    ``agent_type``         → registered custom agent class (e.g. ``codeact``);
+                             None = the base Agent.
 
     Runs against the staged snapshot workspace by setting it as the runtime's
     generated (sandbox) root — every file tool, glob/grep, and bash command
@@ -110,7 +113,9 @@ async def run_one(
     rt.set_generated_root(workspace)
 
     t0 = time.monotonic()
-    root = await rt.run(task.description, system_prompt=system_prompt)
+    root = await rt.run(
+        task.description, system_prompt=system_prompt, agent_type=agent_type
+    )
     latency = time.monotonic() - t0
 
     status = root.task.status.value if root.task.status else "unknown"

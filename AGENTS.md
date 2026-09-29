@@ -58,6 +58,7 @@ src/dynamic_harness/
 │   └── harness.py           → Harness (high-level programmatic Python API)
 ├── core/
 │   ├── agent.py             → Agent class + AGENT_SYSTEM_PROMPT + run() loop + outcome
+│   ├── codeact.py           → CodeActAgent: the single-`invoke` agent type (code-as-action probe cell) + register_codeact()
 │   ├── context.py           → AgentContext (turns, prune/restore/compress)
 │   ├── environment.py       → EnvironmentInfo (runtime-detected, injected)
 │   ├── references.py        → Reference library: discover + index durable rationale docs; skills root resolution + dir-per-skill discovery + trigger rendering + SkillRegistry
@@ -80,11 +81,12 @@ src/dynamic_harness/
 │   │   ├── message.py         → CommsMessage/AgentRef/TopicInfo + envelope renderers
 │   │   ├── factory.py         → build_backend(config, view): topology → backend
 │   │   └── backends/          → relay (1) / siblings (2) / shared (3) / topics (4)
-│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 34 tools split by concern
+│   └── tools/               → ToolDef/ToolResult/ToolRegistry + 35 tools split by concern
 │       ├── registry.py      → ToolRegistry (register/execute/openai_schemas, builds ToolContext)
 │       ├── registration.py  → register_default_tools()
 │       ├── filesystem.py    → read, write, glob, grep, edit (+ sandbox helpers)
 │   ├── process.py       → bash
+│   ├── code.py         → invoke (+ the generated harness_tools RPC bridge: sandboxed code drives the registry with policy parity)
 │   ├── network.py       → webfetch
 │   ├── agents.py        → delegate, report, escalate, fail, ask, converse, read_artifact
 │   ├── skills.py        → skill_load
@@ -278,7 +280,7 @@ delegate to them. This keeps the decision half reusable as a plugin surface
 - `LLMConfig(model, temperature, max_tokens, provider_ignore, provider_allow_fallbacks, provider_force)`
 - Default implementation: `OpenAIProvider` in `llm/openai_provider.py`
 
-## 34 Built-in Tools
+## 35 Built-in Tools
 
 Defined in `core/tools/` (definitions in each module, wired by `core/tools/registration.py`). Tool functions receive a `ToolContext` (never the Agent).
 
@@ -288,7 +290,7 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 2 | `write` | `path: str, content: str` | No |
 | 3 | `glob` | `pattern: str` | No |
 | 4 | `grep` | `pattern: str, include?: str, path?: str` | No |
-| 5 | `bash` | `command: str, timeout?: int` | No |
+| 5 | `bash` | `command: str, timeout?: int, workdir?: str` | No |
 | 6 | `webfetch` | `url: str` | No |
 | 7 | `edit` | `path: str, old_string: str, new_string: str` | No |
 | 8 | `delegate` | `description: str, role?: str, system_prompt?: str, agent_type?: str` | No |
@@ -318,6 +320,34 @@ Defined in `core/tools/` (definitions in each module, wired by `core/tools/regis
 | 32 | `unsubscribe` | `topic: str` | No |
 | 33 | `message` | `agent_id: str, content: str, kind?: str` | No |
 | 34 | `skill_load` | `skill: str` | No |
+| 35 | `invoke` | `code: str, timeout?: int, workdir?: str` | No |
+
+**Code-as-action (`invoke`, #35 — hybrid probe surface).** Execute a Python
+snippet with host access and *bash trust parity* (`core/tools/code.py`; hard
+sandboxing is a later, config-gated hardening). The snippet runs with an
+injected `harness_tools` RPC module on a private socket: its calls
+(`read`/`grep`/`delegate`/`ask`/`converse`/`post`/`plan`/…) route through
+`ToolRegistry.execute()`, so the SAME policies (sandbox roots, role allow-lists,
+spawn caps, comms routing, budget lines) apply to code-driven actions. Only
+what the code *prints* (plus a `# result:` footer of snapshot handles) enters
+context; payloads are snapshot for paging via `result_read`. Terminal intent
+from inside the sandbox is expressed by printing a marker
+(`print(harness_tools.report('…'))`) which the loop delivers — terminal tools
+are never callable through the bridge. Guards: `invoke.*` config
+(`invoke.timeout_ms`, `stdout_cap`/`stderr_cap`, `import_allowlist`), a
+source-normalized near-identical family (comments stripped, whitespace
+folded) for loop detection, and all existing safety invariants apply unchanged.
+
+**`codeact` agent type** (`core/codeact.py`, registered via
+`register_codeact(runtime)`): the measurement cell — a model-facing surface of
+exactly `[invoke, report, result_read, result_bash, usage, status]` (the
+"one tool" contract), with the rich harness surface reached *through* code.
+Benchmark it against the default agent with
+`python -m dynamic_harness.benchmark.run_codeact`, which applies the proposal
+§5 gate (promote only on token reduction at ≥ parity success, or success gain
+at ≤ parity cost). This is the hybrid probe behind the build-vs-extend ruling
+(capability = development; single-tool end-state = new project on the shared
+skeleton).
 
 Terminal tools (report, escalate, fail) stop the agent loop. `plan` records the
 agent's step decomposition (re-stated as progress each turn and persisted to its
@@ -449,7 +479,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | What | How |
 |------|-----|
 | Custom tool | `runtime.tool_registry.register(ToolDef(...), async fn)` |
-| Custom agent class | Subclass `Agent`, register via `runtime.register_agent_class("name", cls)` |
+| Custom agent class | Subclass `Agent`, register via `runtime.register_agent_class("name", cls)` (e.g. the `codeact` type: `register_codeact(runtime)` then delegate with `agent_type="codeact"`) |
 | Custom LLM provider | Implement `LLMProvider` ABC |
 | Event handlers | `runtime.on_report(fn)`, `runtime.on_escalation(fn)`, etc. |
 | Custom timimg/policy decision | Construct one of the `core/policies/` objects (e.g. `SpawnPolicy`, `RetryPolicy`) and either pass it into `Runtime`/`ToolRegistry` or subclass the policy |
@@ -460,6 +490,7 @@ All safety mechanisms are in `Agent._run_loop()`:
 | Need | Look in |
 |------|---------|
 | Add/modify a tool | `core/tools/` (registry + registration + per-concern module) |
+| Work on code-as-action | `core/tools/code.py` (invoke + harness_tools bridge) + `core/codeact.py` (agent type) + `benchmark/run_codeact.py` (measurement gate) — proposal: `product-breakdown/06-evolution/investigations/code-as-action-space/proposal.md` |
 | Add/modify a policy | `core/policies/` |
 | Change agent behavior | `core/agent.py` (AGENT_SYSTEM_PROMPT or _run_loop) |
 | Change runtime lifecycle | `core/runtime.py` |

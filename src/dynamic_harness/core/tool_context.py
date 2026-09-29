@@ -86,6 +86,23 @@ class ToolContext:
         return self._agent.llm
 
     @property
+    def config(self) -> Any:
+        """The agent's resolved harness config (never None). Tools read their
+        own config sections here (e.g. ``invoke.*``)."""
+        return self._agent.config
+
+    @property
+    def tool_registry(self) -> Any:
+        """The runtime's tool registry.
+
+        Exposed for the ``invoke`` RPC bridge (and plugin hosts): a call is
+        forwarded through ``ToolRegistry.execute()`` so every policy — sandbox
+        roots, role allow-lists, spawn caps, comms routing — applies to
+        code-driven actions exactly as it does to a direct tool call.
+        """
+        return self._agent.tool_registry
+
+    @property
     def messages(self) -> list[dict[str, Any]]:
         """Read-only snapshot of the agent's current message buffer."""
         return list(self._agent.context.messages)

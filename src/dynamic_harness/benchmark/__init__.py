@@ -52,6 +52,7 @@ class Benchmark:
         prompt_id: str,
         *,
         system_prompt: str | None = None,
+        agent_type: str | None = None,
         workspace: Path | None = None,
         progress: Callable[[str], None] | None = None,
     ) -> list[RunMetrics]:
@@ -67,6 +68,7 @@ class Benchmark:
                 collector=self.collector,
                 workspace=workspace,
                 system_prompt=system_prompt,
+                agent_type=agent_type,
             )
             runs.append(outcome.metrics)
             if progress:
@@ -84,6 +86,7 @@ class Benchmark:
         prompts: dict[str, str | None],
         *,
         workspace: Path | None = None,
+        agent_type: str | None = None,
         progress: Callable[[str], None] | None = None,
         report_stem: str = "metrics",
         keep_workspace: bool = False,
@@ -91,7 +94,8 @@ class Benchmark:
         """Run all prompts against all tasks and rank them on data.
 
         ``prompts`` maps prompt_id -> system_prompt text. A value of ``None``
-        means "SEED" (use the default agent system prompt).
+        means "SEED" (use the default agent system prompt). ``agent_type``
+        selects a registered custom agent class for every run (None = base).
 
         A snapshot workspace is staged once (unless ``workspace`` is given) so
         every prompt/task runs against identical inputs.
@@ -109,6 +113,7 @@ class Benchmark:
                 runs = await self.run_prompt(
                     prompt_id,
                     system_prompt=system_prompt,
+                    agent_type=agent_type,
                     workspace=workspace,
                     progress=progress,
                 )

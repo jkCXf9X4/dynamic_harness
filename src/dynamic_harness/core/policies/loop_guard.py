@@ -98,6 +98,28 @@ def bash_family(command: str) -> str:
     return "_".join(text.split()).strip().lower()
 
 
+# -- invoke (code-as-action) normalization ------------------------------
+# `invoke` snippets churn by re-issuing near-identical code (editing a
+# constant, re-printing the same slice). The family key strips comments and
+# folds whitespace so two snippets that differ only in decoration group
+# under one family, while genuinely different logic stays separate.
+
+
+def invoke_family(code: str) -> str:
+    """Source-normalized family key for an ``invoke`` snippet.
+
+    ``#`` comments and blank lines are stripped, quotes drop, whitespace
+    folds, and the result is lowercased — so re-invoking the same snippet
+    with a tweaked constant or re-wrapped printing shares a family while
+    different logic does not. Deliberately crude (no AST): it groups the
+    repeated-work shapes the loop guard exists to catch, and is only ever
+    used for a soft warning, never to block a legitimate distinct call.
+    """
+    text = re.sub(r"#[^\n]*", "", code or "")
+    text = text.replace("'", "").replace('"', "")
+    return "_".join(text.split()).strip().lower()
+
+
 def bash_read_regions(command: str) -> list[tuple[str, int, int]]:
     """Extract (file, lo, hi) reads from a bash command.
 
@@ -434,6 +456,10 @@ class LoopGuard(ReactivePolicy):
                 command = str(args.get("command", ""))
                 family = bash_family(command)
                 regions = bash_read_regions(command) or None
+            elif tc.name == "invoke":
+                code = str(args.get("code", ""))
+                family = invoke_family(code)
+                regions = None
             else:
                 family = core
                 regions = None

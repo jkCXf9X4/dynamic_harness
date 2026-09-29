@@ -96,3 +96,24 @@
 - Import allow-list default-on; per-import approval UX.
 - Cross-run procedural-skill provenance (linking a skill back to its artifact /
   commit).
+
+## Prototype status (implementation live)
+
+The v1 probe described above is implemented in the working tree (no decision
+recorded yet — it is a measurement cell, not a commitment):
+
+- `invoke` tool + `harness_tools` RPC bridge — `core/tools/code.py`, routed
+  through `ToolRegistry.execute()` (policy parity by construction), registered
+  by default (35th tool).
+- `codeact` agent type — `core/codeact.py` (`register_codeact(runtime)`), a
+  model-facing surface of exactly `[invoke, report, result_read, result_bash,
+  usage, status]`; `allowed_tools` seam on `Agent`.
+- Guards — `invoke.*` config section (timeout/caps/import allowlist),
+  source-normalized `invoke_family` in the near-identical loop guard.
+- Gate wiring — `benchmark/run_one(agent_type=...)` + `benchmark/run_codeact.py`
+  (side-by-side vs the default agent on ALL_TASKS, proposal §5 metrics).
+- Deviation from this spec: bridge tool-calls return FULL payloads to the code
+  in-process (paging stays an agent-level `result_read` concern); the stdio
+  cap shrinks only the model-visible window. Holds bash parity on memory.
+
+Run the gate with `python -m dynamic_harness.benchmark.run_codeact`.

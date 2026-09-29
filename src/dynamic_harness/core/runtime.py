@@ -1218,6 +1218,12 @@ class Runtime:
     def all_agents(self) -> dict[str, Agent]:
         return dict(self._agents)
 
+    @property
+    def config(self) -> HarnessConfig:
+        """The runtime's resolved harness configuration (never None — a bare
+        ``Runtime()`` behaves exactly like a default ``HarnessConfig()``)."""
+        return self._config
+
     def active_root(self) -> Agent | None:
         """The most recent live root agent (or self-heal successor)."""
         return self._active_root

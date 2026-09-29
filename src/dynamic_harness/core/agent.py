@@ -263,6 +263,15 @@ class Agent:
         # self-heal to restart a failed agent as the same agent_type.
         self.agent_type: str | None = None
 
+        # Optional tool-surface restriction: when set, only these tool names are
+        # exposed to the model (intersected with the role allow-list). None =
+        # unrestricted (whatever `role` permits). The `codeact` agent type uses
+        # this to present the minimalist `[invoke, report, result_read,
+        # result_bash, usage, status]` surface; the rich capability is reached
+        # through the sandboxed code via the harness_tools RPC stub, which routes
+        # back through the registry with the SAME policy enforcement.
+        self.allowed_tools: frozenset[str] | None = None
+
         # Delegate-rarity nudge: set to True once a delegate call is observed, so
         # the reminder never fires for agents that are already delegating.
         self._has_delegated: bool = False
@@ -772,6 +781,16 @@ class Agent:
     @property
     def llm(self) -> LLMProvider | None:
         return self._llm
+
+    @property
+    def config(self) -> Any:
+        """The runtime's resolved harness config (never None)."""
+        return self._runtime.config if self._runtime is not None else None
+
+    @property
+    def tool_registry(self) -> Any:
+        """The runtime's tool registry (executes through all policies)."""
+        return self._tool_registry
 
     @property
     def guidelines(self) -> str:
@@ -1547,6 +1566,10 @@ class Agent:
 
     async def _run_loop(self) -> None:
         tools = self._tool_registry.openai_schemas(role=self.task.role)
+        if self.allowed_tools is not None:
+            tools = [
+                t for t in tools if t["function"]["name"] in self.allowed_tools
+            ]
 
         while True:
             self._iteration += 1
