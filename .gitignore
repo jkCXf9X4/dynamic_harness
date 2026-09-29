@@ -3,7 +3,7 @@
 # Installed agent-method skills (from 3rd_party/agent_methods_and_tools via its install.py)
 .agents/
 
-
+.coverage
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
