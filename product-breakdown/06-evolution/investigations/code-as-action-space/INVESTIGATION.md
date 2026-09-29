@@ -138,6 +138,10 @@ boundary*, not a new category of execution.
   development; the single-tool end-state is a new project on the shared
   skeleton; sequence = probe here → judge by the product's own success criteria
   → route by rule.
+- [tool-definitions-and-help.md](tool-definitions-and-help.md) — real
+  signatures + docstrings for `harness_tools` (generate the stub from the live
+  registry, not a hand-copied shadow), prompt-injection options for the tool
+  reference, and Python `help()`/`pydoc` working inside the sandbox.
 
 ## Investigation next steps
 
@@ -159,4 +163,8 @@ boundary*, not a new category of execution.
       intent shifts via decision-log record
 - [ ] If signal → file an IMP with a task contract (roadmap register)
 - [ ] Extend near-identical detection to Python `invoke` families
+- [ ] Ship `harness_tools` as a checked-in module generated once from the live
+      registry (real signatures/docstrings, parity test, read-only root so the
+      agent can `read` it; `help()` works in the sandbox) — per
+      [tool-definitions-and-help.md](tool-definitions-and-help.md)
 - [ ] Specify procedural-skill persistence rules (frontmatter + validation)

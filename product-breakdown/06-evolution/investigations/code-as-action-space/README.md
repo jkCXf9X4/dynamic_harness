@@ -16,3 +16,4 @@ evidence analysis and the concrete design proposal are leaves.
 | Worker formation vs option load (frontier/modern asymmetry) | [worker-formation-option-load.md](worker-formation-option-load.md) |
 | Self-improving context management (memory/summaries within the commit contract) | [context-management-improvement.md](context-management-improvement.md) |
 | Build vs extend: development of the product or a new project (identity) | [build-vs-extend.md](build-vs-extend.md) |
+| Tool definitions & help: real signatures/docstrings for the stub, prompt injection, python help features | [tool-definitions-and-help.md](tool-definitions-and-help.md) |
