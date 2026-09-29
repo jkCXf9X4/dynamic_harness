@@ -1,18 +1,22 @@
 ---
 id: AD-006
-type: decision
 title: Spine = Runtime `_links` + Reuse of Converse/_inject_queue + Artifact/Result Pointers; Spec Demoted to Advanced Policy Layer
 date: 2026-09-22
 status: accepted
+layers: [architecture]
+state: 06-evolution/investigations/multi-agent-coordination/spine.md
+artifacts:
+  - product-breakdown/02-architecture/multi-agent-coordination/spine.md
+  - collaboration-setting/README.md
+  - src/dynamic_harness/core/policies/links.py (proposed — the tiny new file)
+  - src/dynamic_harness/core/agent.py
+  - core/comms/ (converse eligibility gate)
+supersedes: []
+superseded_by: []
+related: []
 ---
 
 # AD-006: Spine = Runtime `_links` + Reuse of Converse/_inject_queue + Artifact/Result Pointers; Spec Demoted to Advanced Policy Layer
-
-## Status
-Accepted
-
-## Layer
-Architecture
 
 ## Context
 The collaboration-setting spec over-modeled. The advanced features (team
@@ -40,6 +44,9 @@ advanced policy layer** (AC-1..11 still hold, as *policy-layer* acceptance):
 Lifecycle is free: `link` edges die when the parent settles (deleting the
 subtree), or via `disconnect(a, b)`; no disband ceremony needed.
 
+## Rationale
+The collaboration-setting spec over-modeled. Three primitives — a link registry, the existing converse/_inject_queue delivery, artifact/result pointers — cover the MVP, and the rest is policy layered on top. Reusing existing machinery instead of a new TeamMailbox/workspace is hours vs days and shrinks the enforcement surface to one eligibility check.
+
 ## Alternatives Considered
 - **The full spec as core** (Team object, `TeamStatus` FSM, membership dict,
   charter, workspace scoping, sanctions records) — REJECTED: days vs hours; the
@@ -61,11 +68,6 @@ deferred — AC-1..11 are not yet executable (IMP-002/003/004); the spine's
 summary-only delivery assumes the recipient pulls content — a pattern needing
 push of full content is not covered by the MVP.
 
-## Affected Artifacts
-- `product-breakdown/02-architecture/multi-agent-coordination/spine.md`, `collaboration-setting/README.md`
-- `src/dynamic_harness/core/policies/links.py` (proposed — the tiny new file)
-- `src/dynamic_harness/core/agent.py` (converse eligibility gate), `core/comms/`
-
 ## Verification
 The spine's delivery path (converse/_inject_queue) is already exercised by the
 shipped `converse` tool and the comms layer; the P4 benchmark ran the channel
@@ -74,9 +76,3 @@ topologies on it (RESULTS.md). Pending: `_links` + eligibility gate (designed).
 ## Review Trigger
 Revisit if the spine's summary-only delivery proves insufficient (recipients
 need pushed content), or if the advanced layer's deferred features prove core.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

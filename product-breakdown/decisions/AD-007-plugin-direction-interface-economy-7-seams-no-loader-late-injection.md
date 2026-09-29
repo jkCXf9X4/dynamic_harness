@@ -1,18 +1,26 @@
 ---
 id: AD-007
-type: decision
 title: Plugin Direction = Interface Economy (~7 Seams), No Loader / Late Injection
 date: 2026-09-22
 status: accepted
+layers: [implementation]
+state: 06-evolution/investigations/plugin/investigation/README.md
+artifacts:
+  - product-breakdown/03-implementation/plugin/investigation/README.md
+  - src/dynamic_harness/core/tools/
+  - core/policies/
+  - core/events.py
+  - src/dynamic_harness/llm/provider.py
+  - core/runtime.py
+  - core/task.py
+  - artifact/store.py
+  - memory/repository.py
+supersedes: []
+superseded_by: []
+related: []
 ---
 
 # AD-007: Plugin Direction = Interface Economy (~7 Seams), No Loader / Late Injection
-
-## Status
-Accepted
-
-## Layer
-Implementation
 
 ## Context
 The harness is a monolith of *near-seams*: tools by concern, host-agnostic
@@ -40,6 +48,9 @@ swallow a broken component; Q4 safety frozen (policies replaceable, tools/agent
 classes additive); Q5 code-only config; Q6 no stdlib descriptor conversion; Q7
 no discovery, ever. `ToolContext` stays ONE contract, narrowed (faceting rejected).
 
+## Rationale
+The codebase is a monolith of incidental near-seams; a loader (late injection, discovery) buys nothing until the seams are minimal and stable. A small fixed set of ~7 narrow contracts decouples components with no plugin machinery, making replaceability a side effect of structure rather than of runtime indirection.
+
 ## Alternatives Considered
 - **A. Loader / late-injection plugin architecture** — REJECTED (OUT OF SCOPE):
   "a loader buys nothing until the seams are already minimal"; plugin-ready
@@ -60,11 +71,6 @@ reach, dead `ToolContext.message_count` removed; `pytest` green, 466 passed).
 requires discipline to avoid churning interfaces; the ~7 count must be held
 stable while couplings are removed — narrow or trade shapes, never add contracts.
 
-## Affected Artifacts
-- `product-breakdown/03-implementation/plugin/investigation/README.md`
-- `src/dynamic_harness/core/tools/`, `core/policies/`, `core/events.py`
-- `src/dynamic_harness/llm/provider.py`, `core/runtime.py`, `core/task.py`, `artifact/store.py`, `memory/repository.py`
-
 ## Verification
 Success criteria (INVESTIGATION §Success criteria): (1) count holds ≈7; (2) no
 outside private-state reach (`rg "\._agent\b"` in `core/tools/` +
@@ -75,9 +81,3 @@ regressions (`pytest` green, 466 passed); (6) no loader, ever.
 Revisit if the ~7 interface count grows (a new contract is needed), if a
 measured coupling reappears, or if stable contracts make a loader worth
 reconsidering (then it belongs to `00-intent/platform-evaluation/README.md`).
-
-## Supersedes
-- None
-
-## Superseded By
-- None

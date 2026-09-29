@@ -21,7 +21,7 @@ interfaces. Plugin-ready *structure* is the target; a loader is out of scope.
 ## Excludes
 - Runtime-coupled API docs → `../../../../docs/api/`; external porting / MCP transport → `../../../00-intent/platform-evaluation.md`.
 
-Decisions: [AD-007](../../../02-architecture/decisions/AD-007.md); DL-8, DL-9.
+Decisions: [AD-007](../../../../decisions/AD-007-plugin-direction-interface-economy-7-seams-no-loader-late-injection.md); DL-8, DL-9.
 
 ## Contents
 
@@ -42,3 +42,7 @@ Decisions: [AD-007](../../../02-architecture/decisions/AD-007.md); DL-8, DL-9.
 - **INFO-192** [Plugin Direction — Success Criteria](success-criteria.md) — Six measurable criteria for the interface-economy direction.
 - **INFO-193** [Plugin Direction — Target Definition](target.md) — Interface economy: a small, stable set of narrow contracts. Six properties.
 <!-- pb:index:end -->
+
+## Decisions
+
+- AD-007 — Plugin Direction = Interface Economy (~7 Seams), No Loader / Late Injection

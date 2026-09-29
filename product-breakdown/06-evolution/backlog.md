@@ -44,7 +44,7 @@ Raw idea/suggestion log for the evolution layer (moved from `breakdown/developme
 - Hang at a `tool_result` (bash, no output) → `investigations/watchdog/watchdog.md` (threat model T1–T5, cheap gaps, design space, recommended composition).
 - Main orchestrator still times out — evaluate why → `investigations/watchdog/watchdog.md` (root-exempt backstop = whole-run guard §3.2/W1).
 - Bash commands not completing and killing agents by timeout → `investigations/watchdog/watchdog.md` (bash bound = cheap gap §3.1).
-- Common interface for metric-reactive policies (plugin-centric architecture) → `../03-implementation/plugin/investigation/README.md` (seed `core/policies/interface.py`, `Runtime.register_reactive_policy`; interface economy; loader/late-injection explicitly out of scope).
+- Common interface for metric-reactive policies (plugin-centric architecture) → `investigations/plugin/investigation/README.md` (seed `core/policies/interface.py`, `Runtime.register_reactive_policy`; interface economy; loader/late-injection explicitly out of scope).
 - Investigate how a watchdog could be implemented cheaply and robustly → `investigations/watchdog/watchdog.md` + `investigations/watchdog/watchdog_w3_utilization.md`.
 
 ## Resolved / Done

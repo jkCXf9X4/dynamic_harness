@@ -1,18 +1,23 @@
 ---
 id: AD-009
-type: decision
 title: Node Model — Budgeted, Navigational Definition State
 date: 2026-09-23
 status: accepted
+layers: [architecture]
+state: README.md
+artifacts:
+  - product-breakdown/README.md
+  - product-breakdown/tools/check_node_size.py
+  - 3rd_party/agent_methods_and_tools/methods/product-breakdown/SKILL.md
+  - docs/references/information_hygiene.md (storage-rules, readability-rules)
+  - product-breakdown/05-operation/runbook/README.md
+  - product-breakdown/**/*.md all (IMP-016)
+supersedes: []
+superseded_by: []
+related: []
 ---
 
 # AD-009: Node Model — Budgeted, Navigational Definition State
-
-## Status
-Accepted
-
-## Layer
-Architecture
 
 ## Context
 The definition state grew organically: 60+ files, largest 903 lines, index
@@ -38,6 +43,9 @@ by `product-breakdown/tools/check_node_size.py --strict`.
   under IMP-016; it is now empty and removed, so `--strict` enforces the budget
   with no exemptions.
 
+## Rationale
+The definition state grew organically to 60+ files with no way to tell navigational from authoritative content — the failure information hygiene warns against. Per-node size budgets (index/leaf/record) make structure legible and canonical, enforced mechanically so a violation is a blocker instead of a style note.
+
 ## Alternatives Considered
 - **No cap / judgment only** — REJECTED: judgment produced the drift; a
   mechanical check is what holds.
@@ -54,11 +62,6 @@ budget mechanizes information hygiene; one index name removes a lookup exception
 8 ADRs (93–121) out of budget; IMP-016 completed the phased refactor
 (2026-09-23) and the temporary allow-list is removed.
 
-## Affected Artifacts
-- `product-breakdown/README.md`, `product-breakdown/tools/check_node_size.py`
-- `3rd_party/agent_methods_and_tools/methods/product-breakdown/SKILL.md` (storage-rules, readability-rules), `docs/references/information_hygiene.md`
-- `product-breakdown/05-operation/runbook/README.md`, all `product-breakdown/**/*.md` (IMP-016)
-
 ## Verification
 `check_node_size.py --strict` passes with zero violations and no allow-list
 (IMP-016 landed 2026-09-23); the registers (`decision-log.md`,
@@ -67,9 +70,3 @@ budget mechanizes information hygiene; one index name removes a lookup exception
 ## Review Trigger
 When the definition state next changes materially, re-confirm the budget size
 (IMP-016 completed 2026-09-23 and removed the allow-list mechanism).
-
-## Supersedes
-- None
-
-## Superseded By
-- None

@@ -1,18 +1,22 @@
 ---
 id: AD-002
-type: decision
 title: Collaboration Group = Children of a Common Parent, Explicit Membership, Default-Deny
 date: 2026-09-22
 status: accepted
+layers: [architecture]
+state: 06-evolution/investigations/multi-agent-coordination/requirements-group.md
+artifacts:
+  - product-breakdown/02-architecture/multi-agent-coordination/sibling-collaboration.md
+  - requirements-group.md
+  - "src/dynamic_harness/core/comms/backends/siblings.py (cell 2: same-parent scope)"
+  - src/dynamic_harness/core/comms/channel.py
+  - core/tools/comms.py (ChannelPolicy)
+supersedes: []
+superseded_by: []
+related: [AD-001, AD-003]
 ---
 
 # AD-002: Collaboration Group = Children of a Common Parent, Explicit Membership, Default-Deny
-
-## Status
-Accepted
-
-## Layer
-Architecture
 
 ## Context
 Enabling peer collaboration (option B) violates the actor-model
@@ -33,6 +37,9 @@ only if the parent introduced it — at delegation via `collaborate_with=[...]`,
 mid-run via `introduce(agent_a, agent_b, note)` (REQ-2). The permission is an
 *edge*, not a global right, enforced in `get_other_agent` / a policy object. The
 parent is the group's authority: it can authorize, observe, and revoke channels.
+
+## Rationale
+Peer collaboration violates the "know only parent + children + task" isolation invariant, so the relaxation must be bounded and revocable. Restricting groups to children of one common parent collapses the permission problem to "same parent" — zero new structural entities — and confines cross-branch contamination to a trusted set the parent can observe and revoke.
 
 ## Alternatives Considered
 - **Unconstrained B (any agent may message any agent)** — REJECTED: re-opens
@@ -55,11 +62,6 @@ adverse sibling data is possible — a sibling message is input, not authority
 (REQ-12); channels close when the parent settles/is killed and settled siblings
 are read-only targets (REQ-10).
 
-## Affected Artifacts
-- `product-breakdown/02-architecture/multi-agent-coordination/sibling-collaboration.md`, `requirements-group.md`
-- `src/dynamic_harness/core/comms/backends/siblings.py` (cell 2: same-parent scope)
-- `src/dynamic_harness/core/comms/channel.py` (ChannelPolicy), `core/tools/comms.py`
-
 ## Verification
 Comms benchmark cell 2 (`siblings`) exercises the same-parent scope rule; the
 `topics_parent` cell completed correctly in the P4 real-LLM run (232 turns) — see
@@ -72,9 +74,3 @@ Revisit if a topology measurement shows the parent-authorized channel set
 (`topics_parent`) is too costly (P4 showed ~6× churn vs `shared`; hypothesis:
 topic-policing/polling overhead; needs replicates, IMP-001), or if default-deny
 proves too restrictive for a real pattern.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

@@ -56,3 +56,7 @@ Default: don't build it.
   parent arbitration as the low-cost conflict arena. Ostrom's design principles,
   the facilitator ideal of "structure/process without content authority," and
   Hackman's minimal coaching — all three in agreement.
+
+## Decisions
+
+- AD-004 — Facilitation = Mechanical Policy Layer + Sparse Parent Arbitration, No Facilitator Agent

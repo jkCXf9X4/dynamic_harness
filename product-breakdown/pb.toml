@@ -3,13 +3,9 @@
 # The tool is at .agents/skills/product-breakdown/scripts/pb (installed skill).
 
 [nodes]
-# Legacy nodes kept out of the current-standard checks:
-#  - the hand-maintained registers (decision log / traceability map) predate
-#    the generated registers and are migrated as a follow-up;
-#  - 02-architecture/decisions/ is the older per-layer ADR layout, migrated to
-#    the flat `decisions/` stream as a follow-up (the ADRs carry minimal
-#    front-matter so their ids still resolve from prose).
-exempt = ["design-choice-log.md", "decision-log.md", "traceability-map.md", "02-architecture/decisions"]
+# The hand-written registers stay canonical for the not-yet-recorded decisions
+# (DL-1…DL-16 have no record file) and are therefore exempt from node/leaf checks.
+exempt = ["decision-log.md", "traceability-map.md"]
 
 [ids]
 # IMP candidates keep their Evolution handles (IMP-NNN) as stable ids.
@@ -20,3 +16,17 @@ leaf_statuses = ["current", "draft", "superseded", "proposed", "accepted", "open
 # filed (6 of them are cited from roadmap/watchdog); reserve the handles so
 # those forward references resolve. They register with no path.
 reserved_ids = ["IMP-007", "IMP-008", "IMP-009", "IMP-010", "IMP-011", "IMP-012", "IMP-013", "IMP-014", "IMP-015"]
+
+[records]
+# The 9 legacy ADRs (migrated 2026-09-29) are fact-dense records that predate
+# the standard's tighter targets; budget caps are widened to their actual sizes
+# so history is preserved intact while the section budgets still enforce.
+budgets = { Context = [6, 12], Decision = [6, 20], Rationale = [5, 8] }
+
+[registers]
+# Only the stream index (decisions/README.md) is generated. The log and
+# traceability map stay hand-written (decision-log.md, traceability-map.md):
+# they cover DL-1…DL-16 decisions that have no record file yet. Re-enable when
+# those decisions are recorded.
+log = ""
+traceability = ""

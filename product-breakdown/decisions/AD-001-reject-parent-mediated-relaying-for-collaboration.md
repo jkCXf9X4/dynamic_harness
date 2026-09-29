@@ -1,18 +1,23 @@
 ---
 id: AD-001
-type: decision
 title: Reject Parent-Mediated Relaying for Collaboration
 date: 2026-09-22
-status: architecture
+status: accepted
+layers: [architecture]
+state: 06-evolution/investigations/multi-agent-coordination/scope-options.md
+artifacts:
+  - product-breakdown/02-architecture/multi-agent-coordination/
+  - scope-options.md
+  - requirements-group.md
+  - channel-decision.md design leaves
+  - product-breakdown/04-verification/communication-structures/ (INVESTIGATION, PLAN, FINDINGS, RESULTS, metrics-cells.json, context-injection-design.md)
+  - src/dynamic_harness/core/comms/ (the swappable comms layer, AD-008)
+supersedes: []
+superseded_by: []
+related: [AD-002, AD-003, AD-008]
 ---
 
 # AD-001: Reject Parent-Mediated Relaying for Collaboration
-
-## Status
-Accepted (rejection recorded)
-
-## Layer
-Architecture
 
 ## Context
 Moving from *complicated* development (parallel decomposition into independent
@@ -33,6 +38,9 @@ child↔child content. Collaboration uses a topic-channel / workspace-primary
 communication layer with bounded message exceptions (AD-002, AD-003): the parent
 *introduces* and *oversees* but never *relays*.
 
+## Rationale
+A parent that relays every child↔child exchange becomes the coordination bottleneck: it must hold both sides' context, its settlement stream grows with team size, and circular "wait on each other" calls deadlock (P4 `off` cell: 0 turns, 900s watchdog). The actor-model fit of option A was outweighed by the measured failure and unbounded context pollution; a scoped channel keeps most traffic off the parent.
+
 ## Alternatives Considered
 - **A. Stay parent-mediated (enhance `stream_children` + `converse`)** — REJECTED.
 - **B. Sibling mailbox** — direct peer-to-peer messaging; adopted in curated
@@ -52,13 +60,6 @@ FINDINGS.md "Deadlock: circular converse blocks the whole tree — CONFIRMED").
 new A↔B↔A churn/looping surface needs per-pair cycle detection (REQ-9); the
 runtime must track sibling edges alongside parent→child edges.
 
-## Affected Artifacts
-- `product-breakdown/02-architecture/multi-agent-coordination/` design leaves
-  (`scope-options.md`, `requirements-group.md`, `channel-decision.md`)
-- `product-breakdown/04-verification/communication-structures/` (INVESTIGATION,
-  PLAN, FINDINGS, RESULTS, metrics-cells.json, context-injection-design.md)
-- `src/dynamic_harness/core/comms/` (the swappable comms layer, AD-008)
-
 ## Verification
 Real-LLM benchmark (P4, 2026-09-18): relay-style `off` cell deadlocked
 (timed_out, 0 turns, 900s); `shared` channel cell completed correctly (40 turns,
@@ -70,9 +71,3 @@ Revisit if a bounded, lock-safe `converse` (bounded wait for the target's next
 assistant message instead of its whole re-run) removes the deadlock mechanism,
 or if a topology measurement shows parent-relay beating channel topologies on
 cost/quality at scale.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

@@ -1,18 +1,21 @@
 ---
 id: AD-005
-type: decision
 title: Founding Boundary-Scoped, Participation Universal
 date: 2026-09-22
 status: accepted
+layers: [architecture]
+state: 06-evolution/investigations/multi-agent-coordination/collaboration-setting-model.md
+artifacts:
+  - product-breakdown/02-architecture/multi-agent-coordination/capability-scope.md
+  - collaboration-setting-model.md
+  - src/dynamic_harness/core/agent.py (CollaborationCapability mixin/interface)
+  - src/dynamic_harness/core/comms/channel.py (ChannelPolicy — delegation boundary)
+supersedes: []
+superseded_by: []
+related: [AD-001]
 ---
 
 # AD-005: Founding Boundary-Scoped, Participation Universal
-
-## Status
-Accepted
-
-## Layer
-Architecture
 
 ## Context
 Is layer-by-layer collaboration an *orchestration* feature (only orchestrators
@@ -41,6 +44,9 @@ have children) — where **activation is structural, not role-based**: no class
 split, no role string, nothing to promote. Nested enterprises compose by
 construction.
 
+## Rationale
+Interdependence is not an orchestration privilege: two sibling leaves holding half a result are a Hackman "real team". Founding needs the boundary view only a parent has, so it is scoped to nodes with children, while participation stays universal — activation is structural (having children / being introduced), never role-based.
+
 ## Alternatives Considered
 - **Orchestration-only** — REJECTED: interdependence is not depth-dependent;
   forcing every collaborating leaf to delegate grows the tree (against "flat, shallow trees").
@@ -62,11 +68,6 @@ machinery changes *where the code lives*, not *who decides membership* (not
 fully self-organizing); the collaboration setting must be instantiated per
 layer — workspace mechanics and cadence are still open (IMP-002).
 
-## Affected Artifacts
-- `product-breakdown/02-architecture/multi-agent-coordination/capability-scope.md`, `collaboration-setting-model.md`
-- `src/dynamic_harness/core/agent.py` (CollaborationCapability mixin/interface)
-- `src/dynamic_harness/core/comms/channel.py` (ChannelPolicy — delegation boundary)
-
 ## Verification
 The `topics_parent` cell (parent-authorized creation at the delegation boundary)
 completed correctly in P4 — boundary-scoped founding end-to-end. Tests:
@@ -75,9 +76,3 @@ completed correctly in P4 — boundary-scoped founding end-to-end. Tests:
 ## Review Trigger
 Revisit if a measured pattern shows leaves needing to found teams (boundary-
 scoped founding too restrictive), or if structural activation proves unclear.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

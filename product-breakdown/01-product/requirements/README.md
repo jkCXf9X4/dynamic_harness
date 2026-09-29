@@ -9,7 +9,7 @@ Requirements governing the delivered terminal surface and the persisted overview
 (DL-12). The runtime's product definition lives in `../README.md`; this folder
 pins the CLI.
 
-Decisions: `../../02-architecture/decisions/` (DL-12).
+Decisions: `../../decisions/` (DL-12).
 
 ## Contents
 

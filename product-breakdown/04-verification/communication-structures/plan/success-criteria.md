@@ -22,4 +22,4 @@ status: current
    as variance, not asserted away.
 5. **The report answers** "does richer communication change completion/quality or
    only cost/context-health?" with the five-axis numbers per cell — feeding the
-   decision in `../../../02-architecture/multi-agent-coordination/`.
+   decision in `../../../06-evolution/investigations/multi-agent-coordination/`.

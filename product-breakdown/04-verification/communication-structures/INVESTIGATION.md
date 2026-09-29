@@ -15,7 +15,7 @@ summary: >
 # Investigation: Communication structures vs agent success
 
 A **measurement-first** verification item: before committing to any one
-collaboration mechanism (`../../02-architecture/multi-agent-coordination/`),
+collaboration mechanism (`../../06-evolution/investigations/multi-agent-coordination/`),
 establish how different communication structures influence how agents succeed —
 same task, same tree shape, only the topology varying.
 

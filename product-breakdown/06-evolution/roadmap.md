@@ -33,7 +33,7 @@ IMP-style register of open work. Created 2026-09-21 (fills review GAP-4 — the 
 
 ## Notes on provenance
 
-- **IMP-001** comes from the verification evidence chain (`04-verification/communication-structures/FINDINGS.md` n=1 churn hypothesis); **IMP-002..005** migrate the multi-agent INVESTIGATION's open next-steps (all under `02-architecture/multi-agent-coordination/INVESTIGATION.md` "Investigation next steps"; completed ones are marked `[x]` there and are NOT re-registered here); **IMP-006** migrates the restructuring review's GAP-1/GAP-2 (living registers).
+- **IMP-001** comes from the verification evidence chain (`04-verification/communication-structures/FINDINGS.md` n=1 churn hypothesis); **IMP-002..005** migrate the multi-agent INVESTIGATION's open next-steps (all under `06-evolution/investigations/multi-agent-coordination/INVESTIGATION.md` "Investigation next steps"; completed ones are marked `[x]` there and are NOT re-registered here); **IMP-006** migrates the restructuring review's GAP-1/GAP-2 (living registers).
 - **IMP-008..012** migrate the open gaps of `04-verification/gap-analysis/README.md` (G7, G8, G9, G11–G13); G1 is now IMP-005. Resolved gaps (G2–G6, G10) are NOT re-registered.
 - **IMP-013..015** come from unresolved/unpicked suggestions in `06-evolution/backlog.md`.
 - **IMP-016** completed the node-model refactor (AD-009): every node is within budget and `tools/node_size_allowlist.txt` (and its mechanism) is removed.

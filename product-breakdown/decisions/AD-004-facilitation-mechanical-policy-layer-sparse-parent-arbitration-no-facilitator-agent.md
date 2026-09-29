@@ -1,18 +1,22 @@
 ---
 id: AD-004
-type: decision
 title: Facilitation = Mechanical Policy Layer + Sparse Parent Arbitration, No Facilitator Agent
 date: 2026-09-22
 status: accepted
+layers: [architecture]
+state: 06-evolution/investigations/multi-agent-coordination/facilitation-layer.md
+artifacts:
+  - product-breakdown/02-architecture/multi-agent-coordination/facilitation-layer.md
+  - collaboration-setting/behavioral-rules.md
+  - src/dynamic_harness/core/comms/digest.py
+  - core/comms/channel.py
+  - core/policies/ (REQ-6)
+supersedes: []
+superseded_by: []
+related: []
 ---
 
 # AD-004: Facilitation = Mechanical Policy Layer + Sparse Parent Arbitration, No Facilitator Agent
-
-## Status
-Accepted
-
-## Layer
-Architecture
 
 ## Context
 Should the collaboration channel have a **facilitator**, or stay **pure
@@ -39,6 +43,9 @@ Facilitation is a **three-layer stack with no facilitator agent**:
   who arbitrates once and is done (arbitrate, converse, disconnect, dissolve).
   Ostrom #6 + Netflix "step in at risk points" + Hackman coaching (REQ-8/14).
 
+## Rationale
+Ostrom's commons governance shows long-lived shared-resource groups need institutional structure — monitoring, sanctions, conflict resolution — not a person. A facilitator agent duplicates policy, spends tokens, and becomes a point of failure; making the facilitation mechanical (L1) and the arbitration sparse (parent only at conflict) delivers governance at ~zero token cost.
+
 ## Alternatives Considered
 - **Pure child-to-child with zero facilitation** — REJECTED: the commons-tragedy
   trap (no monitoring, sanctions, or conflict resolution).
@@ -59,10 +66,6 @@ exchange *content* to "help", it decays into rejected option A (content is
 pull-only, oversight is one event line); L1's rules must be specified as policy
 objects — workspace mechanics and cadence are still open (IMP-002).
 
-## Affected Artifacts
-- `product-breakdown/02-architecture/multi-agent-coordination/facilitation-layer.md`, `collaboration-setting/behavioral-rules.md`
-- `src/dynamic_harness/core/comms/digest.py`, `core/comms/channel.py`, `core/policies/` (REQ-6)
-
 ## Verification
 `topics_parent` (parent-authorized creation — the L2 authority model) completed
 correctly in P4, with ~6× churn vs `shared` (topic-policing/polling; n=1 —
@@ -71,9 +74,3 @@ IMP-001). Tests: `tests/backend/test_comms.py`. Pending: IMP-002 (L1 executable)
 ## Review Trigger
 Revisit if the sparse-arbitration model fails (conflicts unresolved at L0/L1,
 parent arbitration serializing), or a very large group makes the L2 chair worth it.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

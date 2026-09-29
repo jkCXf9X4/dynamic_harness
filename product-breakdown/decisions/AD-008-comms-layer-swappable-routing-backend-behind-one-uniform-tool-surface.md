@@ -1,19 +1,23 @@
 ---
 id: AD-008
-type: decision
 title: Comms Layer = Swappable Routing Backend Behind One Uniform Tool Surface
 date: 2026-09-22
 status: accepted
+layers: [verification]
+state: 04-verification/communication-structures/README.md
+artifacts:
+  - product-breakdown/04-verification/communication-structures/ (INVESTIGATION, PLAN, FINDINGS, RESULTS, metrics-cells.json, context-injection-design.md)
+  - src/dynamic_harness/core/comms/
+  - core/tools/comms.py
+  - benchmark/comms.py
+  - resources/_collab
+  - tests/backend/test_comms*.py +
+supersedes: []
+superseded_by: []
+related: []
 ---
 
 # AD-008: Comms Layer = Swappable Routing Backend Behind One Uniform Tool Surface
-
-## Status
-Accepted
-
-## Layer
-Verification (verification-led design; the design lives in the verification
-investigation that produced it)
 
 ## Context
 The verified baseline is **one implicit router**: `converse` reaches any agent
@@ -37,6 +41,9 @@ route_message / post / subscribe / unsubscribe / read / channels / channel_info;
 per-(agent, topic) watermarks, backend-owned), `channel.py` (ChannelPolicy),
 `digest.py` (CommsDigestPolicy), `backends/` (relay, siblings, shared, topics),
 `factory.py` (build_backend — the switching seam); tool defs in `core/tools/comms.py`.
+
+## Rationale
+The verified baseline is one implicit router the four topology cells cannot toggle. Measurement-first ("verification-led") design requires the cells to be constructible; a thin host-agnostic layer behind ONE uniform tool surface makes the topology a config switch — the cheapest construction that lets P4 gather real-LLM evidence before a topology is adopted.
 
 ## Alternatives Considered
 - **One implicit router (status quo)** — REJECTED for the experiment: the four
@@ -62,11 +69,6 @@ and runs the whole re-run; channel topologies are robust).
 once by a kill — treat ratios, not absolutes, as signal (IMP-001); the
 `topics_parent` churn hypothesis is untested; a lock-safe `converse` is out of scope.
 
-## Affected Artifacts
-- `product-breakdown/04-verification/communication-structures/` (INVESTIGATION, PLAN, FINDINGS, RESULTS, metrics-cells.json, context-injection-design.md)
-- `src/dynamic_harness/core/comms/`, `core/tools/comms.py`
-- `benchmark/comms.py` + `resources/_collab`, `tests/backend/test_comms*.py`
-
 ## Verification
 P0–P3: unit tests (`tests/backend/test_comms.py`, `test_comms_benchmark.py`) —
 mock-LLM determinism. P4: real-LLM battery (2026-09-18, deepseek-v4-flash via
@@ -75,9 +77,3 @@ OpenRouter) — FINDINGS.md, RESULTS.md, metrics-cells.json. Pending: replicates
 ## Review Trigger
 Revisit if a replicate run (IMP-001) overturns the `shared`-wins reading, or if
 a bounded/lock-safe `converse` changes the topology trade-offs.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

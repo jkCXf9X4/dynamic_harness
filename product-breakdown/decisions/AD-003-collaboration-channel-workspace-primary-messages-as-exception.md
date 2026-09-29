@@ -1,18 +1,23 @@
 ---
 id: AD-003
-type: decision
 title: Collaboration Channel = Workspace-Primary, Messages-as-Exception
 date: 2026-09-22
 status: accepted
+layers: [architecture]
+state: 06-evolution/investigations/multi-agent-coordination/channel-decision.md
+artifacts:
+  - product-breakdown/02-architecture/multi-agent-coordination/channel-decision.md
+  - requirements-steering.md
+  - collaboration-setting/behavioral-rules.md
+  - product-breakdown/04-verification/communication-structures/context-injection-design.md
+  - src/dynamic_harness/core/comms/
+  - core/tools/comms.py
+supersedes: []
+superseded_by: []
+related: [AD-002, AD-001]
 ---
 
 # AD-003: Collaboration Channel = Workspace-Primary, Messages-as-Exception
-
-## Status
-Accepted
-
-## Layer
-Architecture
 
 ## Context
 With the group defined (AD-002), the remaining choice is the **collaboration
@@ -38,6 +43,9 @@ exception** used only for *equivocal* coordination. Decision rules:
    artifact disagrees with a sibling's message, the artifact wins; escalate if
    it matters (REQ-12, existing VERIFY).
 
+## Rationale
+Most collaboration shares results, findings, and constraints — boundary objects the recipient reads on demand (pull), not content pushed into its context. Rich messages are only needed for equivocal exchanges, so they are the scarce, bounded exception: interruptiveness is the cost that must stay rare.
+
 ## Alternatives Considered
 - **B-curated pure (peer messages as the channel)** — REJECTED as primary:
   pre-stabilization direct negotiation is "frustrating" and escalates friction
@@ -59,11 +67,6 @@ cadence/round semantics are undefined ("which children wait on a sibling's
 write") — IMP-002; equivocality is judged by the model and needs a stated
 heuristic (bias workspace-first) — IMP-003.
 
-## Affected Artifacts
-- `product-breakdown/02-architecture/multi-agent-coordination/channel-decision.md`, `requirements-steering.md`, `collaboration-setting/behavioral-rules.md`
-- `product-breakdown/04-verification/communication-structures/context-injection-design.md`
-- `src/dynamic_harness/core/comms/`, `core/tools/comms.py`
-
 ## Verification
 Comms benchmark: the `shared` cell completed the interdependent collab task
 correctly in 40 turns / 389s / ~0.8M tokens (FINDINGS.md reading 2);
@@ -74,9 +77,3 @@ mechanics (IMP-002) and equivocality heuristic (IMP-003).
 Revisit if the workspace-primary rule proves wrong for a measured pattern (e.g.
 message-mediated negotiation dominates), or if IMP-003 shows the model cannot
 reliably distinguish equivocal vs uncertain coordination.
-
-## Supersedes
-- None
-
-## Superseded By
-- None

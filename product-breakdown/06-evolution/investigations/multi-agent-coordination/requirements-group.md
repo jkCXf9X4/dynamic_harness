@@ -48,3 +48,7 @@ each requirement in brackets. Continued:
 - **REQ-7 Cadence substitutes for control.** Settlement events are the "standup";
   a "persist a checkpoint/artifact before you speak again" rule gives rhythm
   without permission. [rituals over control — agile]
+
+## Decisions
+
+- AD-002 — Collaboration Group = Children of a Common Parent, Explicit Membership, Default-Deny

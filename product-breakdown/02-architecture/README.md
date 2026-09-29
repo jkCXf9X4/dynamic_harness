@@ -30,5 +30,4 @@ The strongest rationale artifacts in this layer — the multi-agent INVESTIGATIO
 - [Agent Methodology](methodology/README.md) — The guidelines governing how every agent decomposes, delegates, verifies, synthesizes, and terminates. Derived from VISION.md and the agent system pro…
 - [Architecture Concepts](concepts/README.md) — The load-bearing model concepts. Each is a folder of single-concern leaves
 - [Worked Examples](examples/README.md) — Concrete good-vs-bad examples that make the methodology operational
-- [decisions](decisions/README.md)
 <!-- pb:index:end -->
