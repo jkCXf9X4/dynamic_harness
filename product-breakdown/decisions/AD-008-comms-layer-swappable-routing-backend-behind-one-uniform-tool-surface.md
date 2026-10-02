@@ -4,7 +4,7 @@ title: Comms Layer = Swappable Routing Backend Behind One Uniform Tool Surface
 date: 2026-09-22
 status: accepted
 layers: [verification]
-state: 04-verification/communication-structures/README.md
+state: 06-evolution/investigations/communication-structures/README.md
 artifacts:
   - product-breakdown/04-verification/communication-structures/ (INVESTIGATION, PLAN, FINDINGS, RESULTS, metrics-cells.json, context-injection-design.md)
   - src/dynamic_harness/core/comms/

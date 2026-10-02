@@ -9,7 +9,7 @@ summary: Why does the project exist, who is it for?
 
 Dynamic Harness is a recursive agent runtime that exists to maximize LLM output quality while minimizing cost — by enforcing disciplined task decomposition, strict context encapsulation, and a mandatory analyze → implement → verify loop inspired by ISO/IEC 15288 systems engineering. It is for developers and tool-builders who run multi-step, tool-calling agent workloads (repository analysis, change-and-validation, research-and-synthesis, pipelines-and-jobs, evaluation-and-qa, embedding-and-integration) and want deterministic safety/recovery machinery that works even when the model ignores instructions — rather than prompt advice.
 
-This layer is the "why". It holds the founding thesis (fresh context is cheaper than accumulated context), the vision, the differentiation story, and the platform-evaluation position — not the deliverables, design, or scripts.
+This layer is the "why". It holds the founding thesis (fresh context is cheaper than accumulated context), the vision, and the differentiation story — not the deliverables, design, or scripts. The platform-evaluation position lives under `06-evolution/investigations/platform-evaluation/`.
 
 ## Owns
 - Motivation, stakeholders, research questions, outcomes
@@ -30,5 +30,4 @@ This layer is the "why". It holds the founding thesis (fresh context is cheaper 
 <!-- pb:index:start -->
 - [Competitive Differentiation](competitive-differentiation/README.md) — What separates Dynamic Harness from other agent harnesses (CrewAI, LangGraph, AutoGen, OpenAI Agents SDK, Claude Code, MCP-based tools): the mechanically-enforced guarantees that survive model disobedience, separated from prompt-level advice shared with the field.
 - **INFO-001** [VISION](VISION.md) — Dynamic Harness is a recursive agent runtime that maximizes LLM output quality while minimizing cost — by enforcing disciplined task decomposition, st…
-- [Platform Evaluation: Porting the Harness Elsewhere](platform-evaluation/README.md) — Feasibility assessment for re-implementing Dynamic Harness' mechanically enforced guarantees as add-ons on top of an existing agent platform (OpenCode, Pi, DeepSeek Harness) instead of building tools and scaffolding from scratch, grounded in each platform's documented extension API as of 2026-09.
 <!-- pb:index:end -->

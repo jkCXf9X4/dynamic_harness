@@ -8,13 +8,13 @@ Read top-down. Each layer answers one primary question and must NOT duplicate ow
 
 | Layer | Question | Contents (post-move) |
 |---|---|---|
-| `00-intent/` | Why does the project exist, who is it for? | VISION.md, competitive-differentiation/, platform-evaluation/ |
+| `00-intent/` | Why does the project exist, who is it for? | VISION.md, competitive-differentiation/ |
 | `01-product/` | What is delivered, out of scope? | requirements/ (CLI sub-spec), use-cases/ |
 | `02-architecture/` | How are deliverables, evidence, and work organized? | methodology/, concepts/, examples/ |
-| `03-implementation/` | With what concrete assets is it realized? | plugin/; src/, prompts/, resources/, scripts/, pyproject.toml, harness.json.example stay in place |
-| `04-verification/` | How do we know it satisfies requirements? | gap-analysis/, communication-structures/ |
+| `03-implementation/` | With what concrete assets is it realized? | index only; src/, prompts/, resources/, scripts/, pyproject.toml, harness.json.example stay in place at repo root |
+| `04-verification/` | How do we know it satisfies requirements? | gap-analysis/ (G1–G13 register); the communication-structures evidence chain lives under `06-evolution/investigations/` |
 | `05-operation/` | How do authors run, maintain, release? | runbook/, guides/ |
-| `06-evolution/` | What controlled changes come next? | roadmap.md, backlog.md, selected/ (IMPs) |
+| `06-evolution/` | What controlled changes come next? | roadmap.md, backlog.md, selected/ (IMPs), implemented/, investigations/ |
 
 ## Boundary Rule
 
@@ -34,21 +34,34 @@ Every markdown file here is a **node** with a size budget ([AD-009](decisions/AD
 ## Cross-Cutting Registers
 
 - **[Decision stream](decisions/README.md)** — generated from record front-matter: flat, dated history of every committed choice (`decisions/<PREFIX>-<NNN>-<slug>.md`).
-- **[Decision log](decision-log.md)** — hand register covering the not-yet-recorded decisions (DL-1…DL-16); rows reconciled to record paths as records land in `decisions/`.
-- **[Traceability map](traceability-map.md)** — Claim/Need → Decision Record(s) → Artifact(s); closes the V-model loop at repo level ("every output traced to a requirement").
+- **[Decision log](design-choice-log.md)** — generated from record front-matter (newest-first). Replaces the hand-written `decision-log.md` (DL-1…DL-17), retired to `deprecated/` on 2026-10-02 once every row had a record or state home.
+- **[Traceability map](traceability-map.md)** — Claim/Need → Decision Record(s) → Artifact(s); closes the V-model loop at repo level ("every output traced to a requirement"). Hand-written; it covers claims and needs, not only records.
 
 ## Decision Records & IMPs
 
 - **Records** live in the flat stream under `decisions/<PREFIX>-<NNN>-<slug>.md`, following `templates/TEMPLATE.md` of the method skill (front-matter: id, title, date, status, layers, state, artifacts, supersedes, superseded_by, related; sections Context → Decision → Rationale → Alternatives Considered → Consequences → Verification → Review Trigger). Prefixes map to layers: ID/PD/AD/IMD/VD/OD; evolution candidates use IMP-. Status ∈ `proposed | accepted | superseded | rejected | deprecated`. The 9 legacy ADRs were migrated here on 2026-09-29.
-- **IMPs** live under `06-evolution/selected/IMP-NNN.md` — a scoped candidate needing a task contract, **not** implementation approval. Cross-listed in `06-evolution/README.md`.
+- **IMPs** live under `06-evolution/selected/IMP-NNN.md` — a scoped candidate needing a task contract, **not** implementation approval. An implemented IMP moves to `06-evolution/implemented/` and is no longer tracked. Cross-listed in `06-evolution/README.md`.
 
 ## What Stays Runtime-Coupled in docs/
 
 `docs/api/` (module API reference) and `docs/references/` (durable rationale docs) remain in `docs/` — they are runtime-coupled. Skills (task instruction packages) are installed from the generic `3rd_party/agent_methods_and_tools` library into `.agents/skills/` — also runtime-coupled. `docs/README.md` explains the split.
 
+## Browsing (for agents)
+
+State, history, candidates, and tracking are separate surfaces; a read must not
+mix them. **For a current-state question: read state only — a layer index, then
+the one leaf owning the concern — and stop when the fact is found.** Enter
+`decisions/` records (via a leaf's `## Decisions` footer), IMPs, or
+`investigations/` only when the question is *why / what's next*, never *what
+is*. Never whole-directory read `decisions/`, `selected/`, or
+`investigations/`; `grep` for a term scoped to the owning layer instead.
+Anything `superseded`/`deprecated` (or under a `deprecated/` path) is a
+redirect or tombstone, not evidence — follow its forward pointer or stop.
+Full protocol: the method skill's `guidelines/browsing-protocol.md`.
+
 ## Maintenance
 
-- New decision records go under `decisions/`; reconcile the corresponding `decision-log.md` row's Location to the record path in the same pass. Update `traceability-map.md` when a claim, decision, or artifact changes.
+- New decision records go under `decisions/`. Update `traceability-map.md` when a claim, decision, or artifact changes.
 - After editing any node, run the skill's `pb check --strict` and `pb node-size --strict` from this directory and resolve violations (trim → link → split).
 - Run `pb registers --sync-footers` after record/leaf edits to regenerate `decisions/README.md`, leaf `## Decisions` footers, and index `## Contents` lists.
 - Every new/edited IMP is cross-listed in `06-evolution/README.md` with its stage.

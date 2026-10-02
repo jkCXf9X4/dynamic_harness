@@ -125,15 +125,16 @@ tests/
     └── test_state.py             → StateWriter JSON + events.jsonl persistence
 
 product-breakdown/          → Layered definition state (the seven-layer product breakdown)
-├── 00-intent/              → Why the project exists (VISION.md, competitive-differentiation/, platform-evaluation/)
+├── 00-intent/              → Why the project exists (VISION.md, competitive-differentiation/)
 ├── 01-product/             → What is delivered (requirements/, use-cases/)
-├── 02-architecture/        → How work is organized (methodology/, concepts/, examples/, decisions/, multi-agent-coordination/)
+├── 02-architecture/        → How work is organized (methodology/, concepts/, examples/)
 ├── 03-implementation/      → Concrete assets (plugin/)
-├── 04-verification/        → Proof/acceptance (gap-analysis/, communication-structures/)
+├── 04-verification/        → Proof/acceptance (gap-analysis/ G1–G13; evidence chains under 06-evolution/investigations/)
 ├── 05-operation/           → How authors run/maintain (runbook/, guides/)
-├── 06-evolution/           → Controlled change (roadmap.md, backlog.md, selected/)
+├── 06-evolution/           → Controlled change (roadmap.md, backlog.md, selected/, implemented/)
 ├── README.md               → Index of the seven layers + boundary rule
-├── decision-log.md         → One row per decision (DL-1…DL-17)
+├── design-choice-log.md    → Generated Decision Log (newest-first, from record front-matter)
+├── deprecated/             → Retired hand registers (decision-log.md: DL-1…DL-17, all rows now recorded)
 └── traceability-map.md     → Claim/Need → Decision → Artifact
 
 docs/                      → Runtime-coupled content only (api/ + references/)

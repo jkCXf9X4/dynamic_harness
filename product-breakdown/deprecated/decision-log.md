@@ -1,5 +1,13 @@
 # Decision Log — dynamic_harness
 
+> **DEPRECATED 2026-10-02 — retired.** Every DL-1…DL-17 row now has a record or
+> state home (`decisions/`, the layer leaves, or the roadmap). The history
+> surface is the generated [`design-choice-log.md`](../design-choice-log.md) +
+> [`decisions/README.md`](../decisions/README.md) + the hand-written
+> [`traceability-map.md`](../traceability-map.md). This hand register is no
+> longer maintained; references to it are left stale by design (see
+> `guidelines/deprecated-files.md` of the product-breakdown skill).
+
 One row per decision affecting more than one section; kept current. This log was **created 2026-09-21** from the reconstruction in `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md` — the repo previously had **no decision log**, and decisions existed only as prose inside investigation documents (several without IDs, status, or a home). Rows DL-1…DL-15 and their Status values are inferred from the latest in-repo evidence and are proposals to be reconciled against the ADR records and code history as the records land in `decisions/`.
 
 **DL-6 (reject parent-mediated relaying) is reconstructed:** the original reference in `multi-agent-coordination/INVESTIGATION.md` ("Parent-mediated relaying (option A) is rejected — see decision log") pointed to a **nonexistent log**. The row below reconstructs that entry from the investigation's "Why rejected" rationale (documented) and the verification experiment's measured deadlock/channel results (documented); the *existence* of a log entry is the inferred part. The record for it (AD-001) is the canonical record.

@@ -16,8 +16,7 @@ Filed improvement records. An IMP is a scoped candidate needing a task contract 
 | [IMP-003](IMP-003.md) | Equivocality heuristic | Proposed |
 | [IMP-004](IMP-004.md) | The `introduce` mechanism | Proposed |
 | [IMP-005](IMP-005.md) | Mechanize verification (gap G1) | Proposed |
-| [IMP-006](IMP-006.md) | Maintain decision log + traceability map | Proposed |
-| [IMP-016](IMP-016.md) | Node-model refactor (AD-009 budget) | Completed |
+| [IMP-006](IMP-006.md) | Maintain traceability map as a living register | Proposed |
 
 ## Contents
 
@@ -27,6 +26,5 @@ Filed improvement records. An IMP is a scoped candidate needing a task contract 
 - **IMP-003** [IMP-003: Equivocality Heuristic (When to Escalate to Messages vs Workspace)](IMP-003.md) — Proposed
 - **IMP-004** [IMP-004: The `introduce` Mechanism (B-Curated Sibling Mailbox)](IMP-004.md) — Proposed
 - **IMP-005** [IMP-005: Mechanize Verification (Gap G1)](IMP-005.md) — Proposed
-- **IMP-006** [IMP-006: Maintain Decision Log + Traceability Map as Living Registers](IMP-006.md) — Proposed
-- **IMP-016** [IMP-016: Refactor product-breakdown nodes to the AD-009 budget](IMP-016.md) — Completed
+- **IMP-006** [IMP-006: Maintain Traceability Map as a Living Register](IMP-006.md) — Proposed
 <!-- pb:index:end -->

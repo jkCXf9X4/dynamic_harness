@@ -3,15 +3,18 @@
 # The tool is at .agents/skills/product-breakdown/scripts/pb (installed skill).
 
 [nodes]
-# The hand-written registers stay canonical for the not-yet-recorded decisions
-# (DL-1…DL-16 have no record file) and are therefore exempt from node/leaf checks.
-exempt = ["decision-log.md", "traceability-map.md"]
+# The hand-written traceability map stays canonical (claim/need -> decision ->
+# artifact V-model coverage that the generated registers do not replace) and is
+# therefore exempt from node/leaf checks. The retired decision-log.md lives
+# under deprecated/ (skipped by all checks) and is not exempted here.
+exempt = ["traceability-map.md"]
 
 [ids]
 # IMP candidates keep their Evolution handles (IMP-NNN) as stable ids.
 prefixes = { info = "INFO", decision = "DEC", eval = "EVAL", imp = "IMP" }
-# Leaf/status vocabulary incl. the repo's investigation-doc statuses.
-leaf_statuses = ["current", "draft", "superseded", "proposed", "accepted", "open"]
+# Leaf/status vocabulary incl. the repo's investigation-doc statuses and the
+# IMP lifecycle end-state (implemented IMPs keep their file under implemented/).
+leaf_statuses = ["current", "draft", "superseded", "proposed", "accepted", "open", "implemented"]
 # IMP-007…IMP-015 are Proposed in 06-evolution/selected/README.md but not yet
 # filed (6 of them are cited from roadmap/watchdog); reserve the handles so
 # those forward references resolve. They register with no path.
@@ -24,9 +27,11 @@ reserved_ids = ["IMP-007", "IMP-008", "IMP-009", "IMP-010", "IMP-011", "IMP-012"
 budgets = { Context = [6, 12], Decision = [6, 20], Rationale = [5, 8] }
 
 [registers]
-# Only the stream index (decisions/README.md) is generated. The log and
-# traceability map stay hand-written (decision-log.md, traceability-map.md):
-# they cover DL-1…DL-16 decisions that have no record file yet. Re-enable when
-# those decisions are recorded.
-log = ""
+# The stream index (decisions/README.md) and the Decision Log
+# (design-choice-log.md) are generated. Every DL-1…DL-17 decision now has a
+# record or state home, so the hand-written decision-log.md was retired to
+# deprecated/ (2026-10-02) and replaced by the generated log. The traceability
+# map stays hand-written (traceability-map.md): it covers claims/needs, not
+# just records.
+log = "design-choice-log.md"
 traceability = ""
