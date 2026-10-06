@@ -24,16 +24,17 @@ extension) would reuse.
 - ``delegate_target_signature`` — canonical same-target key (host-agnostic).
 
 The metric-reactive half (``Observation`` → ``PromptInjection``) shares one
-common interface (``core/policies/interface.py``): ``LoopGuard``, ``NudgePolicy``
-and ``SpawnWarningPolicy`` all implement ``ReactivePolicy`` and are driven by
-the registry the same way a plugin-host policy would be.
+common interface (``core/policies/interface.py``): ``LoopGuard``, ``NudgePolicy``,
+``SpawnWarningPolicy`` and ``ContextFillPolicy`` implement
+``ReactivePolicy`` and are driven by the registry the same way a plugin-host
+policy would be.
 """
 
 from __future__ import annotations
 
 from .agent import AgentPolicy
 from .budget import BudgetPolicy, BudgetVerdict, TimeoutPolicy, TokenBudgetPolicy
-from .context import ContextMetricPolicy
+from .context import ContextFillPolicy, ContextMetricPolicy
 from .cost import CostPolicy
 from .disclosure import DisclosurePolicy
 from .filesystem import SandboxPolicy
@@ -70,6 +71,7 @@ __all__ = [
     "BashSafetyPolicy",
     "BudgetPolicy",
     "BudgetVerdict",
+    "ContextFillPolicy",
     "ContextMetricPolicy",
     "CostPolicy",
     "DisclosurePolicy",

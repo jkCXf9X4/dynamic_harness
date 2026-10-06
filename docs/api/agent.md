@@ -70,6 +70,12 @@ rather than inline in `Agent`. The agent owns/uses:
   whole-run wall clock and the total-token hard cap.
 - `NudgePolicy` (`core/policies/nudge.py`) — the delegate-rarity and
   low-iteration soft notices.
+- `ContextFillPolicy` (`core/policies/context.py`) — the per-agent
+  context-fill escalation ladder: when the live-context estimate (what the next
+  provider call will send) reaches its threshold, one non-fatal warning tells
+  the agent to `prune` / `compress` (see `request_compaction()` below); at the
+  hard auto-compact threshold the directive instead sets the run loop's
+  compaction event, so the context is LLM-compressed before the fat call.
 - `ToolPermissionPolicy` (`core/policies/permissions.py`) — agent-state
   eligibility gates (killable / conversable / resumable).
 - `ResumePlanner` (`core/policies/heal.py`) — the parent-driven `resume` ladder's
@@ -127,7 +133,11 @@ turn is never raced and the compressed summary becomes the context the next
 LLM call sees. This is the programmatic seam behind the CLI `/compact` command,
 which calls it on the top (root) agent so the operator can force a long run to
 compress its context without waiting for the model to choose the `compress`
-tool on its own. A no-op (context too small / no LLM) is silently skipped at
+tool on its own. The context-fill policy's auto-compact escalation sets the
+same event reactively: when an agent's live-context estimate crosses
+`context_auto_compact_tokens`, its reactive directive carries
+`action="compact"` and the shared applier sets the event on THAT agent (see
+`core/policies/context.py`). A no-op (context too small / no LLM) is silently skipped at
 the safe point; a request left pending while the agent is idle is honored if
 the root is later continued (interactive REPL keeps the same root).
 

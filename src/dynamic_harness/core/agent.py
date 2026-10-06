@@ -32,6 +32,7 @@ from .policies.budget import TimeoutPolicy, TokenBudgetPolicy
 from .policies.heal import ResumePlanner
 from .policies.nudge import NudgePolicy
 from .policies.brief import BriefPolicy
+from .policies.context import ContextFillPolicy
 from .policies.permissions import ToolPermissionPolicy
 from .policies.spawn import SpawnWarningPolicy
 from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_brief_block, build_system_prompt, build_user_message, render_focus
@@ -150,6 +151,23 @@ class Agent:
         # rare so the prompt prefix (and provider cache) stays contiguous.
         iteration_warning_margin: int = 50,
         iteration_warning_attempts: int = 1,
+        # When the live-context estimate reaches `context_fill_warning_tokens`,
+        # append ONE non-fatal notice telling the agent to compact (prune stale
+        # committed turns / compress the history) BEFORE a provider hard-limits.
+        # Tail-append-only and rare so the prompt prefix (and provider cache)
+        # stays contiguous; the threshold + wording live in the shared
+        # ContextMetricPolicy (core/policies/context.py).
+        context_fill_warning_tokens: int = 100_000,
+        context_fill_warning_attempts: int = 2,
+        # The escalation half of the context-fill ladder: at or above this
+        # estimate the reactive directive carries action="compact", and the
+        # applier sets the run loop's compaction event — the loop compresses at
+        # the top of its next iteration, after queued input drains, BEFORE the
+        # next provider call, so the fat call is never made. Distinct from the
+        # warning threshold; when it is at or below the warning threshold the
+        # compact branch owns everything at or above it and the warning never
+        # fires. 0 disables auto-compaction.
+        context_auto_compact_tokens: int = 240_000,
     ) -> None:
         self.id = agent_id
         self.task = task
@@ -196,6 +214,13 @@ class Agent:
         self._spawn_warning_policy = SpawnWarningPolicy(
             runtime.spawn_policy, warning_attempts=0
         )
+        # Per-agent context-fill escalation ladder; the fill threshold + wording
+        # come from the shared ContextMetricPolicy (core/policies/context.py).
+        self._context_fill_policy = ContextFillPolicy(
+            fill_threshold=context_fill_warning_tokens,
+            compact_threshold=context_auto_compact_tokens,
+            warning_attempts=context_fill_warning_attempts,
+        )
         # The post-turn reactive registry. LoopGuard is NOT evaluated here: loop
         # detection runs at commit time (right after a tool turn) so it also
         # fires on stream-harvest iterations that `continue` past the tail.
@@ -203,6 +228,7 @@ class Agent:
             self._nudge_policy,
             self._brief_policy,
             self._spawn_warning_policy,
+            self._context_fill_policy,
         )
         self._safety_timeout_seconds = safety_timeout_seconds
         # Hard total-request deadline per LLM call (llm.call_timeout_seconds),
@@ -832,6 +858,7 @@ class Agent:
         self._has_delegated = False
         self._nudge_policy.reset()
         self._brief_policy.reset()
+        self._context_fill_policy.reset()
         # A fresh run is a fresh wall-clock budget: clear any prior safety-stop
         # markers so a resumed/re-run agent that finishes cleanly is not still
         # tagged timed-out / safety-stopped.
@@ -880,6 +907,7 @@ class Agent:
             self._has_delegated = False
             self._nudge_policy.reset()
             self._brief_policy.reset()
+            self._context_fill_policy.reset()
             self._terminated_by_safety = False
             self._timed_out = False
             self.context.messages.append({"role": "user", "content": user_message})
@@ -1360,6 +1388,7 @@ class Agent:
             assistant_content=(response.content if response is not None else None),
             tree_depth=self._depth,
             spawn_usage=self._runtime.spawn_usage(self) if self._runtime is not None else None,
+            prompt_token_estimate=self.context.estimate_prompt_tokens(),
             agent_id=self.id,
             task_description=self.task.description,
             role=self.task.role,
@@ -1379,6 +1408,16 @@ class Agent:
         if injection.stop:
             self.fail(injection.message or injection.warning_type)
             return True
+        if injection.action == "compact":
+            # An auto-compact directive: set the run loop's compaction event —
+            # the top of the next iteration drains it after queued input, so
+            # the compressed summary becomes the context the next provider
+            # call sees (the fat call that would have seen the over-threshold
+            # context is never made). The directive carries no message: the
+            # [Context compressed] marker the summarization leaves behind is
+            # the agent-visible record. Unknown actions are ignored by the
+            # core applier (a host subclass may perform its own).
+            self._compact_event.set()
         return False
 
     def _run_reactive_pass(self, response: Any) -> bool:

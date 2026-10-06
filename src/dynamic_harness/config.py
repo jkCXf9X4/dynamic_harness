@@ -239,6 +239,44 @@ class SafetyConfig(BaseModel):
                     "once per cap when usage reaches 80% of that cap. 0 disables "
                     "the feature entirely.",
     )
+    context_fill_warning_tokens: int = Field(
+        default=100_000, ge=0,
+        description="The live-context token estimate (what an agent's NEXT provider "
+                    "call will actually send — chars/3.8 words proxy, see "
+                    "core/policies/context.py) at or above which a non-fatal 'your "
+                    "context is getting full' notice is injected, telling the agent "
+                    "to prune stale committed turns and/or compress so the reduction "
+                    "happens before a provider hard-limit. Distinct from "
+                    "max_agent_tokens, which caps CUMULATIVE usage and force-fails. "
+                    "0 disables the feature entirely.",
+    )
+    context_fill_warning_attempts: int = Field(
+        default=2, ge=0,
+        description="How many times the context-fill notice may be injected into a "
+                    "single agent's context over the whole run. 0 disables the "
+                    "feature entirely.",
+    )
+    context_auto_compact_tokens: int = Field(
+        default=240_000, ge=0,
+        description="The live-context token estimate (what an agent's NEXT provider "
+                    "call will actually send — chars/3.8 words proxy, see "
+                    "core/policies/context.py) at or above which the agent's context "
+                    "is AUTO-COMPACTED at the loop's next safe point: the top of the "
+                    "next iteration, after queued input drains, BEFORE the next "
+                    "provider call — so the fat call is never made. The escalation "
+                    "half of the context-fill ladder (the soft warning fires below "
+                    "this threshold): the directive flows through the reactive pass "
+                    "as a PromptInjection with action='compact'; the applier sets "
+                    "the run loop's compaction event, the loop performs the LLM "
+                    "summarization, emits the standard COMPRESSION event, and "
+                    "persists a checkpoint. Not budgeted — a compaction drops the "
+                    "estimate below the threshold, so it self-limits. Read together "
+                    "with context_fill_warning_tokens: when this is at or below the "
+                    "warning threshold the compact branch owns everything at or "
+                    "above it and the soft warning never fires. 0 disables "
+                    "auto-compaction entirely (warnings still fire per their own "
+                    "knob).",
+    )
 
 
 class SelfHealConfig(BaseModel):

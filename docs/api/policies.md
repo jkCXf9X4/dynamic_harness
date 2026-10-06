@@ -23,7 +23,7 @@ from dynamic_harness.core.policies import (
     ResultCachePolicy, RetryPolicy, DisclosurePolicy, BudgetPolicy,
     TimeoutPolicy, TokenBudgetPolicy, CostPolicy, VerifyPolicy, NudgePolicy,
     ToolPermissionPolicy, BashSafetyPolicy, WebFetchPolicy, SandboxPolicy,
-    ContextMetricPolicy,
+    ContextFillPolicy, ContextMetricPolicy,
 )
 ```
 
@@ -56,7 +56,8 @@ decisions and wording without coupling to the harness core.
 | `BashSafetyPolicy` | `process.py` | Read-only-ness, shell-metacharacter detection, and leading-`cd` workdir resolution for the `bash` tool. |
 | `WebFetchPolicy` | `network.py` | URL host validation (SSRF), fetch-size caps, and redirect budgets for `webfetch`. |
 | `SandboxPolicy` | `filesystem.py` | Filesystem containment: safe-path resolution, sandbox root, hidden-file filtering. |
-| `ContextMetricPolicy` | `context.py` | Token-estimation proxies (chars/words per token) and compress-retry counts. |
+| `ContextMetricPolicy` | `context.py` | Token-estimation proxies (chars/words per token), compress-retry counts, and the context-fill threshold decision + wording. |
+| `ContextFillPolicy` | `context.py` | Per-agent context-fill escalation ladder (the reactive half): budgeted near-full *warning* at the fill threshold, then an auto-compact *directive* (`action="compact"`) at the hard threshold that the host performs at the loop's compaction safe point. |
 
 Supporting decisions also exported from the package: `SpawnDecision`,
 `BudgetVerdict`, `VerifyResult`, `NudgeDecision`, `LoopAction`, and the pure
@@ -69,7 +70,8 @@ signature helpers (`delegate_target_signature`, `normalize_tool_signature`,
   (`HealBudget` per-child) in `__init__` and uses `DisclosurePolicy` in
   `deliver_report` (see `docs/api/runtime.md`).
 - **Agent** owns/uses `LoopGuard`, `RetryPolicy`, `TimeoutPolicy` /
-  `TokenBudgetPolicy`, `NudgePolicy`, `ToolPermissionPolicy`, and
+  `TokenBudgetPolicy`, `NudgePolicy`, `ContextFillPolicy`,
+  `ToolPermissionPolicy`, and
   `ResumePlanner` (see `docs/api/agent.md`).
 - **ToolRegistry** uses `ToolPermissionPolicy` (role gating) and
   `ResultCachePolicy` (cacheability + footers); the individual tools use

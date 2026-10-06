@@ -166,6 +166,14 @@ Example:
 | `max_same_target_delegations` | `0` | Per-lineage cap on delegations aimed at the **same target** (normalized file/directory path(s) in the description, via `delegate_target_signature`). The counter is shared across an entire family (root → all descendants), so re-spawning the same "explore X / read X" sub-agent — including across self-heal fresh restarts — trips this cap and is refused at the runtime choke point. **`0` or `null` disables the cap** (the field is `ge=0`; `0` is normalized to `None`). |
 | `spawn_limit_warning_attempts` | `2` | How many times a non-fatal "you are near the delegation caps" notice may be injected before a cap is hit. Fires once per cap at 80% usage. `0` disables the feature entirely. |
 
+### Context fill warnings
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `context_fill_warning_tokens` | `100000` | The live-context token estimate (what an agent's **next** provider call will actually send — the chars/3.8 words proxy in `core/policies/context.py`) at or above which a non-fatal "your context is getting full" notice is injected, telling the agent to prune stale committed turns and/or `compress` so the reduction happens *before* a provider hard-limit or the context rots. Distinct from `max_agent_tokens`, which caps **cumulative** usage and force-fails. `0` disables the feature entirely. |
+| `context_fill_warning_attempts` | `2` | How many times the context-fill notice may be injected into a single agent's context over the whole run. `0` disables the feature entirely. |
+| `context_auto_compact_tokens` | `240000` | The escalation half of the context-fill ladder: the live-context estimate at or above which the agent's context is **auto-compacted** at the loop's next safe point — the top of the next iteration, after queued input drains, **before** the next provider call, so the fat call is never made. The directive flows through the reactive pass as a `PromptInjection` with `action="compact"`; the applier sets the run loop's compaction event, the loop performs the LLM summarization, emits the standard `COMPRESSION` event, and persists a checkpoint. Not budgeted — a compaction drops the estimate below the threshold, so it self-limits. Read together with `context_fill_warning_tokens`: when this is at or below the warning threshold the compact branch owns everything at or above it and the soft warning never fires. `0` disables auto-compaction entirely (warnings still fire per their own knob). |
+
 **Interaction with the config disable convention:** `max_agent_tokens` and
 `max_same_target_delegations` accept `0` in config and normalize it to `None` (cap off);
 `max_agents`, `max_depth`, and `timeout_seconds` require `null` (since they are
@@ -194,7 +202,10 @@ Example:
     "max_agents": 300,
     "max_depth": 15,
     "max_same_target_delegations": 0,
-    "spawn_limit_warning_attempts": 2
+    "spawn_limit_warning_attempts": 2,
+    "context_fill_warning_tokens": 100000,
+    "context_fill_warning_attempts": 2,
+    "context_auto_compact_tokens": 240000
   }
 }
 ```

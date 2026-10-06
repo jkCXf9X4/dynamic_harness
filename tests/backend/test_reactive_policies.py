@@ -12,6 +12,7 @@ from dynamic_harness.core.policies.interface import (
     ReactivePolicyRegistry,
 )
 from dynamic_harness.core.policies.loop_guard import LoopGuard
+from dynamic_harness.core.policies.context import ContextFillPolicy
 from dynamic_harness.core.policies.nudge import NudgePolicy
 from dynamic_harness.core.policies.spawn import SpawnPolicy, SpawnWarningPolicy
 from dynamic_harness.core.runtime import Runtime
@@ -36,10 +37,15 @@ def _obs(**kw: Any) -> Observation:
 def test_prompt_injection_levels_and_stop() -> None:
     assert PromptInjection.notice("n", warning_type="w").level == "notice"
     assert PromptInjection.notice("n", warning_type="w").stop is False
+    assert PromptInjection.notice("n", warning_type="w").action is None
     assert PromptInjection.warning("w", warning_type="w").level == "warning"
     c = PromptInjection.critical("stop", warning_type="loop")
     assert c.level == "critical"
     assert c.stop is True
+    # action: the optional host side effect (empty message = the action
+    # itself alters the context; nothing is appended).
+    a = PromptInjection(message="", level="notice", warning_type="w", action="compact")
+    assert a.message == "" and a.action == "compact"
 
 
 # ── the registry -----------------------------------------------------------
@@ -248,6 +254,104 @@ def test_spawn_warning_policy_silent_below_cap() -> None:
     assert pol.evaluate(obs) == []
 
 
+# ── ContextFillPolicy as a reactive policy --------------------------
+
+
+def test_context_fill_policy_fires_near_full_notice() -> None:
+    pol = ContextFillPolicy(fill_threshold=100, warning_attempts=2)
+    obs = _obs(iteration=1, prompt_token_estimate=120)
+    out = pol.evaluate(obs)
+    assert len(out) == 1
+    assert out[0].warning_type == "context_fill"
+    assert not out[0].stop
+    assert "context is getting full" in out[0].message
+    assert "`prune`" in out[0].message and "`compress`" in out[0].message
+    assert out[0].data == {
+        "estimate": 120, "threshold": 100, "attempts_remaining": 1,
+    }
+    # Budget (2) spent after two fires; the third observation is silent.
+    assert pol.evaluate(obs)
+    assert pol.evaluate(obs) == []
+
+
+def test_context_fill_policy_silent_below_threshold() -> None:
+    pol = ContextFillPolicy(fill_threshold=100, warning_attempts=1)
+    assert pol.evaluate(_obs(iteration=1, prompt_token_estimate=50)) == []
+
+
+def test_context_fill_policy_thresholds_disable_their_own_branch() -> None:
+    # An estimate of 0 means the host did not fill the observation field —
+    # a plugin host that does not track context stays silent.
+    pol = ContextFillPolicy(fill_threshold=100, warning_attempts=2)
+    assert pol.evaluate(_obs(iteration=1)) == []
+    # Each threshold 0 disables ITS OWN branch only: fill 0 silences the soft
+    # warning, and the compact branch (its own default) still fires.
+    off = ContextFillPolicy(fill_threshold=0, warning_attempts=2)
+    out = off.evaluate(_obs(iteration=1, prompt_token_estimate=999_999))
+    assert len(out) == 1
+    assert out[0].warning_type == "context_auto_compact"
+    assert out[0].action == "compact"
+
+
+def test_context_fill_policy_reset_restores_budget() -> None:
+    pol = ContextFillPolicy(fill_threshold=10, warning_attempts=1)
+    obs = _obs(iteration=1, prompt_token_estimate=10)
+    assert len(pol.evaluate(obs)) == 1
+    assert pol.evaluate(obs) == []
+    pol.reset()
+    assert len(pol.evaluate(obs)) == 1
+
+
+def test_context_fill_policy_auto_compact_at_hard_threshold() -> None:
+    """At or above the compact threshold the directive carries action="compact"
+    and no message (the [Context compressed] marker the summarization leaves
+    behind is the agent-visible record). NOT budgeted — a compaction drops the
+    estimate below the threshold, so it self-limits."""
+    pol = ContextFillPolicy(fill_threshold=100, compact_threshold=150, warning_attempts=2)
+    out = pol.evaluate(_obs(iteration=1, prompt_token_estimate=160))
+    assert len(out) == 1
+    d = out[0]
+    assert d.warning_type == "context_auto_compact"
+    assert d.message == ""
+    assert d.action == "compact"
+    assert not d.stop
+    assert d.data == {"estimate": 160, "threshold": 150}
+    # The warning budget is untouched by a compact fire.
+    assert pol.warning_left == 2
+
+
+def test_context_fill_policy_warns_only_below_compact_threshold() -> None:
+    """In [fill, compact) the soft warning fires per its own budget."""
+    pol = ContextFillPolicy(fill_threshold=100, compact_threshold=150, warning_attempts=1)
+    obs = _obs(iteration=1, prompt_token_estimate=120)
+    out = pol.evaluate(obs)
+    assert len(out) == 1
+    assert out[0].warning_type == "context_fill"
+    assert out[0].action is None
+    assert pol.evaluate(obs) == []
+
+
+def test_context_fill_policy_compact_owns_ladder_when_inverted() -> None:
+    """A compact threshold at or below the fill threshold owns everything at
+    or above it: the compact branch fires first and the soft warning's zone
+    is empty — it never fires."""
+    pol = ContextFillPolicy(fill_threshold=100, compact_threshold=50, warning_attempts=2)
+    obs = _obs(iteration=1, prompt_token_estimate=120)
+    out = pol.evaluate(obs)
+    assert len(out) == 1
+    assert out[0].action == "compact"
+    assert pol.warning_left == 2  # the warning budget was never consumed
+
+
+def test_context_fill_policy_compact_disabled_warns_only() -> None:
+    """compact_threshold 0 disables auto-compaction; the soft warning still
+    fires per its own knob."""
+    pol = ContextFillPolicy(fill_threshold=100, compact_threshold=0, warning_attempts=2)
+    out = pol.evaluate(_obs(iteration=1, prompt_token_estimate=500_000))
+    assert len(out) == 1
+    assert out[0].warning_type == "context_fill"
+
+
 # ── wiring through the agent / runtime ------------------------------------
 
 
@@ -387,5 +491,96 @@ def test_agent_reactive_registry_listed_names(runtime: Runtime) -> None:
     assert "nudges" in agent.reactive_policies.names()
     assert "mission_brief" in agent.reactive_policies.names()
     assert "spawn_warning" in agent.reactive_policies.names()
+    assert "context_fill" in agent.reactive_policies.names()
     # LoopGuard is driven at commit time, not via the post-turn registry.
     assert "loop_guard" not in agent.reactive_policies.names()
+
+
+@pytest.mark.asyncio
+async def test_agent_context_fill_warning_injected_near_full(tmp: Path) -> None:
+    """When the live-context estimate crosses its threshold, one non-fatal
+    'context is getting full' notice is appended to the agent's context
+    (tail-append-only) and the run carries on."""
+    from dynamic_harness.config import HarnessConfig, SafetyConfig
+
+    runtime = Runtime(
+        artifact_root=tmp / "artifacts", repo_root=tmp / "repo",
+        generated_root=tmp,
+        config=HarnessConfig(safety=SafetyConfig(
+            context_fill_warning_tokens=1, context_fill_warning_attempts=1,
+        )),
+    )
+    runtime.set_llm(_ScriptedLLM([
+        # 1: a tool turn (a content-only response would report and return
+        # before the post-turn reactive pass ever runs).
+        _usage_call(0),
+        # 2: the agent reports after the warning landed.
+        ToolCallResponse(content="finished", model="mock", tool_calls=[]),
+    ]))
+
+    root = runtime.delegate(Task(description="one"))
+    await root.run()
+
+    assert root.task.status.value == "completed"
+    assert any(
+        m.get("role") == "user" and "context is getting full" in str(m.get("content", ""))
+        and "`prune`" in str(m.get("content", ""))
+        for m in root.context.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_auto_compacts_at_hard_threshold(tmp: Path) -> None:
+    """At or above context_auto_compact_tokens the reactive directive sets the
+    compaction event; the loop compresses at the top of its next iteration —
+    after queued input drains, BEFORE the next provider call — so the fat call
+    is never made and the compressed summary becomes the context the next
+    provider call sees."""
+    from dynamic_harness.config import HarnessConfig, SafetyConfig
+
+    seen: list[list[str]] = []
+
+    class _RecordingLLM(LLMProvider):
+        async def generate(self, system: str, user: str, config=None):
+            raise NotImplementedError
+
+        async def generate_structured(self, system, user, response_model, config=None):
+            raise NotImplementedError
+
+        async def generate_with_tools(self, messages, tools, config=None):
+            is_compress = any(
+                str(m.get("content", "")).startswith("You are a context compression engine")
+                for m in messages if m.get("role") == "system"
+            )
+            seen.append(["compress" if is_compress else "turn",
+                         [m.get("role") for m in messages]])
+            if len(seen) == 1:
+                return _usage_call(0)
+            return ToolCallResponse(content="finished", model="mock", tool_calls=[])
+
+    runtime = Runtime(
+        artifact_root=tmp / "artifacts", repo_root=tmp / "repo",
+        generated_root=tmp,
+        config=HarnessConfig(safety=SafetyConfig(
+            context_auto_compact_tokens=1, context_fill_warning_tokens=0,
+        )),
+    )
+    runtime.set_llm(_RecordingLLM())
+
+    root = runtime.delegate(Task(description="one"))
+    await root.run()
+
+    assert root.task.status.value == "completed"
+    # seen[1] is the COMPRESSION LLM call (the drain's summarization), not a
+    # provider turn — its messages carry the compression system prompt (4
+    # entries, one system). seen[2] is provider turn #2 — and it saw the
+    # COMPACTED context (just system + compressed summary): the
+    # over-threshold call was never made.
+    assert seen[1][0] == "compress"
+    assert len(seen[1][1]) == 4
+    assert seen[2][0] == "turn"
+    assert seen[2][1] == ["system", "system"]
+    assert any(
+        str(m.get("content", "")).startswith("[Context compressed]")
+        for m in root.context.messages
+    )

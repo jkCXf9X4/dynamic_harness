@@ -4,8 +4,10 @@ The recurring shape across the harness' prompt-guiding policies is the same:
 *observe a live metric, decide a reaction, and produce a directive that
 injects / alters the agent's prompt.* ``LoopGuard`` (loop metrics → notice /
 nudge / fail), ``NudgePolicy`` (delegation scarcity + low iteration budget →
-warning), and ``SpawnWarningPolicy`` (near-cap spawn usage → notice) all had
-this skeleton with different payloads and different side-effect call-sites.
+warning), ``SpawnWarningPolicy`` (near-cap spawn usage → notice), and
+``ContextFillWarningPolicy`` (live-context fill near its cap → compact
+warning) all had this skeleton with different payloads and different
+side-effect call-sites.
 
 This module names that contract exactly once, so a plugin host (MCP server /
 extension) can implement and register policies against it without touching the
@@ -38,7 +40,13 @@ class PromptInjection:
     ``level`` ranks the directive (``notice`` / ``warning`` / ``critical``);
     ``warning_type`` names it for activity events; ``data`` is the optional
     activity-event payload. ``stop=True`` means the host must terminate the
-    run after applying (used by the loop-detection fail ladder).
+    run after applying (used by the loop-detection fail ladder). ``action``
+    optionally names a host side effect to perform after applying — the core
+    applier knows ``compact`` (it sets the run loop's compaction event);
+    unknown actions are ignored by the core, and a host subclass may perform
+    its own. ``message`` may be empty when the action itself alters the
+    context (the compaction directive: the ``[Context compressed]`` marker
+    the summarization leaves behind is the agent-visible record).
     """
 
     message: str
@@ -46,6 +54,7 @@ class PromptInjection:
     warning_type: str = "notice"
     data: dict[str, Any] | None = None
     stop: bool = False
+    action: str | None = None
 
     @classmethod
     def notice(
@@ -113,6 +122,10 @@ class Observation:
     assistant_content: str | None = None
     tree_depth: int = 0
     spawn_usage: dict[str, Any] | None = None
+    #: Live-context token estimate for the NEXT provider call (what the request
+    #: will actually send — not cumulative billed usage). 0 = unknown (the host
+    #: does not track it); the context-fill warning never fires on unknown.
+    prompt_token_estimate: int = 0
     agent_id: str | None = None
     task_description: str | None = None
     role: str | None = None

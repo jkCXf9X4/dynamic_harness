@@ -59,6 +59,9 @@ class AgentPolicy:
         delegate_nudge_threshold: int = 8,
         delegate_nudge_attempts: int = 1,
         brief_nudge_attempts: int = 1,
+        context_fill_warning_tokens: int = 100_000,
+        context_fill_warning_attempts: int = 2,
+        context_auto_compact_tokens: int = 240_000,
         # -- loop-guard (near-identical) --
         near_identical_threshold: int = 3,
         near_identical_window: int = 6,
@@ -95,6 +98,9 @@ class AgentPolicy:
         self.delegate_nudge_threshold = int(delegate_nudge_threshold)
         self.delegate_nudge_attempts = int(delegate_nudge_attempts)
         self.brief_nudge_attempts = int(brief_nudge_attempts)
+        self.context_fill_warning_tokens = int(context_fill_warning_tokens)
+        self.context_fill_warning_attempts = int(context_fill_warning_attempts)
+        self.context_auto_compact_tokens = int(context_auto_compact_tokens)
         self.near_identical_threshold = int(near_identical_threshold)
         self.near_identical_window = int(near_identical_window)
         self.near_identical_similarity = float(near_identical_similarity)
@@ -135,6 +141,9 @@ class AgentPolicy:
             iteration_warning_margin=s.iteration_warning_margin,
             iteration_warning_attempts=s.iteration_warning_attempts,
             brief_nudge_attempts=s.brief_nudge_attempts,
+            context_fill_warning_tokens=s.context_fill_warning_tokens,
+            context_fill_warning_attempts=s.context_fill_warning_attempts,
+            context_auto_compact_tokens=s.context_auto_compact_tokens,
             near_identical_threshold=s.near_identical_threshold,
             near_identical_window=s.near_identical_window,
             near_identical_similarity=s.near_identical_similarity,
@@ -176,6 +185,9 @@ class AgentPolicy:
             "delegate_nudge_threshold": self.delegate_nudge_threshold,
             "delegate_nudge_attempts": self.delegate_nudge_attempts,
             "brief_nudge_attempts": self.brief_nudge_attempts,
+            "context_fill_warning_tokens": self.context_fill_warning_tokens,
+            "context_fill_warning_attempts": self.context_fill_warning_attempts,
+            "context_auto_compact_tokens": self.context_auto_compact_tokens,
         }
 
     def post_construct(self, agent: "object") -> None:
