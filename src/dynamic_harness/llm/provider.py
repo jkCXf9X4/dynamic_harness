@@ -54,7 +54,13 @@ class LLMProvider(ABC):
     @abstractmethod
     async def generate_with_tools(
         self, messages: list[dict], tools: list[dict], config: LLMConfig | None = None
-    ) -> ToolCallResponse: ...
+    ) -> ToolCallResponse:
+        """Run a tool-calling turn over the wire-shape ``messages`` buffer.
+
+        Messages may carry multimodal content-part arrays (text + image parts,
+        see ``llm.content``) — forward them to the API untouched; image-capable
+        models accept ``image_url`` parts in tool results.
+        """
 
     @abstractmethod
     async def generate_structured(

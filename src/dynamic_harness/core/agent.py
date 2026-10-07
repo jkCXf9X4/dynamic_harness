@@ -39,6 +39,7 @@ from .prompts import AGENT_SYSTEM_PROMPT, FocusLedger, build_brief_block, build_
 from .result_store import ResultStore
 from .spawn_limits import DelegationLimit, delegate_target_signature
 from .telemetry import Telemetry
+from ..llm.content import tool_message_parts
 from ..llm.provider import LLMConfig
 from .tools.registry import ToolResult
 from .task import (
@@ -1285,10 +1286,12 @@ class Agent:
                 )
             content = result.content or ""
             self._telemetry.tool_finished(tc, content, result_id=getattr(result, "result_id", None))
+            # Tool messages keep their plain-string shape unless the call
+            # produced images (then: text part + one image part per image).
             results.append({
                 "role": "tool",
                 "tool_call_id": result.tool_call_id,
-                "content": content,
+                "content": tool_message_parts(content, result.images),
             })
 
             if self.task.status in (

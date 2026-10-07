@@ -91,6 +91,25 @@ class ArtifactStore:
             raise ValueError(f"Artifact path escapes store root: {name!r}")
         return p.read_text() if p.exists() else None
 
+    def write_bytes(self, artifact_id: str, name: str, data: bytes) -> Path:
+        """Write raw (binary) content, e.g. an image, under ``<artifact>/<name>``."""
+        name = self._validate_component(name)
+        d = self._artifact_dir(artifact_id)
+        p = (d / name).resolve()
+        if not p.is_relative_to(self.root):
+            raise ValueError(f"Artifact path escapes store root: {name!r}")
+        p.write_bytes(data)
+        return p
+
+    def read_bytes(self, artifact_id: str, name: str) -> bytes | None:
+        """Read raw (binary) content written by ``write_bytes``."""
+        name = self._validate_component(name)
+        d = self._artifact_dir(artifact_id)
+        p = (d / name).resolve()
+        if not p.is_relative_to(self.root):
+            raise ValueError(f"Artifact path escapes store root: {name!r}")
+        return p.read_bytes() if p.exists() else None
+
     def list_files(self, artifact_id: str) -> Sequence[Path]:
         d = self._artifact_dir(artifact_id)
         return list(d.iterdir()) if d.exists() else []

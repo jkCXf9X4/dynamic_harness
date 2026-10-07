@@ -3,7 +3,7 @@ from __future__ import annotations
 import json as _json
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..policies.permissions import ToolPermissionPolicy
 from ..policies.result_cache import ResultCachePolicy
@@ -13,13 +13,21 @@ if TYPE_CHECKING:
     from ...core.tool_context import ToolContext
 
 
-ToolFunc = Callable[..., Awaitable[str]]
+ToolFunc = Callable[..., Awaitable["str | ToolOutput"]]
 
 
 class ToolDef(BaseModel):
     name: str
     description: str
     input_schema: dict[str, Any]
+
+
+class ToolOutput(BaseModel):
+    """Structured output a tool may return instead of a plain str, when a call
+    produces content beyond text (e.g. the ``read`` tool attaching an image as
+    a base64 data URI)."""
+    content: str = ""
+    images: list[str] = Field(default_factory=list)
 
 
 # Back-compat aliases: the role allow-list lives with the ToolPermissionPolicy
@@ -43,7 +51,13 @@ NON_CACHEABLE_TOOLS: frozenset[str] = ResultCachePolicy.DEFAULT_NON_CACHEABLE
 
 
 class ToolResult:
-    def __init__(self, tool_call_id: str, content: str, result_id: str | None = None) -> None:
+    def __init__(
+        self,
+        tool_call_id: str,
+        content: str,
+        result_id: str | None = None,
+        images: list[str] | None = None,
+    ) -> None:
         self.tool_call_id = tool_call_id
         self.content = content
         # Handle into the agent's ResultStore for the full (untruncated) output
@@ -51,6 +65,11 @@ class ToolResult:
         # the `result_read` tool pages it; the model calls the work tool again
         # to get a fresh result.
         self.result_id = result_id
+        # Images produced by this call (base64 data URIs / https URLs), passed
+        # to image-capable models as content parts alongside ``content``. Not
+        # persisted in the result store (text-only snapshots): they ride the
+        # committed tool message inline.
+        self.images = list(images or [])
 
 
 class ToolRegistry:
@@ -101,36 +120,29 @@ class ToolRegistry:
             # generic truncation knobs. Forward them untouched and return the
             # tool's output verbatim — no snapshot, no re-slicing.
             try:
-                content = await fn(
-                    ctx=ctx, token_limit=token_limit, token_offset=token_offset,
-                    **kwargs,
+                content, images = self._normalize(
+                    await fn(
+                        ctx=ctx, token_limit=token_limit, token_offset=token_offset,
+                        **kwargs,
+                    )
                 )
             except Exception as e:
                 return ToolResult(
                     tool_call_id=tool_call_id, content=f"Error executing {name}: {e}"
                 )
-            if content is None:
-                content = ""
-            elif not isinstance(content, str):
-                content = str(content)
-            return ToolResult(tool_call_id=tool_call_id, content=content)
+            return ToolResult(tool_call_id=tool_call_id, content=content, images=images)
 
         try:
-            content = await fn(ctx=ctx, **kwargs)
+            content, images = self._normalize(await fn(ctx=ctx, **kwargs))
         except Exception as e:
             return ToolResult(tool_call_id=tool_call_id, content=f"Error executing {name}: {e}")
-
-        # Tools are allowed to return None or non-string values; normalize them
-        # here so the truncation/slicing below never raises on a falsy body.
-        if content is None:
-            content = ""
-        elif not isinstance(content, str):
-            content = str(content)
 
         # Every cacheable tool's FULL output is snapshotted behind an opaque
         # handle before any truncation, so the model can page later parts with
         # the read-only `result_read` tool instead of re-running slow work.
         # Cacheability + truncation/footer policy live in ResultCachePolicy.
+        # Images are not snapshotted (text-only store); they ride the returned
+        # ToolResult inline — see ToolResult.images.
         result_id = self._cache_policy.snapshot(ctx.result_store, name, content)
         content = self._cache_policy.render(
             content,
@@ -139,7 +151,26 @@ class ToolRegistry:
             name=name,
             result_id=result_id,
         )
-        return ToolResult(tool_call_id=tool_call_id, content=content, result_id=result_id)
+        return ToolResult(
+            tool_call_id=tool_call_id, content=content, result_id=result_id, images=images
+        )
+
+    @staticmethod
+    def _normalize(out: "str | ToolOutput | None") -> tuple[str, list[str]]:
+        """Normalize a tool's return to a ``(text, images)`` pair.
+
+        Tools return a plain str (the common path) or a ``ToolOutput`` when
+        the call produced content beyond text (e.g. an attached image).
+        """
+        images: list[str] = []
+        if isinstance(out, ToolOutput):
+            images = list(out.images)
+            out = out.content
+        if out is None:
+            out = ""
+        elif not isinstance(out, str):
+            out = str(out)
+        return out, images
 
     def openai_schemas(self, role: str | None = None) -> list[dict]:
         allowed = tools_for_role(role)

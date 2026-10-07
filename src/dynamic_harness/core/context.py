@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ..llm.content import content_to_text
 from ..llm.provider import LLMProvider
 from .policies.context import ContextMetricPolicy
 
@@ -64,7 +65,7 @@ class AgentContext:
         ) if turn_msgs and turn_msgs[0].get("role") == "assistant" else "reply"
         tail = ""
         for m in reversed(turn_msgs):
-            content = m.get("content")
+            content = content_to_text(m.get("content"))
             if content:
                 tail = content
                 break
@@ -80,7 +81,7 @@ class AgentContext:
     def turn_token_estimate(self, pid: str) -> int:
         total = 0
         for m in self.turns.get(pid, []):
-            total += estimate_tokens(str(m.get("content") or ""))
+            total += estimate_tokens(content_to_text(m.get("content")))
             for tc in m.get("tool_calls") or []:
                 total += estimate_tokens(tc.get("function", {}).get("arguments", ""))
         return max(1, total)
@@ -104,7 +105,7 @@ class AgentContext:
         """
         total = 0
         for m in self.messages:
-            total += estimate_tokens(str(m.get("content") or ""))
+            total += estimate_tokens(content_to_text(m.get("content")))
             for tc in m.get("tool_calls") or []:
                 total += estimate_tokens(tc.get("function", {}).get("arguments", ""))
         return max(1, total)

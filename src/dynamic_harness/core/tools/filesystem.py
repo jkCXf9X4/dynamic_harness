@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..policies.filesystem import SandboxPolicy
-from .registry import ToolDef
+from ...llm.content import images_to_data_uri
+from .registry import ToolDef, ToolOutput
 
 if TYPE_CHECKING:
     from ...core.tool_context import ToolContext
@@ -15,7 +16,9 @@ if TYPE_CHECKING:
 
 TOOL_READ_DEF = ToolDef(
     name="read",
-    description="Read a file from disk by path",
+    description="Read a file from disk by path. Text files return their text; "
+                "image files (png/jpeg/webp/gif/bmp) are attached to the result "
+                "as image content parts for image-capable models.",
     input_schema={
         "type": "object",
         "properties": {
@@ -85,6 +88,37 @@ def is_hidden(path: str | Path) -> bool:
     return SandboxPolicy.is_hidden(path)
 
 
+def gitignore_key(path: str | Path, search_root: Path) -> str:
+    """Path form the gitignore filter matches against.
+
+    Patterns are matched relative to the grep/glob search root so
+    filesystem components above it (e.g. the ``/tmp`` root vs a ``tmp/``
+    ignore rule) can never match. Paths outside the search root fall
+    back to their absolute form.
+    """
+    try:
+        return str(Path(path).relative_to(search_root))
+    except ValueError:
+        return str(path)
+
+
+# Model-readable image formats (OpenAI image input), by file suffix. Deliberately
+# NOT mimetypes.guess_type: it resolves e.g. svg → image/svg+xml, which vision
+# models reject.
+IMAGE_MIME: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
+
+# Cap the base64 payload attached to a turn: a multi-MiB image as a single
+# content part would dwarf the whole message buffer.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
 def sandbox_root(ctx: ToolContext) -> Path:
     """The workspace an agent is allowed to operate in (read/glob/grep)."""
     return SandboxPolicy.for_context(
@@ -141,7 +175,10 @@ def resolve_safe_path(path: str, ctx: ToolContext, *, write: bool = True) -> Pat
     ).resolve_safe_path(path, write=write)
 
 
-async def read(*, ctx: ToolContext, path: str) -> str:
+async def read(*, ctx: ToolContext, path: str) -> "str | ToolOutput":
+    """Read a file. Text files return their text; image files are attached to
+    the result as base64 data URIs (see ``ToolOutput.images``) so image-capable
+    models can read them directly."""
     try:
         safe = resolve_safe_path(path, ctx, write=False)
     except ValueError as e:
@@ -149,7 +186,21 @@ async def read(*, ctx: ToolContext, path: str) -> str:
     refusal = _skill_role_refusal(ctx, safe)
     if refusal is not None:
         return refusal
-    return safe.read_text()
+    mime = IMAGE_MIME.get(safe.suffix.lower())
+    if mime is None:
+        return safe.read_text()
+    size = safe.stat().st_size
+    if size > MAX_IMAGE_BYTES:
+        return (
+            f"Error: image {path} is {size // 1024} KiB — above the "
+            f"{MAX_IMAGE_BYTES // (1024 * 1024)} MiB read cap. Downscale or "
+            "crop it, then read again."
+        )
+    return ToolOutput(
+        content=f"Image {path} ({mime}, {size // 1024} KiB) attached as an "
+                "image content part — read it directly; no text was extracted.",
+        images=[images_to_data_uri(safe.read_bytes(), mime)],
+    )
 
 
 async def write(*, ctx: ToolContext, path: str, content: str) -> str:
@@ -185,7 +236,10 @@ async def glob(*, ctx: ToolContext, pattern: str) -> str:
         return _skill_role_refusal(ctx, resolved) is None
 
     _filter = ctx.gitignore_filter()
-    filtered = [m for m in matches if not _filter(m) and not is_hidden(m) and _allowed(m)]
+    filtered = [
+        m for m in matches
+        if not _filter(gitignore_key(m, search)) and not is_hidden(m) and _allowed(m)
+    ]
     if filtered:
         return _json.dumps(sorted(filtered), indent=2)
     visible = [m for m in matches if not is_hidden(m) and _allowed(m)]
@@ -209,7 +263,7 @@ async def grep(*, ctx: ToolContext, pattern: str, include: str | None = None, pa
             continue
         if is_hidden(f):
             continue
-        if _filter(str(f)):
+        if _filter(gitignore_key(f, search_path)):
             continue
         if _skill_role_refusal(ctx, f) is not None:
             continue

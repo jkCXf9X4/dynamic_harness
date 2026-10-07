@@ -1,13 +1,7 @@
 {
+  "model": "openrouter/deepseek/deepseek-v4-flash-0731",
   "llm": {
-    "model": "deepseek/deepseek-v4-flash-0731",
-    "base_url": "https://openrouter.ai/api/v1",
-    "provider_ignore": [],
-    "provider_allow_fallbacks": true,
-    "provider_force": null,
     "verify_ssl": true,
-    "price_input_per_mtok": null,
-    "price_output_per_mtok": null,
     "call_timeout_seconds": 500.0,
     "retry_max_attempts": 4,
     "rate_limit_max_attempts": 6,
@@ -16,6 +10,18 @@
     "retry_jitter_seconds": 0.5,
     "rate_limit_backoff_multiplier": 3.0,
     "fallback_on_rate_limit": true
+  },
+  "providers": {
+    "openrouter": {
+      "env": ["OPENROUTER_API_KEY", "OPENAI_API_KEY"],
+      "base_url": "https://openrouter.ai/api/v1",
+      "provider_force": null,
+      "provider_ignore": [],
+      "provider_allow_fallbacks": true,
+      "models": {
+        "deepseek/deepseek-v4-flash-0731": {"name": "DeepSeek V4 Flash 0731"}
+      }
+    }
   },
   "safety": {
     "max_iterations": 400,
@@ -35,7 +41,10 @@
     "max_agents": 300,
     "max_depth": 15,
     "max_same_target_delegations": 0,
-    "spawn_limit_warning_attempts": 2
+    "spawn_limit_warning_attempts": 2,
+    "context_fill_warning_tokens": 100000,
+    "context_fill_warning_attempts": 2,
+    "context_auto_compact_tokens": 240000
   },
   "self_heal": {
     "mode": true,
