@@ -880,9 +880,18 @@ class Agent:
                 self.fail("Agent cancelled")
             raise
         except Exception as exc:
-            if not self.last_report and not self.last_failure:
+            if self.task.status is TaskStatus.running or (
+                not self.last_report and not self.last_failure
+            ):
+                # An uncaught error fails the current turn. This must hold on a
+                # CONTINUATION too (new user input on a previously failed or
+                # completed agent): the fresh error replaces the stale one and
+                # re-marks the task failed, or the root would sit in "running"
+                # limbo while every view keeps showing the old failure.
                 self.fail(f"Unhandled agent error: {exc}", trace=type(exc).__name__)
             else:
+                # The turn already got a terminal verdict from a tool
+                # (complete/fail/escalate) mid-dispatch; respect it.
                 self._telemetry.event("agent_error", error=str(exc))
             self._event_bus.emit_activity(ActivityEvent(
                 agent_id=self.id,
@@ -976,6 +985,15 @@ class Agent:
                         # safety.timeout_seconds being exhausted.
                         raise RuntimeError(
                             policy.per_call_timeout_message(self._call_timeout_seconds)
+                        ) from e
+                    if attempts[rate_limited] >= budgets[rate_limited]:
+                        # The retry budget ran out after real retries — say so,
+                        # instead of re-raising bare and letting `_run_guarded`
+                        # report a retried failure as "Unhandled agent error".
+                        raise RuntimeError(
+                            policy.exhausted_message(
+                                rate_limited=rate_limited, last_error=e,
+                            )
                         ) from e
                     raise
                 self._runtime.record_retry(self.id)

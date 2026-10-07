@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from openai import APITimeoutError, RateLimitError
+from openai import APITimeoutError, InternalServerError, RateLimitError
 
 from dynamic_harness.core import agent as agent_mod
 from dynamic_harness.core.agent import Agent
@@ -73,6 +73,49 @@ def _rate_limit_error(**headers: str) -> RateLimitError:
     )
 
 
+class _UpstreamServerLLM(LLMProvider):
+    """Raises an upstream 5xx (openai ``InternalServerError``) the first
+    ``fail_calls`` generations, then completes normally. Mirrors the upstream
+    500 / 502 provider outages that surfaced as "Unhandled agent error"."""
+
+    def __init__(self, fail_calls: int, status: int, message: str) -> None:
+        self.fail_calls = fail_calls
+        self.status = status
+        self.message = message
+        self.calls = 0
+
+    async def generate(self, system: str, user: str, config=None):
+        raise NotImplementedError
+
+    async def generate_with_tools(self, messages: list[dict], tools: list[dict], config=None):
+        self.calls += 1
+        if self.calls <= self.fail_calls:
+            raise _server_error(self.status, self.message)
+        return ToolCallResponse(content="done", model="mock")
+
+    async def generate_structured(self, system, user, response_model, config=None):
+        raise NotImplementedError
+
+
+def _server_error(status: int, message: str) -> InternalServerError:
+    """An openai ``InternalServerError`` rendered exactly as the SDK surfaces
+    provider 5xx responses ("Error code: <status> - {body}")."""
+    request = httpx.Request("POST", "http://provider.invalid/v1/chat/completions")
+    body = {
+        "error": {
+            "type": "internal_server_error",
+            "code": None,
+            "message": message,
+            "param": None,
+        }
+    }
+    return InternalServerError(
+        message=f"Error code: {status} - {body}",
+        response=httpx.Response(status, request=request),
+        body=body,
+    )
+
+
 def _no_sleep(root: Agent) -> None:
     """Kill the retry backoff so budget-exhaustion tests run instantly."""
     root.retry_base_delay_seconds = 0.0
@@ -90,6 +133,20 @@ def test_rate_limit_classified_as_retryable() -> None:
     exc = _rate_limit_error()
     # Type-based classification must catch it regardless of message text.
     assert Agent._is_retryable(exc) is True
+
+
+def test_upstream_server_errors_classified_as_retryable() -> None:
+    # The exact provider messages from the field: an upstream 500 and a 502
+    # bad_gateway. Type-based classification (InternalServerError) must catch
+    # both; they are generic transient failures, not rate limits.
+    for status, message in (
+        (500, "Failed to communicate with the upstream service."),
+        (502, "Could not connect to the gateway. Try again later."),
+    ):
+        exc = _server_error(status, message)
+        assert "Error code:" in str(exc)  # SDK-rendered 5xx
+        assert Agent._is_retryable(exc) is True
+        assert Agent._is_rate_limit(exc) is False
 
 
 def test_plain_runtime_error_not_retryable() -> None:
@@ -137,6 +194,141 @@ async def test_persistent_timeout_fails_gracefully(runtime: Runtime) -> None:
     # Must not raise/crash even after retries are exhausted.
     assert root.task.status == TaskStatus.failed
     assert root.last_failure is not None
+
+
+@pytest.mark.asyncio
+async def test_retries_upstream_500_then_completes(runtime: Runtime) -> None:
+    """A transient upstream 500 ("Failed to communicate with the upstream
+    service.") is absorbed by the generic retry budget."""
+    runtime._self_heal_mode = False
+    llm = _UpstreamServerLLM(
+        fail_calls=2, status=500,
+        message="Failed to communicate with the upstream service.",
+    )
+    runtime.set_llm(llm)
+
+    root = runtime.delegate(Task(description="do the thing"))
+    _no_sleep(root)
+    await root.run()
+
+    assert root.task.status == TaskStatus.completed
+    assert root.last_report is not None
+    assert llm.calls == 3  # two 500s absorbed by retry + one success
+
+
+@pytest.mark.asyncio
+async def test_retries_upstream_502_bad_gateway_then_completes(runtime: Runtime) -> None:
+    """A 502 bad_gateway ("Could not connect to the gateway. Try again
+    later.") is retried like any other transient server error."""
+    runtime._self_heal_mode = False
+    llm = _UpstreamServerLLM(
+        fail_calls=3, status=502,
+        message="Could not connect to the gateway. Try again later.",
+    )
+    runtime.set_llm(llm)
+
+    root = runtime.delegate(Task(description="do the thing"))
+    _no_sleep(root)
+    await root.run()
+
+    assert root.task.status == TaskStatus.completed
+    assert root.last_report is not None
+    assert llm.calls == 4  # three 502s absorbed by retry + one success
+
+
+@pytest.mark.asyncio
+async def test_persistent_upstream_500_fails_gracefully(runtime: Runtime) -> None:
+    """A 500 that outlasts the generic retry budget fails after exactly four
+    attempts, and the failure says so instead of reading as never-retried."""
+    runtime._self_heal_mode = False
+    llm = _UpstreamServerLLM(
+        fail_calls=10_000, status=500,
+        message="Failed to communicate with the upstream service.",
+    )
+    runtime.set_llm(llm)
+
+    root = runtime.delegate(Task(description="do the thing"))
+    _no_sleep(root)
+    await root.run()
+
+    assert root.task.status == TaskStatus.failed
+    assert root.last_failure is not None
+    assert llm.calls == 4  # exhausted exactly the generic budget
+    assert "LLM call failed after 4 attempt(s)" in root.last_failure.error
+    assert "transient retry budget exhausted" in root.last_failure.error
+
+
+class _ScheduledOutageLLM(LLMProvider):
+    """Fails each of the first ``len(schedule)`` generations with the matching
+    (status, message) 5xx, then completes normally. Lets one agent lifetime
+    stage two different outages — e.g. a 500 retry-budget exhaustion on the
+    first run, then a 502 on the user continuation."""
+
+    def __init__(self, schedule: list[tuple[int, str]]) -> None:
+        self.schedule = list(schedule)
+        self.calls = 0
+
+    async def generate(self, system: str, user: str, config=None):
+        raise NotImplementedError
+
+    async def generate_with_tools(self, messages: list[dict], tools: list[dict], config=None):
+        self.calls += 1
+        if self.schedule:
+            status, message = self.schedule.pop(0)
+            raise _server_error(status, message)
+        return ToolCallResponse(content="done", model="mock")
+
+    async def generate_structured(self, system, user, response_model, config=None):
+        raise NotImplementedError
+
+
+@pytest.mark.asyncio
+async def test_continued_root_recovers_from_upstream_outage(runtime: Runtime) -> None:
+    """A root that failed on an exhausted retry budget recovers when the user
+    continues it with a new message once the upstream is back."""
+    runtime._self_heal_mode = False
+    llm = _ScheduledOutageLLM(
+        [(500, "Failed to communicate with the upstream service.")] * 4
+    )
+    runtime.set_llm(llm)
+
+    root = runtime.delegate(Task(description="do the thing"))
+    _no_sleep(root)
+    await root.run()  # first run: generic retry budget exhausted → failed
+    assert root.task.status == TaskStatus.failed
+    assert "LLM call failed after 4 attempt(s)" in root.last_failure.error
+
+    await root.continue_with_input("the upstream is back — try again")
+
+    assert root.task.status == TaskStatus.completed
+    assert root.last_report is not None
+    assert llm.calls == 5  # four exhausted attempts + one success
+
+
+@pytest.mark.asyncio
+async def test_continued_root_remarks_failed_when_outage_repeats(runtime: Runtime) -> None:
+    """If the outage repeats on the continuation, the fresh failure must replace
+    the stale one and re-mark the task failed — not leave the root in "running"
+    limbo while every view keeps showing the old error."""
+    runtime._self_heal_mode = False
+    llm = _ScheduledOutageLLM(
+        [(500, "Failed to communicate with the upstream service.")] * 4
+        + [(502, "Could not connect to the gateway. Try again later.")] * 4
+    )
+    runtime.set_llm(llm)
+
+    root = runtime.delegate(Task(description="do the thing"))
+    _no_sleep(root)
+    await root.run()
+    assert root.task.status == TaskStatus.failed
+    assert "Error code: 500" in root.last_failure.error
+
+    await root.continue_with_input("try again now")
+
+    assert root.task.status == TaskStatus.failed  # re-marked, not "running"
+    assert "Error code: 502" in root.last_failure.error  # fresh, not stale
+    assert "LLM call failed after 4 attempt(s)" in root.last_failure.error
+    assert llm.calls == 8  # two full generic budgets, one per turn
 
 
 @pytest.mark.asyncio

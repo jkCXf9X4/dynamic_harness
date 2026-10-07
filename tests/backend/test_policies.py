@@ -342,6 +342,18 @@ def test_retry_after_header() -> None:
     assert RetryPolicy.retry_after_seconds(_DuckRateLimit()) is None
 
 
+def test_retry_exhausted_message() -> None:
+    pol = RetryPolicy(retry_max_attempts=4, rate_limit_max_attempts=6)
+    err = ValueError("Error code: 500 - {'error': {...}}")
+    generic = pol.exhausted_message(rate_limited=False, last_error=err)
+    assert "4 attempt(s)" in generic
+    assert "transient" in generic
+    assert str(err) in generic
+    rate = pol.exhausted_message(rate_limited=True, last_error=err)
+    assert "6 attempt(s)" in rate
+    assert "rate-limit" in rate
+
+
 # -- DisclosurePolicy ----------------------------------------------------
 
 

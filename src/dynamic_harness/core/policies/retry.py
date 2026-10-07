@@ -185,3 +185,14 @@ class RetryPolicy:
             f"LLM call exceeded the {call_timeout_seconds}s "
             f"per-call timeout on all {self.retry_max_attempts} attempt(s)"
         )
+
+    def exhausted_message(self, *, rate_limited: bool, last_error: Exception) -> str:
+        """Distinct error for a failure class whose retry budget ran out — the
+        caller's run-level handler must not misreport a genuinely retried
+        failure as one that was never retried at all."""
+        attempts = self.budgets[rate_limited]
+        label = "rate-limit" if rate_limited else "transient"
+        return (
+            f"LLM call failed after {attempts} attempt(s) "
+            f"({label} retry budget exhausted): {last_error}"
+        )
