@@ -7,7 +7,7 @@ Each topology cell is built by a per-cell ``runtime_factory``, reusing
 (completion / quality / cost / context-health / contention) comes out of the
 box.
 
-Cells (see ``../../../product-breakdown/04-verification/communication-structures/plan/README.md``):
+Cells (see ``../../../product-breakdown/06-evolution/investigations/communication-structures/``):
 
 - ``off``              — baseline: no comms layer (today's global by-ID converse)
 - ``relay``            — cell 1: parent-mediated

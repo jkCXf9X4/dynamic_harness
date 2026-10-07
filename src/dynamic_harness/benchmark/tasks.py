@@ -13,6 +13,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .vision_asset import decode_code_image
+
 
 _IGNORE_DIRS = {
     ".git", ".venv", "venv", "node_modules", "__pycache__",
@@ -517,6 +519,56 @@ class CollaborationTask(BenchmarkTask):
                 + ", ".join(f"y{i}={got} want {want}" for i, (got, want) in sorted(wrong.items()))
             )
         return True, f"collab ({self.mode}) matches all {len(truth)} parts"
+
+
+class VisionCodeTask(BenchmarkTask):
+    """Live vision probe: the ground truth exists only as rendered pixels.
+
+    ``resources/_vision/code.png`` shows a 4-digit code (drawn by
+    ``benchmark/run_vision.py`` with a tiny bitmap font — no text layer, no
+    metadata hint). The only honest path is to view the image with the
+    ``read`` tool, which attaches it as an ``image_url`` content part to the
+    model; a model without vision (or a provider that drops image parts)
+    cannot produce the digits. The verifier re-decodes the PNG by template
+    matching against the same font, so there is no answer literal in the
+    source tree to grep.
+
+    Intentionally NOT in ``ALL_TASKS`` — like :class:`CollaborationTask`, it
+    is an opt-in probe (see ``benchmark/run_vision.py``): it needs a
+    vision-capable model and a staged asset, so it cannot run in the offline
+    deterministic battery.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            id="vision",
+            description=(
+                "The image resources/_vision/code.png shows a 4-digit code. "
+                "Use the read tool on that image file to view it, then write "
+                "the 4 digits to .optimize_benchmarks/code.txt and report with "
+                "that artifact. .optimize_benchmarks/ exists. Do not guess — "
+                "read the image."
+            ),
+            artifact_paths=[".optimize_benchmarks/code.txt"],
+        )
+
+    def verify(self, output_dir: Path, scan_root: Path) -> tuple[bool, str]:
+        image = scan_root / "resources" / "_vision" / "code.png"
+        if not image.exists():
+            return False, "resources/_vision/code.png missing from workspace"
+        try:
+            truth = decode_code_image(image)
+        except Exception as e:  # noqa: BLE001
+            return False, f"could not decode code.png: {e}"
+
+        out = output_dir / "code.txt"
+        if not out.exists():
+            return False, "code.txt missing"
+
+        produced = re.sub(r"\D", "", out.read_text())
+        if produced != truth:
+            return False, f"mismatch: got {produced or 'nothing'} want {truth}"
+        return True, f"vision code matches: {truth}"
 
 
 ALL_TASKS: list[BenchmarkTask] = [

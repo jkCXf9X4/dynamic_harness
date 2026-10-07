@@ -249,7 +249,7 @@ if response.tool_calls:
     # Execute each tool call, feed results back as messages
     for tc in response.tool_calls:
         result = await registry.execute(tc.name, tc.id, agent=self, **tc.arguments)
-        messages.append({"role": "tool", "tool_call_id": tc.id, "content": result.content})
+        messages.append(tool_message_parts(result.content, result.images))
     # Continue loop
 else:
     # No tool calls — treat content as report summary
