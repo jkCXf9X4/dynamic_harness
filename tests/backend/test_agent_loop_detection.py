@@ -9,6 +9,7 @@ import pytest
 
 from dynamic_harness.config import HarnessConfig, LLMSettings, SafetyConfig
 from dynamic_harness.core.agent import Agent
+from dynamic_harness.core.policies.budget import TimeoutPolicy
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
 from dynamic_harness.llm.provider import LLMProvider, ToolCallData, ToolCallResponse
@@ -578,6 +579,76 @@ async def test_run_timeout_binds_mid_call(runtime: Runtime) -> None:
     await root._run_loop()
     assert root.task.status.value == "failed"
     assert root._terminated_by_safety is True
+
+
+class _DelegateThenReportLLM(LLMProvider):
+    """Shared mock for a parent and its delegated children, keyed on global
+    call order: call 1 (parent) delegates two children; calls 2-3 (children)
+    sleep then report; call 4 (parent, after the first child settles) sleeps
+    far longer than the parent's remaining budget, then reports (which ends
+    the run, cancelling the still-sleeping second child)."""
+
+    def __init__(self, child_sleep: float, parent_sleep: float) -> None:
+        self.child_sleep = child_sleep
+        self.parent_sleep = parent_sleep
+        self.calls = 0
+
+    async def generate(self, system: str, user: str, config=None):
+        raise NotImplementedError
+
+    async def generate_with_tools(self, messages: list[dict], tools: list[dict], config=None):
+        self.calls += 1
+        if self.calls == 1:
+            return ToolCallResponse(
+                content=None,
+                model="mock",
+                tool_calls=[
+                    ToolCallData(id="call_a", name="delegate",
+                                 arguments={"description": "child A work"}),
+                    ToolCallData(id="call_b", name="delegate",
+                                 arguments={"description": "child B work"}),
+                ],
+            )
+        sleep = self.parent_sleep if self.calls == 4 else self.child_sleep
+        await asyncio.sleep(sleep)
+        return ToolCallResponse(
+            content=None,
+            model="mock",
+            tool_calls=[ToolCallData(
+                id=f"call_{self.calls}", name="report",
+                arguments={"summary": f"report {self.calls}",
+                           "files_written": ["out.txt"]},
+            )],
+        )
+
+    async def generate_structured(self, system: str, user: str, response_model, config=None):
+        raise NotImplementedError
+
+
+@pytest.mark.asyncio
+async def test_no_timeout_while_child_running_rearm_on_child_return(runtime: Runtime) -> None:
+    """The wall-clock budget cannot fire while a delegated child is running —
+    the loop-top/harvest-wait check and the mid-call bound are both suspended —
+    and each child settle re-arms the parent with at least 30 min of budget."""
+    llm = _DelegateThenReportLLM(child_sleep=1.5, parent_sleep=0.5)
+    runtime.set_llm(llm)
+
+    root = _make_agent(runtime, Task(description="parent work"), stream_children=True)
+    root._safety_timeout_seconds = 0.5  # budget expires while child A runs
+    await root.run()
+
+    # Parent survived: children reported, then the slow post-children call —
+    # which STARTS with the budget exhausted — completed the run.
+    assert root.task.status.value == "completed"
+    assert root._timed_out is False
+    assert root._terminated_by_safety is False
+    assert llm.calls == 4
+    assert root._children_running == 0
+    # The last child settle re-armed the wall clock: at least 30 min remain.
+    remaining = TimeoutPolicy(
+        timeout_seconds=root._safety_timeout_seconds
+    ).remaining_seconds(time.monotonic() - root._started_at)
+    assert remaining is not None and remaining >= 1795.0
 
 
 @staticmethod

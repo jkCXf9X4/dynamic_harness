@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..policies.process import BashSafetyPolicy
-from .process import _kill_process_group
+from .process import _kill_process_group, _retrieve_stdin_close_state
 from .registry import ToolDef
 
 if TYPE_CHECKING:
@@ -79,9 +79,23 @@ async def result_bash(
         cwd=cwd,
         start_new_session=True,
     )
+    # Feed stdin ourselves: write + close up front, then communicate() with
+    # no input. ``communicate(text)`` spawns an internal _feed_stdin task whose
+    # drain waiter can be orphaned with an unretrieved BrokenPipeError when the
+    # child is killed or cancelled mid-drain (CPython 3.10 teardown race; it
+    # surfaced here as "Unhandled exception in event loop" and aborted a run).
+    # Writing first (the transport drops buffered data on a dead pipe) and
+    # never awaiting a stdin drain removes that orphan class entirely, and a
+    # filter that stops reading early (`head`, `rg -m`) is a normal outcome,
+    # not an error.
+    try:
+        proc.stdin.write(text.encode())
+    except (BrokenPipeError, ConnectionResetError):
+        pass  # child died before consuming input; close() below is a no-op
+    proc.stdin.close()
     try:
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(text.encode()), timeout=timeout / 1000
+            proc.communicate(), timeout=timeout / 1000
         )
     except asyncio.TimeoutError:
         await _kill_process_group(proc)
@@ -95,6 +109,11 @@ async def result_bash(
         # group down before re-raising so no subprocess is orphaned.
         await _kill_process_group(proc)
         raise
+    # Retrieve stdin's close state on the normal/early-exit paths too: a child
+    # that exits before consuming the snapshot sets a bare BrokenPipeError on
+    # the StreamWriter's _closed future (see _retrieve_stdin_close_state);
+    # on the kill paths _kill_process_group does this retrieval.
+    await _retrieve_stdin_close_state(proc)
     result = ""
     if stdout:
         result += stdout.decode(errors="replace")

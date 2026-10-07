@@ -360,6 +360,33 @@ async def _drive(
     return root
 
 
+def _asyncio_exception_handler(
+    loop: asyncio.AbstractEventLoop, context: dict
+) -> None:
+    """Contain stray asyncio teardown exceptions instead of crashing the run.
+
+    Orphaned futures from killed stdin-piped subprocesses (e.g. a result_bash
+    child that died while its stdin was being fed) surface here as
+    "Future exception was never retrieved" / "Unhandled exception in event
+    loop" contexts. Nothing ever retrieves those futures, so containment here
+    is the only lever: the default handler prints a fatal-looking traceback
+    and has historically taken down the event loop mid-run.
+    """
+    exc = context.get("exception")
+    src = context.get("future") or context.get("task") or context.get("handle")
+    console.print(
+        f"[yellow]asyncio: {context.get('message') or 'unhandled event loop error'}: "
+        f"{exc!r} (source: {src!r})[/yellow]"
+    )
+
+
+def _install_asyncio_guard() -> None:
+    """Install ``_asyncio_exception_handler`` on the running loop (idempotent)."""
+    loop = asyncio.get_running_loop()
+    if loop.get_exception_handler() is None:
+        loop.set_exception_handler(_asyncio_exception_handler)
+
+
 async def _run(
     runtime: Runtime,
     description: str,
@@ -369,6 +396,7 @@ async def _run(
 ) -> tuple[Agent | None, StateWriter, dict[str, str]]:
     """Run a task to completion, streaming state/events to files and keeping a
     live single-line token counter + always-available input while it works."""
+    _install_asyncio_guard()
     writer = _make_writer(runtime)
     runtime.event_bus.clear()
     attach_events(runtime, writer)

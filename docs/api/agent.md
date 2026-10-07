@@ -112,7 +112,11 @@ Each iteration:
 1. Appends a **Context Observation** (turn count, message count, token estimate)
 2. Calls `llm.generate_with_tools(messages, tools)`
 3. If the response has tool calls: executes them via `ToolRegistry.execute()`, feeds results back
-4. If the response has no tool calls: treats content as the report summary
+4. If the response has no tool calls: treats content as the report summary —
+   unless streamed children are still running (`stream_children=True`), in which
+   case the turn is a wait: the content is committed to context and the loop
+   harvests the next settling child instead of reporting (a final report would
+   cancel the in-flight children the agent is waiting for)
 5. Safety checks: max iterations, repeated-call detection
 
 ### `async continue_with_input(user_message: str) -> None`

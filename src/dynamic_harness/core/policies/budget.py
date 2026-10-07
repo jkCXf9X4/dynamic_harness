@@ -85,8 +85,17 @@ class TimeoutPolicy:
     retry layer): this is the full-run wall clock ``safety.timeout_seconds``.
     """
 
-    def __init__(self, *, timeout_seconds: float | None) -> None:
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float | None,
+        child_return_floor_seconds: float = 1800.0,
+    ) -> None:
         self.timeout_seconds: float | None = timeout_seconds
+        # Each settled child run re-arms the parent's wall clock to at least
+        # this much remaining budget: a parent that just received a child
+        # result is never close to its timeout.
+        self.child_return_floor_seconds: float = child_return_floor_seconds
 
     @property
     def enabled(self) -> bool:
@@ -100,6 +109,18 @@ class TimeoutPolicy:
 
     def exceeded(self, elapsed: float) -> bool:
         return self.enabled and elapsed > self.timeout_seconds
+
+    def started_at_after_child_return(
+        self, *, started_at: float, now: float
+    ) -> float | None:
+        """Adjusted ``started_at`` baseline guaranteeing at least
+        ``child_return_floor_seconds`` of remaining budget once a child run
+        settles (None when uncapped — there is no baseline to adjust)."""
+        if self.timeout_seconds is None:
+            return None
+        remaining = max(0.0, self.timeout_seconds - (now - started_at))
+        floor = max(remaining, self.child_return_floor_seconds)
+        return now - (self.timeout_seconds - floor)
 
     @staticmethod
     def timeout_message(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import gc
 import json
 import shutil
 from collections.abc import AsyncGenerator
@@ -780,3 +782,79 @@ async def test_agent_test_helper_completes_with_llm(runtime: Runtime, agent_test
     await agent_test.run("Do something")
     assert agent_test.status == "completed"
     assert "Task complete" in agent_test.summary
+
+# ── result_bash: subprocess stdin teardown must not orphan asyncio futures ──
+
+@pytest.mark.asyncio
+async def test_result_bash_early_exit_child_returns_without_epipe(
+    runtime: Runtime,
+) -> None:
+    """A child that exits before consuming the snapshot must return normally.
+
+    The transport drops buffered input when the child dies; a BrokenPipeError
+    from the stdin write (or its close) must never escape the tool. This pins
+    the write+close-then-communicate feed against reintroducing the
+    synchronous EPIPE race.
+    """
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    first = await reg.execute(
+        "bash", "tc1", agent=agent, command="seq 1 50", token_limit=2,
+    )
+    result = await reg.execute(
+        "result_bash", "tc2", agent=agent,
+        result_id=first.result_id, command="exit 0",
+    )
+    assert isinstance(result.content, str)  # returned, did not raise
+
+
+@pytest.mark.asyncio
+async def test_result_bash_timeout_teardown_leaves_no_orphaned_futures(
+    runtime: Runtime,
+) -> None:
+    """Killing a stdin-piped child mid-drain must not orphan asyncio futures.
+
+    ``communicate(text)`` feeds stdin via an internal task whose drain waiter
+    is resolved with a BrokenPipeError when the killed child's pipe closes —
+    nobody retrieves it, and the event loop reports it as an unhandled
+    exception (observed as a fatal "Unhandled exception in event loop" that
+    aborted a run). Capture the loop's exception contexts around repeated
+    forced timeout-kills of children that never read stdin and require none.
+
+    The orphan is a tight race (child death must land between the drain
+    waiter's exception-set and the feed task's cancellation step), so a single
+    trial can miss it — hence the trial loop.
+    """
+    reg = _make_registry()
+    agent = _make_agent(runtime, "test")
+    first = await reg.execute(
+        "bash", "tc1", agent=agent, command="seq 1 40000", token_limit=2,
+    )
+
+    captured: list[dict] = []
+    loop = asyncio.get_running_loop()
+    old_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda l, ctx: captured.append(ctx))
+    try:
+        for _ in range(12):
+            # Snapshot >> 64KiB pipe buffer + a child that never reads stdin +
+            # tiny timeout: the writer is paused mid-drain when the timeout
+            # fires and the whole process group is killed — the teardown race.
+            result = await reg.execute(
+                "result_bash", "tc2", agent=agent,
+                result_id=first.result_id, command="sleep 30", timeout=100,
+            )
+            assert "timed out" in result.content
+            # Let the killed child's transports finish their connection_lost
+            # dance, then force the GC pass that surfaces orphaned futures.
+            await asyncio.sleep(0.15)
+            gc.collect()
+    finally:
+        loop.set_exception_handler(old_handler)
+
+    leaked = [
+        c for c in captured
+        if isinstance(c.get("exception"), (BrokenPipeError, ConnectionResetError))
+        or "never retrieved" in str(c.get("message", ""))
+    ]
+    assert not leaked, f"orphaned asyncio futures: {leaked!r}"

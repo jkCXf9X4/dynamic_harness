@@ -250,6 +250,11 @@ class Agent:
         self.rate_limit_backoff_multiplier: float = 3.0
         self.fallback_on_rate_limit: bool = True
         self._started_at: float | None = None
+        # Delegated child runs currently executing. While any child of this
+        # agent is running its wall-clock timeout is suspended (a parent must
+        # not time out while a child runs), and each child settle re-arms the
+        # budget with at least TimeoutPolicy's child-return floor.
+        self._children_running: int = 0
         self._has_run: bool = False
         self._iteration: int = 0
         self._report_artifact_id: str | None = None
@@ -1041,13 +1046,17 @@ class Agent:
 
         The full-run timeout (``safety.timeout_seconds``) is enforced even WHILE
         a request is in flight, so a single slow call (plus its retries) can never
-        overshoot the run's wall-clock budget. Returns None when the budget was
-        exhausted mid-call (the loop should stop). The per-call httpx timeout on
-        the provider remains the tighter bound for a single request.
+        overshoot the run's wall-clock budget — EXCEPT while a delegated child is
+        still running: the budget cannot fire then, so the call is awaited without
+        the run-budget bound (the per-call httpx timeout on the provider remains
+        the tighter bound for a single request, and the budget re-arms once the
+        child settles). Returns None when the budget was exhausted mid-call (the
+        loop should stop).
         """
         remaining = None
         if (
-            self._safety_timeout_seconds is not None
+            self._children_running == 0
+            and self._safety_timeout_seconds is not None
             and self._started_at is not None
         ):
             timeout = TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds)
@@ -1155,14 +1164,42 @@ class Agent:
             child = await self._runtime._recover(child)
         return self._format_delegate_result(child), child
 
+    # -- child-run wall-clock coupling ------------------------------------
+
+    def _child_run_started(self, task: asyncio.Task[None]) -> None:
+        """Register a delegated child run: while it executes, this agent's
+        wall-clock timeout cannot fire (a parent must not time out while one
+        of its children is still running)."""
+        self._children_running += 1
+        task.add_done_callback(self._child_run_settled)
+
+    def _child_run_settled(self, task: asyncio.Task[None]) -> None:
+        """Settle a delegated child run (any ending — completed, failed,
+        killed, cancelled): drop the suspension and re-arm the wall-clock
+        budget so at least ``TimeoutPolicy.child_return_floor_seconds``
+        (30 min) of budget remains."""
+        self._children_running = max(0, self._children_running - 1)
+        if self._safety_timeout_seconds is None or self._started_at is None:
+            return
+        timeout = TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds)
+        adjusted = timeout.started_at_after_child_return(
+            started_at=self._started_at, now=time.monotonic()
+        )
+        if adjusted is not None:
+            self._started_at = adjusted
+
     # -- run loop ---------------------------------------------------------
 
     def _safety_check(self) -> bool:
         """Return True when a safety limit was hit and the loop must stop."""
         timeout = TimeoutPolicy(timeout_seconds=self._safety_timeout_seconds)
+        # A running child suspends the wall-clock timeout: the parent cannot
+        # time out while one of its children is still executing (each child
+        # settle re-arms the budget instead).
         if (
             timeout.enabled
             and self._started_at is not None
+            and self._children_running == 0
             and timeout.exceeded(time.monotonic() - self._started_at)
         ):
             self._terminated_by_safety = True
@@ -1660,6 +1697,28 @@ class Agent:
                         continue
             else:
                 content = (response.content or "").strip()
+                if self.stream_children and self._stream_pending:
+                    # A text-only turn while streamed children are still
+                    # running is a WAIT, not a final report. Routing it to
+                    # report() would cancel every in-flight child (report()
+                    # cancels stragglers) — the self-heal ↔ waiting deadlock
+                    # from run 261007_212018_b659: a waiting root posted prose
+                    # ("still running…"), the heal read that as a blunt
+                    # termination, and the resume/fresh action cancelled
+                    # exactly the children the root was waiting for.
+                    if content:
+                        self.context.commit_turn(
+                            {"role": "assistant", "content": content}, [],
+                        )
+                    if await self._harvest_streamed_child():
+                        continue
+                    # The harvest returned False: safety fired while waiting,
+                    # which already recorded the failure and cancelled the
+                    # stragglers — stop here rather than reporting on top of
+                    # a terminal verdict.
+                    if self.task.status is not TaskStatus.running:
+                        self.persist_checkpoint()
+                        return
                 if not content:
                     # A response with neither tool calls nor usable text is a
                     # degenerate provider output. Fail gracefully rather than
@@ -2161,6 +2220,9 @@ class Agent:
         task = asyncio.create_task(child.run())
         self._runtime.track_agent_task(task)
         self._runtime.set_agent_run_task(child.id, task)
+        # While this child runs, the parent's wall-clock timeout is suspended;
+        # when it settles, the parent's budget re-arms (>= 30 min left).
+        self._child_run_started(task)
         if self.stream_children:
             self._stream_pending[tool_call_id] = (tool_call_id, child, task)
             return json.dumps({
@@ -2375,6 +2437,9 @@ class Agent:
                     fresh_task = asyncio.create_task(fresh.run())
                     self._runtime.track_agent_task(fresh_task)
                     self._runtime.set_agent_run_task(fresh.id, fresh_task)
+                    # The fresh worker is this agent's child too: same
+                    # wall-clock suspension + settle re-arm as a delegation.
+                    self._child_run_started(fresh_task)
                     try:
                         await fresh_task
                     except Exception as exc:

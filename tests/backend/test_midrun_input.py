@@ -84,7 +84,10 @@ def _runtime(tmp_path) -> Runtime:
 
 async def test_midrun_input_answers_while_child_executes(tmp_path) -> None:
     """Typing during a child-wait lets the top agent answer immediately: its next
-    LLM call must include the user's message as a fresh user turn (FR-3.5.3)."""
+    LLM call must include the user's message as a fresh user turn (FR-3.5.3).
+    The text-only answer is a committed turn, not a final report — report()
+    would cancel the in-flight child — so the parent waits for the child, its
+    result folds into context, and the following call finalizes the run."""
     rt = _runtime(tmp_path)
     llm = _RecordingLLM([
         ToolCallResponse(
@@ -109,10 +112,21 @@ async def test_midrun_input_answers_while_child_executes(tmp_path) -> None:
 
     assert root.task.status.value == "completed"
     assert root.last_report is not None
-    assert root.last_report.summary == "Here is my direct answer"
     assert len(llm.seen) >= 2
     second = " ".join(str(m.get("content") or "") for m in llm.seen[1])
     assert "ANSWER ME DIRECTLY" in second
+    # The answer was not lost and did not cancel the child: it is committed as
+    # an assistant turn, the child runs to completion, and its result folds in.
+    assert any(
+        m.get("role") == "assistant" and "Here is my direct answer" in str(m.get("content"))
+        for m in root.context.messages
+    )
+    child = root.children[0]
+    assert child.task.status.value == "completed"
+    assert any("claim-123-verified" in str(m.get("content")) for m in root.context.messages)
+    # The finalizing call saw both the answer and the settled child result.
+    final = " ".join(str(m.get("content") or "") for m in llm.seen[2])
+    assert "Here is my direct answer" in final and "claim-123-verified" in final
 
 
 async def test_interrupted_gather_keeps_children_non_lossy(tmp_path) -> None:

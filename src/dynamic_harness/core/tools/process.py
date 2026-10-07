@@ -54,6 +54,26 @@ async def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
         await asyncio.wait_for(proc.wait(), timeout=2.0)
     except asyncio.TimeoutError:
         pass
+    await _retrieve_stdin_close_state(proc)
+
+
+async def _retrieve_stdin_close_state(proc: asyncio.subprocess.Process) -> None:
+    """Retrieve stdin's close state so its exception is never orphaned.
+
+    When the killed child's pipe dies, the write transport closes stdin's
+    StreamReaderProtocol with a bare ``BrokenPipeError()`` (unix_events.py
+    ``_read_ready`` → ``_close``); that lands on the StreamWriter's
+    ``_closed`` future, which nobody else ever awaits — left unretrieved it
+    surfaces at GC as "Future exception was never retrieved" and the event
+    loop reports it as an unhandled exception (observed to abort a run).
+    """
+    stdin = proc.stdin
+    if stdin is None:
+        return
+    try:
+        await stdin.wait_closed()
+    except (BrokenPipeError, ConnectionResetError):
+        pass
 
 
 async def bash(*, ctx: ToolContext, command: str, timeout: int = 120000, workdir: str | None = None) -> str:

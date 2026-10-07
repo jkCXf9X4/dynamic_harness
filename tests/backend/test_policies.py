@@ -531,6 +531,22 @@ def test_timeout_policy_remaining_and_messages() -> None:
     assert not uncapped.enabled and uncapped.remaining_seconds(9) is None
 
 
+def test_timeout_policy_child_return_floor() -> None:
+    """A child settle re-arms the wall-clock budget: the baseline shifts so at
+    least the floor (default 30 min) of budget remains."""
+    pol = TimeoutPolicy(timeout_seconds=60.0, child_return_floor_seconds=30.0)
+    # 55s consumed -> 5s left -> topped up to the 30s floor.
+    assert pol.started_at_after_child_return(started_at=0.0, now=55.0) == 25.0
+    # 55s elapsed against the adjusted baseline leaves exactly the floor.
+    assert pol.remaining_seconds(55.0 - 25.0) == 30.0
+    # Remaining already above the floor: baseline untouched.
+    assert pol.started_at_after_child_return(started_at=0.0, now=10.0) == 0.0
+    # Uncapped: no baseline to adjust.
+    assert TimeoutPolicy(timeout_seconds=None).started_at_after_child_return(
+        started_at=0.0, now=10.0**9
+    ) is None
+
+
 def test_token_budget_policy() -> None:
     pol = TokenBudgetPolicy(max_agent_tokens=1000)
     assert pol.exceeded(1001) is True and pol.exceeded(999) is False
