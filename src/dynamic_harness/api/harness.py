@@ -78,25 +78,23 @@ class Harness:
         self._user_on_failure: Callable[[str, Failure], None] | None = None
         self._user_on_activity: Callable[[ActivityEvent], None] | None = None
 
-    def _configure_llm(self, config: dict[str, Any]) -> None:
-        from ..llm.openai_provider import OpenAIProvider
+    def _configure_llm(self, llm_config: dict[str, Any]) -> None:
+        """Build the LLM provider from a config mapping.
 
-        # Treat empty/whitespace api_key as unset and fall through to the
-        # environment (mirrors config.merge_api_key).
-        api_key = config.get("api_key", "")
-        if not api_key or not api_key.strip():
-            api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get(
-                "OPENAI_API_KEY"
-            )
-        llm = OpenAIProvider(
-            model=config.get("model", "deepseek/deepseek-v4-flash"),
-            base_url=config.get("base_url", "https://openrouter.ai/api/v1"),
-            api_key=api_key,
-            verify_ssl=config.get("verify_ssl", True),
-            provider_force=config.get("provider_force"),
-            timeout=config.get("call_timeout_seconds", 500.0),
-        )
-        self._runtime.set_llm(llm)
+        Accepts the v2 config shape (``model`` + ``providers``). The flat
+        provider keys were removed — stale keys raise a validation error
+        naming the field. The credential comes from the selected provider's
+        ``env`` names in the environment (never from the config file); a run
+        with no credential stays keyless and the agent fails with a recorded
+        "No LLM provider configured" reason. The registry is attached to the
+        runtime so ``switch_provider`` can swap providers later.
+        """
+        from ..llm.registry import ProviderRegistry
+
+        config = HarnessConfig.model_validate(llm_config)
+        registry = ProviderRegistry.from_config(config)
+        self._runtime.provider_registry = registry
+        self._runtime.set_llm(registry.select())
 
     def _on_report(self, agent_id: str, payload: ReportPayload) -> None:
         if self._verbose:

@@ -8,7 +8,7 @@ state: README.md
 artifacts:
   - product-breakdown/README.md
   - product-breakdown/tools/check_node_size.py
-  - 3rd_party/agent_methods_and_tools/methods/product-breakdown/SKILL.md
+  - 3rd_party/agent_methods_and_tools/src/agent_methods/methods/product-breakdown/SKILL.md
   - docs/references/information_hygiene.md (storage-rules, readability-rules)
   - product-breakdown/05-operation/runbook/README.md
   - product-breakdown/**/*.md all (IMP-016)

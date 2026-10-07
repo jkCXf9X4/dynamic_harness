@@ -27,8 +27,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from ..config import load_harness_config, merge_api_key
-from ..llm.openai_provider import OpenAIProvider
+from ..config import load_harness_config
+from ..llm.registry import ProviderRegistry
 from .comms import CELLS, COLLAB_TASKS, runtime_factory_for
 from .metrics import MetricsCollector, RunMetrics
 from .runner import run_one
@@ -49,19 +49,6 @@ def _stage_workspace() -> Path:
     )
     (ws / ".optimize_benchmarks").mkdir()
     return ws
-
-
-def _make_llm(config, api_key: str) -> OpenAIProvider:
-    return OpenAIProvider(
-        model=config.llm.model,
-        base_url=config.llm.base_url,
-        api_key=api_key,
-        verify_ssl=config.llm.verify_ssl,
-        provider_ignore=config.llm.provider_ignore or None,
-        provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
-        provider_force=config.llm.provider_force,
-        timeout=config.llm.call_timeout_seconds,
-    )
 
 
 def _cell_of(m: RunMetrics) -> str:
@@ -211,7 +198,8 @@ def main() -> None:
         args.replicates = 1
 
     config = load_harness_config()
-    api_key = merge_api_key(config)
+    registry = ProviderRegistry.from_config(config)
+    api_key = registry.api_key_for(registry.active_provider_id)
     if not api_key:
         print("Error: no API key found (OPENROUTER_API_KEY / OPENAI_API_KEY)", file=sys.stderr)
         sys.exit(1)
@@ -224,12 +212,12 @@ def main() -> None:
         print(f"Error: unknown cells {unknown} (use: {', '.join(CELLS)})", file=sys.stderr)
         sys.exit(1)
 
-    llm = _make_llm(config, api_key)
-    print(f"LLM: {config.llm.model} | cells: {', '.join(cells)} | tasks: {task_modes} | reps: {args.replicates}", flush=True)
+    llm = registry.select()
+    print(f"LLM: {config.model} | cells: {', '.join(cells)} | tasks: {task_modes} | reps: {args.replicates}", flush=True)
     ws = _stage_workspace()
     print(f"workspace: {ws}", flush=True)
 
-    collector = _make_collector(config)
+    collector = _make_collector(registry)
 
     async def run_async():
         results: list[RunMetrics] = []
@@ -258,8 +246,8 @@ def main() -> None:
     summary = _summarize(results, cells)
     meta = {
         "when": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "model": config.llm.model,
-        "base_url": config.llm.base_url,
+        "model": config.model,
+        "base_url": config.providers[registry.active_provider_id].base_url,
         "task_ids": args.tasks,
         "replicates": args.replicates,
         "runs": len(results),
@@ -275,11 +263,11 @@ def main() -> None:
     print(f"\nReport: {OUT_DIR / 'RESULTS.md'}\nRaw: {OUT_DIR / 'metrics-cells.json'}")
 
 
-def _make_collector(config):
+def _make_collector(registry: ProviderRegistry):
     from .metrics import MetricsCollector
     return MetricsCollector(
-        price_input_per_mtok=config.llm.price_input_per_mtok or 0.0,
-        price_output_per_mtok=config.llm.price_output_per_mtok or 0.0,
+        price_input_per_mtok=registry.model_info.cost.input or 0.0,
+        price_output_per_mtok=registry.model_info.cost.output or 0.0,
     )
 
 

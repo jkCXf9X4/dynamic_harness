@@ -21,9 +21,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from ..config import load_harness_config, merge_api_key
+from ..config import load_harness_config
 from ..core.runtime import Runtime
-from ..llm.openai_provider import OpenAIProvider
+from ..llm.registry import ProviderRegistry
 from . import Benchmark
 from .scoring import format_scores
 
@@ -64,30 +64,22 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_harness_config()
-    api_key = merge_api_key()
+    registry = ProviderRegistry.from_config(config)
+    api_key = registry.api_key_for(registry.active_provider_id)
     if not api_key:
         print("Error: no API key found", file=sys.stderr)
         sys.exit(1)
 
     prompts = _load_prompts(Path(args.prompts), args.seed_only)
-    print(f"LLM: {config.llm.model} | prompts: {list(prompts)}")
+    print(f"LLM: {config.model} | prompts: {list(prompts)}")
 
-    llm = OpenAIProvider(
-        model=config.llm.model,
-        base_url=config.llm.base_url,
-        api_key=api_key,
-        verify_ssl=config.llm.verify_ssl,
-        provider_ignore=config.llm.provider_ignore or None,
-        provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
-        provider_force=config.llm.provider_force,
-        timeout=config.llm.call_timeout_seconds,
-    )
+    llm = registry.select()
 
     benchmark = Benchmark(
         runtime_factory=_make_runtime_factory(config, api_key, llm),
         output_dir=Path(".optimize_benchmarks"),
-        price_input_per_mtok=config.llm.price_input_per_mtok or 0.0,
-        price_output_per_mtok=config.llm.price_output_per_mtok or 0.0,
+        price_input_per_mtok=registry.model_info.cost.input or 0.0,
+        price_output_per_mtok=registry.model_info.cost.output or 0.0,
     )
 
     def progress(line: str) -> None:

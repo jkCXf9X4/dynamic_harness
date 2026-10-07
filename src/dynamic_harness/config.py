@@ -1,28 +1,97 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 DEFAULT_CONFIG_FILENAME = "harness.json"
 XDG_CONFIG_DIR = Path.home() / ".config" / "dynamic-harness"
 
 
-class LLMProviderConfig(BaseModel):
-    model: str = "deepseek/deepseek-v4-flash"
-    base_url: str = "https://openrouter.ai/api/v1"
-    provider_ignore: list[str] = Field(default_factory=list)
-    provider_allow_fallbacks: bool = True
+class ModelLimit(BaseModel):
+    """Token limits for one model, when known."""
+
+    context: int | None = Field(default=None, ge=1, description="Context window in tokens.")
+    output: int | None = Field(default=None, ge=1, description="Maximum output tokens.")
+
+
+class ModelCost(BaseModel):
+    """USD pricing for one model, per 1M tokens, when known.
+
+    ``0``/``None`` means "unknown price" → cost 0 (uncounted, not free — the
+    caller decides how to report an unknown-price run).
+    """
+
+    input: float | None = Field(default=None, ge=0, description="USD per 1M input tokens.")
+    output: float | None = Field(default=None, ge=0, description="USD per 1M output tokens.")
+
+
+class ModelSpec(BaseModel):
+    """Metadata for one selectable model.
+
+    The ``providers.<id>.models`` map key is the model id used in model refs
+    (``<provider>/<model>``); ``model_id`` remaps the id sent upstream to the
+    provider API (default: the map key). Entries add name/limit/cost metadata;
+    a model absent from the map passes through as-is.
+    """
+
+    model_id: str | None = Field(
+        default=None,
+        description="Model or deployment id sent to the provider API. Defaults to the map key.",
+    )
+    name: str | None = Field(default=None, description="Display name.")
+    limit: ModelLimit | None = None
+    cost: ModelCost | None = None
+
+
+class ProviderConfig(BaseModel):
+    """One named provider: identity, credential source, endpoint, routing, models.
+
+    Credentials come from the environment only — never from the config file —
+    via the ordered ``env`` variable names (the first set one wins). The
+    ``provider_*`` routing knobs shape the OpenRouter request body and only
+    mean anything on an OpenRouter-style routing endpoint.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, description="Display name.")
+    env: list[str] = Field(
+        default_factory=list,
+        description="Ordered environment variable names that can provide the credential.",
+    )
+    base_url: str = Field(description="OpenAI-compatible API base URL.")
     provider_force: str | None = Field(
         default=None,
         description="OpenRouter provider slug to pin exclusively (disables fallbacks).",
     )
+    provider_ignore: list[str] = Field(
+        default_factory=list,
+        description="OpenRouter provider slugs to exclude from routing.",
+    )
+    provider_allow_fallbacks: bool = Field(
+        default=True,
+        description="Allow OpenRouter upstream fallback routing.",
+    )
+    models: dict[str, ModelSpec] = Field(
+        default_factory=dict,
+        description="Model metadata keyed by the model id used in model refs.",
+    )
+
+
+class LLMSettings(BaseModel):
+    """General LLM call behavior, shared by every provider (the ``llm`` section).
+
+    Provider identity, endpoint, credential, and OpenRouter routing live on
+    each ``providers`` entry; everything about HOW a call is made lives here so
+    the knobs are configured once, not per provider.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     verify_ssl: bool = True
-    price_input_per_mtok: float | None = Field(default=None, description="USD per 1M input tokens, if known")
-    price_output_per_mtok: float | None = Field(default=None, description="USD per 1M output tokens, if known")
     call_timeout_seconds: float = Field(
         default=500.0, gt=0,
         description="Timeout for a single LLM request, in seconds. A slow or stuck "
@@ -83,8 +152,99 @@ class LLMProviderConfig(BaseModel):
                     "every turn of a conversation on one provider for a warm "
                     "prompt cache), so OpenRouter can route the retry to a "
                     "different provider. Only the retried calls drop the pin; the "
-                    "next turn resumes normal session pinning. Has no effect when "
-                    "provider_force pins a single provider already.",
+                    "next turn resumes normal session pinning.",
+    )
+
+
+class ResolvedModel(BaseModel):
+    """The active model fully resolved: which provider builds it, which model
+    id the API receives, and its catalog metadata."""
+
+    provider_id: str
+    model_id: str = Field(description="Model id used in model refs (the catalog key).")
+    upstream_id: str = Field(description="Model/deployment id sent to the provider API.")
+    name: str | None = None
+    limit: ModelLimit | None = None
+    cost: ModelCost | None = None
+
+
+def _default_providers() -> dict[str, ProviderConfig]:
+    """The built-in provider set: OpenRouter with today's defaults.
+
+    A config file with no ``providers`` still resolves — ``model`` defaults to
+    ``openrouter/deepseek/deepseek-v4-flash`` and the implicit OpenRouter entry
+    carries the default endpoint and credential source, so out-of-the-box
+    behavior is unchanged from the single-provider config.
+    """
+
+    return {
+        "openrouter": ProviderConfig(
+            name="OpenRouter",
+            env=["OPENROUTER_API_KEY", "OPENAI_API_KEY"],
+            base_url="https://openrouter.ai/api/v1",
+            models={"deepseek/deepseek-v4-flash": ModelSpec(name="DeepSeek V4 Flash")},
+        )
+    }
+
+
+def resolve_model_ref(
+    providers: dict[str, ProviderConfig],
+    default_ref: str,
+    model_ref: str | None = None,
+    provider: str | None = None,
+) -> ResolvedModel:
+    """Resolve a model reference to a provider + model (pure — constructs nothing).
+
+    References are ``<provider>/<model>``; the FIRST slash splits provider id
+    from model id, so multi-slash upstream ids (``openrouter/deepseek/deepseek-v4-flash``)
+    resolve to provider ``openrouter``, model ``deepseek/deepseek-v4-flash``.
+
+    With ``provider`` given, the model is the ref naming that provider, else
+    the config default's model when it names it, else the provider's first
+    models key (deterministic insertion order). Raises ``ValueError`` for an
+    unknown provider, a ref without a provider prefix, or a provider with no
+    models.
+    """
+
+    def resolved(provider_id: str, model_key: str) -> ResolvedModel:
+        spec = providers[provider_id].models.get(model_key) or ModelSpec()
+        return ResolvedModel(
+            provider_id=provider_id,
+            model_id=model_key,
+            upstream_id=spec.model_id or model_key,
+            name=spec.name,
+            limit=spec.limit,
+            cost=spec.cost,
+        )
+
+    if provider is not None:
+        if provider not in providers:
+            raise ValueError(_unknown_provider(provider, providers))
+        for candidate in (model_ref, default_ref):
+            if not candidate:
+                continue
+            prefix, _, key = candidate.partition("/")
+            if prefix == provider and key:
+                return resolved(provider, key)
+        models = providers[provider].models
+        if not models:
+            raise ValueError(f"provider '{provider}' has no models configured; add a models entry")
+        return resolved(provider, next(iter(models)))
+
+    ref = model_ref or default_ref
+    provider_id, sep, model_key = ref.partition("/")
+    if not sep or provider_id not in providers:
+        raise ValueError(
+            f"model ref '{ref}' must be '<provider>/<model>' with <provider> one of: "
+            f"{', '.join(sorted(providers))}"
+        )
+    return resolved(provider_id, model_key)
+
+
+def _unknown_provider(provider: str, providers: dict[str, ProviderConfig]) -> str:
+    return (
+        f"unknown provider '{provider}' — model refs select from the config's "
+        f"'providers' map (keys: {', '.join(sorted(providers))})"
     )
 
 
@@ -386,8 +546,9 @@ class AgentConfig(BaseModel):
         description="Directory of skills — task-specific instruction "
                     "packages, one directory per skill (<root>/<name>/SKILL.md with "
                     "name + description frontmatter and optional roles). Install a "
-                    "generic library (e.g. 3rd_party/agent_methods_and_tools via its "
-                    "install.py) and point this at it, typically '.agents/skills'. "
+                    "generic library (e.g. 3rd_party/agent_methods_and_tools via "
+                    "its agent-methods command) and point this at it, typically "
+                    "'.agents/skills'. "
                     "Triggers (name + description) are injected role-filtered into each "
                     "agent's system prompt; bodies load on demand via the "
                     "skill_load tool; the role gate applies to raw file access too. "
@@ -412,11 +573,37 @@ class AgentConfig(BaseModel):
 
 
 class HarnessConfig(BaseModel):
-    llm: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+    model: str = Field(
+        default="openrouter/deepseek/deepseek-v4-flash",
+        description="Default model selection in '<provider>/<model>' form. The "
+                    "first slash splits provider id from model id, so multi-slash "
+                    "upstream ids (openrouter/deepseek/deepseek-v4-flash) resolve "
+                    "to provider 'openrouter', model 'deepseek/deepseek-v4-flash'.",
+    )
+    llm: LLMSettings = Field(default_factory=LLMSettings)
+    providers: dict[str, ProviderConfig] = Field(
+        default_factory=_default_providers,
+        description="Named providers keyed by the id used in model refs and "
+                    "--provider. Keys route model refs; each entry carries the "
+                    "credential source (env names — never secrets), endpoint, "
+                    "OpenRouter routing, and model catalog. The built-in default "
+                    "is OpenRouter.",
+    )
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     self_heal: SelfHealConfig = Field(default_factory=SelfHealConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     communication: CommsConfig = Field(default_factory=CommsConfig)
+
+    def resolve_model(
+        self, model_ref: str | None = None, provider: str | None = None
+    ) -> ResolvedModel:
+        """Resolve a model reference to the active provider + model.
+
+        See :func:`resolve_model_ref` for the reference grammar and the
+        ``--provider`` selection rule.
+        """
+
+        return resolve_model_ref(self.providers, self.model, model_ref, provider)
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:
@@ -492,8 +679,3 @@ def load_harness_config(path: str | None = None) -> HarnessConfig:
             raise ValueError(f"Config file '{cfg_path}' must contain a JSON object")
         merged = _deep_merge(merged, raw)
     return HarnessConfig.model_validate(merged)
-
-
-def merge_api_key(config: HarnessConfig | None = None) -> str | None:
-    """Return the API key from env only — never from the JSON config."""
-    return os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")

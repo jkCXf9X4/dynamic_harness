@@ -66,7 +66,7 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 ```
 src/dynamic_harness/
 ├── __main__.py          → entry: python -m dynamic_harness
-├── config.py            → HarnessConfig, LLMProviderConfig, SafetyConfig, harness.json loading
+├── config.py            → HarnessConfig, ProviderConfig, ModelSpec, ResolvedModel, LLMSettings, harness.json loading
 ├── api/harness.py       → Harness (high-level programmatic API)
 ├── core/
 │   ├── agent.py         → Agent class + system prompt + run() loop + safety
@@ -82,7 +82,7 @@ src/dynamic_harness/
 ├── artifact/            → ArtifactStore (progressive disclosure) + summaries
 ├── memory/              → Repository (Git-like provenance commits)
 ├── benchmark/           → deterministic task suite + scoring + standalone CLI
-└── llm/                 → LLMProvider ABC + OpenAIProvider
+└── llm/                 → LLMProvider ABC + OpenAIProvider + ProviderRegistry (named providers from config → built instances)
 
 tests/                   → pytest suite (backend/ + cli/)
 product-breakdown/       → systems-engineering record (seven layers; start at its README.md)
@@ -143,7 +143,7 @@ Data flow, in one line: `User/CLI → Runtime.delegate(Task) → Agent.run()` (t
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
 | Change agent methodology | `product-breakdown/02-architecture/methodology/README.md` |
-| Change rationale / reference library | `core/references.py` + `docs/references/` + installed skills (`3rd_party/agent_methods_and_tools/methods/` → `.agents/skills/`) |
+| Change rationale / reference library | `core/references.py` + `docs/references/` + installed skills (`3rd_party/agent_methods_and_tools/src/agent_methods/methods/` → `.agents/skills/`) |
 
 
 

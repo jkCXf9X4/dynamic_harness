@@ -11,7 +11,7 @@ status: current
 
 ## Failure Recovery
 
-See delegation-guidelines skill (`3rd_party/agent_methods_and_tools/methods/delegation-guidelines/SKILL.md`) →
+See delegation-guidelines skill (`3rd_party/agent_methods_and_tools/src/agent_methods/methods/delegation-guidelines/SKILL.md`) →
 "The Kill → Inspect → Retry loop" for the full salvage-and-retry protocol.
 Short version:
 

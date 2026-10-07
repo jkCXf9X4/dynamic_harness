@@ -197,6 +197,21 @@ provider = OpenAIProvider(api_key="sk-...", model="gpt-4o")
 runtime.set_llm(provider)
 ```
 
+### `switch_provider(model_ref: str) -> None`
+
+Swap the active provider for agents created from now on. Resolves
+`model_ref` through the attached registry, rebuilds the cost policy from the
+new model's catalog cost, and swaps the provider. Agents capture
+`runtime.provider` (and the policy knobs) at construction, so a switch applies
+to agents created afterward; running agents keep theirs — session pinning and
+prompt-cache continuity are per provider. A mid-turn swap inside one agent's
+context is deliberately unsupported. Requires `provider_registry`; without
+one, `set_llm` remains the manual path.
+
+```python
+runtime.switch_provider("openrouter/anthropic/claude-sonnet-4")
+```
+
 ## Token Usage Tracking
 
 ### `async record_usage(agent_id, *, prompt_tokens=0, completion_tokens=0, message_count=0) -> None`

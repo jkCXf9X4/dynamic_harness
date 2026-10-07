@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from dynamic_harness.config import HarnessConfig, LLMProviderConfig, SafetyConfig
+from dynamic_harness.config import HarnessConfig, LLMSettings, SafetyConfig
 from dynamic_harness.core.agent import Agent
 from dynamic_harness.core.runtime import Runtime
 from dynamic_harness.core.task import Task, TaskStatus
@@ -540,7 +540,7 @@ def test_runtime_wires_recovery_from_config(tmp_path) -> None:
 
 def test_runtime_wires_call_timeout_to_agent(tmp_path) -> None:
     """llm.call_timeout_seconds is threaded from config through Runtime to each agent."""
-    cfg = HarnessConfig(llm=LLMProviderConfig(call_timeout_seconds=45.5))
+    cfg = HarnessConfig(llm=LLMSettings(call_timeout_seconds=45.5))
     rt = Runtime(
         artifact_root=tmp_path / "artifacts",
         repo_root=tmp_path / "repo",

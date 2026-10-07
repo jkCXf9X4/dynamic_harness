@@ -84,18 +84,29 @@ positive value or `null`, so only `null` disables those. Per-cap notes call this
 
 ---
 
-## `llm` — LLM provider
+## `model` — default model selection
+
+The default model, in `<provider>/<model>` form. The FIRST slash splits
+provider id from model id, so multi-slash upstream ids resolve: provider
+`openrouter`, model `deepseek/deepseek-v4-flash-0731`.
+
+```json
+{
+  "model": "openrouter/deepseek/deepseek-v4-flash-0731"
+}
+```
+
+---
+
+## `llm` — general LLM call behavior (shared by every provider)
+
+Provider identity, endpoint, credential, and OpenRouter routing live on each
+`providers` entry; everything about HOW a call is made lives here so the knobs
+are configured once, not per provider.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `model` | `deepseek/deepseek-v4-flash` | Model identifier sent to the provider. |
-| `base_url` | `https://openrouter.ai/api/v1` | Provider endpoint. Point at `https://api.openai.com/v1` to use OpenAI directly. |
-| `provider_ignore` | `[]` | OpenRouter provider slugs to exclude (blacklist). |
-| `provider_allow_fallbacks` | `true` | Let the provider fall back to other models when the primary is unavailable. |
-| `provider_force` | `null` | OpenRouter provider slug to pin exclusively. Setting this disables fallbacks. |
 | `verify_ssl` | `true` | Verify TLS certificates on LLM requests. |
-| `price_input_per_mtok` | `null` | USD per 1M input tokens, if known (used for cost reporting). |
-| `price_output_per_mtok` | `null` | USD per 1M output tokens, if known (used for cost reporting). |
 | `call_timeout_seconds` | `500.0` | Timeout for a single LLM request. Must be `> 0`. A slow/stuck provider call is abandoned after this; the agent may retry transient failures. This is a *per-call* deadline and is separate from `safety.timeout_seconds` (the whole-run wall clock). |
 | `retry_max_attempts` | `4` | How many times a single LLM call may be retried after a generic transient failure (timeout, connection drop, 5xx) before it is given up. Each retry sleeps an exponential backoff (`retry_base_delay_seconds`, capped by `retry_max_delay_seconds`). Rate-limited calls get their own, larger budget (`rate_limit_max_attempts`). |
 | `rate_limit_max_attempts` | `6` | How many times a single LLM call may be retried after a rate limit (HTTP 429 / `engine_overloaded`). Shared upstream pool overloads can outlast the generic transient-error budget, so rate limits get more attempts and a longer backoff (`rate_limit_backoff_multiplier`). |
@@ -105,21 +116,45 @@ positive value or `null`, so only `null` disables those. Per-cap notes call this
 | `rate_limit_backoff_multiplier` | `3.0` | Scales the exponential backoff for rate-limited calls. With the defaults the sleeps run ~3s, 6s, 12s, 24s, then the 30s cap — buying a shared upstream pool tens of seconds to shed its overload. |
 | `fallback_on_rate_limit` | `true` | On a rate-limited call, retry **without** the session-pinned provider (the `session_id` that normally keeps every turn of a conversation on one provider for a warm prompt cache), so OpenRouter can route the retry to a different provider. Only the retried calls drop the pin — the next turn resumes normal session pinning. No effect when `provider_force` already pins one provider. |
 
+---
+
+## `providers` — named provider registry
+
+A map keyed by the provider id used in model refs and `--provider`. Each entry
+carries the credential source (`env` — ordered environment variable names, the
+first set one wins; credentials never live in the config file), the endpoint
+(`base_url`), the OpenRouter routing knobs, and the model catalog. The built-in
+default is OpenRouter.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `name` | `null` | Display name. |
+| `env` | `[]` | Ordered environment variable names that can provide the credential. |
+| `base_url` | *(required)* | OpenAI-compatible API base URL. |
+| `provider_force` | `null` | OpenRouter provider slug to pin exclusively. Setting this disables fallbacks. |
+| `provider_ignore` | `[]` | OpenRouter provider slugs to exclude from routing. |
+| `provider_allow_fallbacks` | `true` | Let the provider fall back to other models when the primary is unavailable. |
+| `models` | `{}` | Model catalog keyed by the model id used in model refs. `model_id` remaps the id sent upstream (default: the map key); `name` is a display name; `limit`/`cost` add token limits and USD-per-1M pricing. A model absent from the map passes through as-is. |
+
 Example:
 
 ```json
 {
+  "model": "openrouter/deepseek/deepseek-v4-flash-0731",
   "llm": {
-    "model": "deepseek/deepseek-v4-flash-0731",
-    "base_url": "https://openrouter.ai/api/v1",
-    "provider_force": "DeepInfra",
-    "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": true,
-    "verify_ssl": true,
-    "call_timeout_seconds": 500,
-    "retry_max_attempts": 4,
-    "rate_limit_max_attempts": 6,
-    "rate_limit_backoff_multiplier": 3.0
+    "verify_ssl": true
+  },
+  "providers": {
+    "openrouter": {
+      "env": ["OPENROUTER_API_KEY", "OPENAI_API_KEY"],
+      "base_url": "https://openrouter.ai/api/v1",
+      "provider_force": "DeepInfra",
+      "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
+      "provider_allow_fallbacks": true,
+      "models": {
+        "deepseek/deepseek-v4-flash-0731": {"name": "DeepSeek V4 Flash 0731"}
+      }
+    }
   }
 }
 ```
@@ -243,7 +278,7 @@ Example:
 |-----|---------|-------------|
 | `environment_notes` | `["Working dir is project root; run \`pytest\` from there."]` | Extra environment instructions appended to every agent's context observation (e.g. "pip is unavailable"). |
 | `references_dir` | `null` | Directory of durable, git-tracked reference docs (rationale) that survive prompt optimization. A compact index is injected into every agent's environment; the agent reads full bodies on demand. Defaults to the harness package's own `docs/references` (resolved relative to the package, not the cwd, so it works from any project folder); falls back to a cwd-relative `docs/references` when the project carries its own library. |
-| `skills_dir` | `null` | Directory of skills — task-specific instruction packages, one directory per skill (`<root>/<name>/SKILL.md` with `name` + `description` frontmatter and optional `roles`). Install a generic agent-methods library (e.g. `3rd_party/agent_methods_and_tools` via its `install.py`) and point this at the installed copy, typically `.agents/skills`. Triggers (name + description) are injected role-filtered into each agent's system-prompt block; bodies load on demand via the `skill_load` tool; the role gate also applies to raw file access (`read`/`glob`/`grep`). With no explicit dir, defaults to the harness package's own `skills`, falling back to a cwd-relative `skills`. |
+| `skills_dir` | `null` | Directory of skills — task-specific instruction packages, one directory per skill (`<root>/<name>/SKILL.md` with `name` + `description` frontmatter and optional `roles`). Install a generic agent-methods library (e.g. `3rd_party/agent_methods_and_tools` via its `agent-methods` command) and point this at the installed copy, typically `.agents/skills`. Triggers (name + description) are injected role-filtered into each agent's system-prompt block; bodies load on demand via the `skill_load` tool; the role gate also applies to raw file access (`read`/`glob`/`grep`). With no explicit dir, defaults to the harness package's own `skills`, falling back to a cwd-relative `skills`. |
 | `active_turn_window` | `50` | How many recent committed turns the Context Observation lists. Must be `>= 1`. |
 | `stream_children` | `true` | When true, an agent that delegates multiple children stays responsive: it is re-admitted to its LLM loop as each child settles (report/escalate/fail) instead of blocking until ALL children finish. Lets a parent react to child events — re-delegate a failed branch, converse, cancel the rest, or report early — before its siblings are done. Cost: generally more LLM turns per parent. Set `false` to restore block-until-all semantics. |
 

@@ -13,7 +13,7 @@ Two separate, canonical roots (each discovered independently):
 - **Skills** (``<skills root>/<name>/SKILL.md``) — task-specific instruction
   packages, one directory per skill, typically installed from a *generic*
   agent-methods library (``3rd_party/agent_methods_and_tools`` → copied to
-  ``.agents/skills`` via its ``install.py``, then wired with
+  ``.agents/skills`` via its ``agent-methods`` command, then wired with
   ``agent.skills_dir``). Each skill has ``name`` + ``description`` frontmatter
   and optional ``roles``; the ``description`` is a *trigger*: a short
   when-to-use signal that is always visible, while the full body is loaded on

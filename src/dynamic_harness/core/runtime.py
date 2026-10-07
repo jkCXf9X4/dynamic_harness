@@ -44,6 +44,7 @@ from .usage import UsageTracker
 
 if TYPE_CHECKING:
     from ..llm.provider import LLMProvider
+    from ..llm.registry import ProviderRegistry
     from .policies.interface import ReactivePolicy
 
 
@@ -123,6 +124,7 @@ class Runtime:
         config: HarnessConfig | None = None,
         *,
         checkpoint_root: Path | None = None,
+        provider_registry: ProviderRegistry | None = None,
     ) -> None:
         # A bare ``Runtime()`` behaves EXACTLY like a default ``HarnessConfig()``:
         # config is the only default provider, so there is no second hardcoded
@@ -156,6 +158,19 @@ class Runtime:
         self._task_graph: dict[str, list[str]] = {}
         self._agent_registry: dict[str, type[Agent]] = {}
         self._llm: LLMProvider | None = None
+        # Provider registry: named providers from config → lazily built
+        # ``LLMProvider`` instances (see llm/registry.py). Wiring attaches one
+        # so ``switch_provider`` can swap the active provider between
+        # runs/tasks; without one, set_llm() remains the manual path. The
+        # resolved model feeds the cost policy: the active model's catalog
+        # cost (unset = "unknown price") replaces the removed flat
+        # ``llm.price_*`` fields.
+        self.provider_registry = provider_registry
+        self.model_info = (
+            provider_registry.model_info
+            if provider_registry is not None
+            else config.resolve_model()
+        )
         # Communication layer: None = disabled (topology "off" — `converse` keeps
         # today's global by-ID behavior). Any other topology constructs the
         # routing backend, which the comms tools delegate to. The audit trail
@@ -172,11 +187,11 @@ class Runtime:
         # exactly like a default ``HarnessConfig()``, no second fallback dict).
         # All knobs below are forwarding properties into this bundle.
         self.agent_policy = AgentPolicy.from_config(config)
-        # USD cost conversion from configured per-1M-token prices (0/None price
-        # = "unknown price" → cost 0; the caller decides how to report it).
+        # USD cost conversion from the resolved model's catalog cost (0/None
+        # cost = "unknown price" → cost 0; the caller decides how to report it).
         self.cost_policy = CostPolicy(
-            price_input_per_mtok=config.llm.price_input_per_mtok,
-            price_output_per_mtok=config.llm.price_output_per_mtok,
+            price_input_per_mtok=self.model_info.cost.input if self.model_info.cost else None,
+            price_output_per_mtok=self.model_info.cost.output if self.model_info.cost else None,
         )
         self._self_heal_mode = config.self_heal.mode
         # Recovery limits live on the HealPolicy (the shared *per-child* used
@@ -641,6 +656,30 @@ class Runtime:
 
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
+
+    def switch_provider(self, model_ref: str) -> None:
+        """Swap the active LLM provider for agents created from now on.
+
+        Resolves ``model_ref`` through the attached registry, rebuilds the cost
+        policy from the new model's catalog cost, and swaps the provider.
+        Agents capture ``runtime.provider`` (and the policy knobs) at
+        construction, so a switch applies to agents created afterward; running
+        agents keep theirs — session pinning and prompt-cache continuity are
+        per provider. A mid-turn swap inside one agent's context is
+        deliberately unsupported. Requires ``provider_registry``; without one,
+        ``set_llm`` remains the manual path.
+        """
+        if self.provider_registry is None:
+            raise RuntimeError(
+                "no provider registry attached to this runtime — construct it "
+                "with a config (or set provider_registry) to switch providers"
+            )
+        self.model_info = self.provider_registry.resolve(model_ref)
+        self.cost_policy = CostPolicy(
+            price_input_per_mtok=self.model_info.cost.input if self.model_info.cost else None,
+            price_output_per_mtok=self.model_info.cost.output if self.model_info.cost else None,
+        )
+        self.set_llm(self.provider_registry.select(model_ref))
 
     def set_generated_root(self, root: Path) -> None:
         """Set/replace the sandbox workspace agents operate in."""

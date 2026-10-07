@@ -8,31 +8,53 @@ import pytest
 
 from dynamic_harness.config import (
     HarnessConfig,
-    LLMProviderConfig,
+    LLMSettings,
+    ModelSpec,
+    ProviderConfig,
+    ResolvedModel,
     SafetyConfig,
     _deep_merge,
     _discover_config_files,
     _discover_path,
     load_harness_config,
-    merge_api_key,
+    resolve_model_ref,
 )
 
 
 class TestHarnessConfig:
     def test_defaults(self) -> None:
         cfg = HarnessConfig()
-        assert cfg.llm.model == "deepseek/deepseek-v4-flash"
-        assert cfg.llm.base_url == "https://openrouter.ai/api/v1"
+        assert cfg.model == "openrouter/deepseek/deepseek-v4-flash"
         assert cfg.safety.max_iterations == 400
         assert cfg.safety.repeated_call_limit == 5
 
-    def test_default_llm_provider_ignore_empty(self) -> None:
+    def test_default_llm_settings(self) -> None:
         cfg = HarnessConfig()
-        assert cfg.llm.provider_ignore == []
+        assert cfg.llm.verify_ssl is True
+        assert cfg.llm.call_timeout_seconds == 500.0
+        assert cfg.llm.retry_max_attempts == 4
+        assert cfg.llm.rate_limit_max_attempts == 6
+        assert cfg.llm.retry_base_delay_seconds == 1.0
+        assert cfg.llm.retry_max_delay_seconds == 30.0
+        assert cfg.llm.retry_jitter_seconds == 0.5
+        assert cfg.llm.rate_limit_backoff_multiplier == 3.0
+        assert cfg.llm.fallback_on_rate_limit is True
 
-    def test_default_llm_allow_fallbacks(self) -> None:
+    def test_default_provider_is_openrouter(self) -> None:
         cfg = HarnessConfig()
-        assert cfg.llm.provider_allow_fallbacks is True
+        assert sorted(cfg.providers) == ["openrouter"]
+        pc = cfg.providers["openrouter"]
+        assert pc.env == ["OPENROUTER_API_KEY", "OPENAI_API_KEY"]
+        assert pc.base_url == "https://openrouter.ai/api/v1"
+        assert pc.provider_ignore == []
+        assert pc.provider_allow_fallbacks is True
+        assert pc.provider_force is None
+        assert "deepseek/deepseek-v4-flash" in pc.models
+        assert pc.models["deepseek/deepseek-v4-flash"].name == "DeepSeek V4 Flash"
+
+    def test_default_llm_provider_ignore_empty(self) -> None:
+        for pc in HarnessConfig().providers.values():
+            assert pc.provider_ignore == []
 
     def test_safety_config_defaults(self) -> None:
         sc = SafetyConfig()
@@ -44,41 +66,159 @@ class TestHarnessConfig:
         assert sc.max_same_target_delegations == 0
 
     def test_safety_timeout_seconds(self) -> None:
-        sc = SafetyConfig(timeout_seconds=120.0)
-        assert sc.timeout_seconds == 120.0
+        assert SafetyConfig(timeout_seconds=120.0).timeout_seconds == 120.0
 
-    def test_llm_provider_config_defaults(self) -> None:
-        lpc = LLMProviderConfig()
-        assert lpc.model == "deepseek/deepseek-v4-flash"
-        assert lpc.base_url == "https://openrouter.ai/api/v1"
-        assert lpc.provider_ignore == []
-        assert lpc.provider_allow_fallbacks is True
-        assert lpc.provider_force is None
-        assert lpc.call_timeout_seconds == 500.0
+    def test_llm_settings(self) -> None:
+        llm = LLMSettings(verify_ssl=False, call_timeout_seconds=45.0)
+        assert llm.verify_ssl is False
+        assert llm.call_timeout_seconds == 45.0
 
-    def test_call_timeout_seconds(self) -> None:
-        lpc = LLMProviderConfig(call_timeout_seconds=45.0)
-        assert lpc.call_timeout_seconds == 45.0
+    def test_custom_model_and_provider(self) -> None:
+        cfg = HarnessConfig.model_validate(
+            {
+                "model": "openai/gpt-5.2",
+                "providers": {
+                    "openai": {
+                        "env": ["OPENAI_API_KEY"],
+                        "base_url": "https://api.openai.com/v1",
+                        "models": {
+                            "gpt-5.2": {
+                                "model_id": "gpt-5.2",
+                                "name": "GPT-5.2",
+                                "cost": {"input": 1.25, "output": 10.0},
+                            }
+                        },
+                    }
+                },
+            }
+        )
+        assert cfg.model == "openai/gpt-5.2"
+        assert cfg.providers["openai"].base_url == "https://api.openai.com/v1"
+        assert cfg.safety.max_iterations == 400
+
+    def test_stale_flat_llm_keys_error(self) -> None:
+        """The flat provider keys were removed — stale configs fail loudly."""
+        with pytest.raises(Exception, match="model"):
+            HarnessConfig.model_validate({"llm": {"model": "x"}})
+        with pytest.raises(Exception, match="base_url"):
+            HarnessConfig.model_validate(
+                {"llm": {"verify_ssl": True, "base_url": "https://x"}}
+            )
+        with pytest.raises(Exception, match="price_input_per_mtok"):
+            HarnessConfig.model_validate({"llm": {"price_input_per_mtok": 1.0}})
 
     def test_partial_config_merge(self) -> None:
-        cfg = HarnessConfig.model_validate({"llm": {"model": "custom-model"}})
-        assert cfg.llm.model == "custom-model"
-        assert cfg.llm.base_url == "https://openrouter.ai/api/v1"
+        cfg = HarnessConfig.model_validate({"llm": {"call_timeout_seconds": 45.5}})
+        assert cfg.llm.call_timeout_seconds == 45.5
+        assert cfg.llm.verify_ssl is True
         assert cfg.safety.max_iterations == 400
+
+
+class TestResolveModelRef:
+    def _providers(self) -> dict[str, ProviderConfig]:
+        return {
+            "openrouter": ProviderConfig(
+                env=["OPENROUTER_API_KEY"],
+                base_url="https://openrouter.ai/api/v1",
+                models={
+                    "deepseek/deepseek-v4-flash": ModelSpec(
+                        name="DeepSeek V4 Flash",
+                        cost=None,
+                    )
+                },
+            ),
+            "openai": ProviderConfig(
+                env=["OPENAI_API_KEY"],
+                base_url="https://api.openai.com/v1",
+                models={
+                    "gpt-5.2": ModelSpec(
+                        model_id="gpt-5.2",
+                        name="GPT-5.2",
+                        cost=None,
+                    )
+                },
+            ),
+        }
+
+    def test_default_ref_resolves_multi_slash(self) -> None:
+        """The first slash splits provider id from model id, so OpenRouter's
+        multi-slash upstream ids resolve: provider 'openrouter', model
+        'deepseek/deepseek-v4-flash'."""
+
+        resolved = resolve_model_ref(self._providers(), "openrouter/deepseek/deepseek-v4-flash")
+        assert (resolved.provider_id, resolved.model_id) == (
+            "openrouter",
+            "deepseek/deepseek-v4-flash",
+        )
+
+    def test_model_id_remaps_upstream_id(self) -> None:
+        providers = self._providers()
+        providers["openai"].models["alias"] = ModelSpec(model_id="upstream/gpt-5.2")
+        resolved = resolve_model_ref(providers, "openrouter/deepseek/deepseek-v4-flash")
+        assert resolved.upstream_id == "deepseek/deepseek-v4-flash"
+        assert resolve_model_ref(providers, "openai/alias").upstream_id == "upstream/gpt-5.2"
+
+    def test_explicit_model_ref_overrides_default(self) -> None:
+        resolved = resolve_model_ref(self._providers(), "openai/gpt-5.2")
+        assert (resolved.provider_id, resolved.model_id) == ("openai", "gpt-5.2")
+
+    def test_provider_selection_uses_config_model_when_it_names_provider(self) -> None:
+        resolved = resolve_model_ref(
+            self._providers(),
+            "openrouter/deepseek/deepseek-v4-flash",
+            provider="openai",
+        )
+        assert (resolved.provider_id, resolved.model_id) == ("openai", "gpt-5.2")
+
+    def test_provider_selection_falls_back_to_first_model_key(self) -> None:
+        resolved = resolve_model_ref(
+            self._providers(),
+            "openrouter/deepseek/deepseek-v4-flash",
+            provider="openai",
+        )
+        assert (resolved.provider_id, resolved.model_id) == ("openai", "gpt-5.2")
+
+    def test_provider_selection_errors_for_provider_with_no_models(self) -> None:
+        providers = self._providers()
+        providers["openai"].models = {}
+        with pytest.raises(ValueError, match="no models"):
+            resolve_model_ref(providers, "openrouter/deepseek/deepseek-v4-flash", provider="openai")
+
+    def test_unknown_provider_errors_listing_keys(self) -> None:
+        with pytest.raises(ValueError, match="openrouter"):
+            resolve_model_ref(self._providers(), "deepseek/deepseek-v4-flash")
+
+    def test_bare_ref_errors(self) -> None:
+        with pytest.raises(ValueError, match="<provider>/<model>"):
+            resolve_model_ref(self._providers(), "deepseek/deepseek-v4-flash")
+
+    def test_model_absent_from_map_passes_through(self) -> None:
+        """A model absent from the map passes through as-is (upstream id =
+        the ref, no metadata) — a typo fails at the provider, like today."""
+        resolved = resolve_model_ref(self._providers(), "openai/oops")
+        assert isinstance(resolved, ResolvedModel)
+        assert (resolved.provider_id, resolved.model_id, resolved.upstream_id) == (
+            "openai",
+            "oops",
+            "oops",
+        )
+        assert resolved.name is None
+        assert resolved.cost is None
 
 
 class TestLoadHarnessConfig:
     def test_load_from_file(self, tmp_path: Path) -> None:
         config_data = {
-            "llm": {"model": "test-model", "base_url": "http://localhost"},
+            "model": "openrouter/test-model",
+            "providers": {"openrouter": {"base_url": "http://localhost"}},
             "safety": {"max_iterations": 100, "repeated_call_limit": 3, "timeout_seconds": 90},
         }
         cfg_path = tmp_path / "harness.json"
         cfg_path.write_text(json.dumps(config_data))
 
         cfg = load_harness_config(str(cfg_path))
-        assert cfg.llm.model == "test-model"
-        assert cfg.llm.base_url == "http://localhost"
+        assert cfg.model == "openrouter/test-model"
+        assert cfg.providers["openrouter"].base_url == "http://localhost"
         assert cfg.safety.max_iterations == 100
         assert cfg.safety.repeated_call_limit == 3
         assert cfg.safety.timeout_seconds == 90
@@ -87,15 +227,18 @@ class TestLoadHarnessConfig:
         with pytest.raises(FileNotFoundError):
             load_harness_config(str(tmp_path / "nonexistent.json"))
 
-    def test_load_returns_defaults_when_no_path(self) -> None:
-        cwd_candidate = Path.cwd() / "harness.json"
-        if cwd_candidate.exists():
-            cfg = load_harness_config()
-            assert isinstance(cfg, HarnessConfig)
-        else:
-            cfg = load_harness_config()
-            assert isinstance(cfg, HarnessConfig)
-            assert cfg.llm.model == "deepseek/deepseek-v4-flash"
+    def test_load_returns_defaults_when_no_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Isolate from the machine's XDG config — the test asserts the
+        built-in defaults, not machine state."""
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(
+            "dynamic_harness.config.XDG_CONFIG_DIR", tmp_path / "xdg"
+        )
+        cfg = load_harness_config()
+        assert cfg.model == "openrouter/deepseek/deepseek-v4-flash"
 
 
 class TestDiscoverPath:
@@ -123,25 +266,31 @@ class TestDeepMerge:
 
     def test_nested_dicts_merge_field_by_field(self) -> None:
         merged = _deep_merge(
-            {"llm": {"model": "base", "base_url": "http://base"}},
-            {"llm": {"model": "local"}},
+            {"llm": {"call_timeout_seconds": 500.0, "verify_ssl": True}},
+            {"llm": {"verify_ssl": False}},
         )
-        assert merged == {"llm": {"model": "local", "base_url": "http://base"}}
+        assert merged == {"llm": {"call_timeout_seconds": 500.0, "verify_ssl": False}}
 
-    def test_overlay_list_replaces_base_list(self) -> None:
-        merged = _deep_merge({"llm": {"provider_ignore": ["a", "b"]}}, {"llm": {"provider_ignore": ["c"]}})
-        assert merged["llm"]["provider_ignore"] == ["c"]
+    def test_overlay_replaces_base_list(self) -> None:
+        merged = _deep_merge(
+            {"providers": {"openrouter": {"provider_ignore": ["a", "b"]}}},
+            {"providers": {"openrouter": {"provider_ignore": ["c"]}}},
+        )
+        assert merged["providers"]["openrouter"]["provider_ignore"] == ["c"]
 
     def test_overlay_adds_new_key(self) -> None:
-        merged = _deep_merge({"llm": {"model": "base"}}, {"agent": {"stream_children": True}})
-        assert merged == {"llm": {"model": "base"}, "agent": {"stream_children": True}}
+        merged = _deep_merge(
+            {"llm": {"verify_ssl": True}},
+            {"agent": {"stream_children": True}},
+        )
+        assert merged == {"llm": {"verify_ssl": True}, "agent": {"stream_children": True}}
 
     def test_does_not_mutate_inputs(self) -> None:
-        base = {"llm": {"model": "base"}}
-        overlay = {"llm": {"model": "local"}}
+        base = {"llm": {"verify_ssl": True}}
+        overlay = {"llm": {"verify_ssl": False}}
         _deep_merge(base, overlay)
-        assert base == {"llm": {"model": "base"}}
-        assert overlay == {"llm": {"model": "local"}}
+        assert base == {"llm": {"verify_ssl": True}}
+        assert overlay == {"llm": {"verify_ssl": False}}
 
 
 class TestLayeredLoading:
@@ -156,11 +305,18 @@ class TestLayeredLoading:
         xdg_dir = tmp_path / "xdg"
         xdg_dir.mkdir()
         (xdg_dir / "harness.json").write_text(
-            json.dumps({"llm": {"model": "base-model"}, "safety": {"max_iterations": 300}})
+            json.dumps(
+                {
+                    "model": "openrouter/base-model",
+                    "providers": {"openrouter": {"base_url": "http://base"}},
+                    "safety": {"max_iterations": 300},
+                }
+            )
         )
 
         cfg = load_harness_config()
-        assert cfg.llm.model == "base-model"
+        assert cfg.model == "openrouter/base-model"
+        assert cfg.providers["openrouter"].base_url == "http://base"
         assert cfg.safety.max_iterations == 300
 
     def test_local_overlay_overrides_common_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -173,18 +329,31 @@ class TestLayeredLoading:
         (xdg_dir / "harness.json").write_text(
             json.dumps(
                 {
-                    "llm": {"model": "base-model", "base_url": "http://base", "verify_ssl": False},
+                    "model": "openrouter/base-model",
+                    "providers": {
+                        "openrouter": {
+                            "base_url": "http://base",
+                            "provider_ignore": ["a"],
+                        }
+                    },
+                    "llm": {"verify_ssl": False},
                     "safety": {"max_iterations": 300, "repeated_call_limit": 5},
                 }
             )
         )
         (cwd / "harness.json").write_text(
-            json.dumps({"llm": {"model": "local-model"}, "safety": {"repeated_call_limit": 9}})
+            json.dumps(
+                {
+                    "model": "openrouter/local-model",
+                    "safety": {"repeated_call_limit": 9},
+                }
+            )
         )
 
         cfg = load_harness_config()
-        assert cfg.llm.model == "local-model"
-        assert cfg.llm.base_url == "http://base"
+        assert cfg.model == "openrouter/local-model"
+        assert cfg.providers["openrouter"].base_url == "http://base"
+        assert cfg.providers["openrouter"].provider_ignore == ["a"]
         assert cfg.llm.verify_ssl is False
         assert cfg.safety.max_iterations == 300
         assert cfg.safety.repeated_call_limit == 9
@@ -196,13 +365,15 @@ class TestLayeredLoading:
         xdg_dir = tmp_path / "xdg"
         xdg_dir.mkdir()
         monkeypatch.setattr("dynamic_harness.config.XDG_CONFIG_DIR", xdg_dir)
-        (xdg_dir / "harness.json").write_text(json.dumps({"llm": {"model": "base-model", "base_url": "http://base"}}))
+        (xdg_dir / "harness.json").write_text(
+            json.dumps({"providers": {"openrouter": {"base_url": "http://base"}}})
+        )
         explicit = tmp_path / "custom.json"
-        explicit.write_text(json.dumps({"llm": {"model": "custom-model"}}))
+        explicit.write_text(json.dumps({"model": "openrouter/custom-model"}))
 
         cfg = load_harness_config(str(explicit))
-        assert cfg.llm.model == "custom-model"
-        assert cfg.llm.base_url == "http://base"
+        assert cfg.model == "openrouter/custom-model"
+        assert cfg.providers["openrouter"].base_url == "http://base"
 
     def test_invalid_json_in_base_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         cwd = tmp_path / "project"
@@ -228,25 +399,3 @@ class TestLayeredLoading:
 
         files = _discover_config_files()
         assert files == [xdg_dir / "harness.json", cwd / "harness.json"]
-
-
-class TestMergeApiKey:
-    def test_openrouter_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-key")
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        assert merge_api_key() == "sk-or-key"
-
-    def test_openai_key_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-oai-key")
-        assert merge_api_key() == "sk-oai-key"
-
-    def test_openrouter_preferred_over_openai(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-key")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-oai-key")
-        assert merge_api_key() == "sk-or-key"
-
-    def test_no_keys_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        assert merge_api_key() is None

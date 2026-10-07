@@ -155,23 +155,51 @@ export OPENAI_API_KEY=sk-...                   # Fallback key
 **`harness.json`** — structured settings:
 ```json
 {
+  "model": "openrouter/deepseek/deepseek-v4-flash-0731",
   "llm": {
-    "model": "deepseek/deepseek-v4-flash-0731",
-    "base_url": "https://openrouter.ai/api/v1",
-    "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": true,
-    "provider_force": "DeepInfra"
+    "verify_ssl": true
   },
-  "safety": {
-    "max_iterations": 500,
-    "repeated_call_limit": 5
+  "providers": {
+    "openrouter": {
+      "env": ["OPENROUTER_API_KEY", "OPENAI_API_KEY"],
+      "base_url": "https://openrouter.ai/api/v1",
+      "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
+      "provider_allow_fallbacks": true,
+      "provider_force": "DeepInfra",
+      "models": {
+        "deepseek/deepseek-v4-flash-0731": {"name": "DeepSeek V4 Flash 0731"}
+      }
+    }
   }
 }
 ```
 
+The top-level `model` selects the default model in `<provider>/<model>` form;
+`llm` carries only the general call behavior; `providers` carries each
+provider's credential source (`env`), endpoint, OpenRouter routing, and model
+catalog.
+
 **Discovery (layered)**: `~/.config/dynamic-harness/harness.json` is the common base, overlaid by `./harness.json` (or explicit `--config`); local keys override the base per-field.
 
-**Precedence**: CLI args (`--model`, `--base-url`, `--api-key`) → `harness.json` → built-in defaults.
+**Precedence**: CLI args (`--model`, `--provider`, `--base-url`, `--api-key`) → `harness.json` → built-in defaults.
+
+## `ProviderRegistry` (named providers from config → built instances)
+
+`ProviderRegistry.from_config(config)` builds a registry from a harness
+config; `resolve(model_ref)` turns a `<provider>/<model>` ref into a
+`ResolvedModel` (pure — constructs nothing); `select()` builds the provider for
+the ref and marks it active; `api_key_for(provider_id)` walks the provider's
+ordered `env` names in the environment only; `close_all()` releases every built
+instance. Credentials are never read from the config file — a run with no
+credential stays keyless and the agent fails with a recorded reason.
+
+```python
+from dynamic_harness.config import HarnessConfig
+from dynamic_harness.llm.registry import ProviderRegistry
+
+registry = ProviderRegistry.from_config(HarnessConfig())
+llm = registry.select("openrouter/deepseek/deepseek-v4-flash-0731")
+```
 
 ## Creating a Custom Provider
 

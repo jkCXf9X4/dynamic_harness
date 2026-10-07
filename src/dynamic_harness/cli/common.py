@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import functools
-import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -10,9 +9,9 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 
-from ..config import HarnessConfig, load_harness_config, merge_api_key
+from ..config import load_harness_config
 from ..core.runtime import Runtime
-from ..llm.openai_provider import OpenAIProvider
+from ..llm.registry import ProviderRegistry
 
 
 @functools.lru_cache(maxsize=1)
@@ -39,28 +38,27 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
         repo_root.mkdir(parents=True, exist_ok=True)
 
     config = load_harness_config(getattr(args, "config", None))
+    # The registry resolves the active model (``--model``/``--provider``
+    # override the config) and owns provider construction + credentials, so
+    # the four construction sites stop duplicating ``OpenAIProvider`` wiring.
+    registry = ProviderRegistry.from_config(
+        config,
+        model_ref=args.model,
+        provider=getattr(args, "provider", None),
+        api_key=args.api_key,
+        base_url=args.base_url,
+    )
     rt = Runtime(
         artifact_root=artifact_root,
         repo_root=repo_root,
         trace_root=trace_root,
         checkpoint_root=checkpoint_root,
         config=config,
+        provider_registry=registry,
     )
 
     load_dotenv()
-    api_key = args.api_key or merge_api_key()
+    api_key = args.api_key or registry.api_key_for(registry.active_provider_id)
     if api_key:
-        model = args.model or config.llm.model
-        base_url = args.base_url or config.llm.base_url
-        llm = OpenAIProvider(
-            model=model,
-            base_url=base_url,
-            api_key=api_key,
-            verify_ssl=config.llm.verify_ssl,
-            provider_ignore=config.llm.provider_ignore or None,
-            provider_allow_fallbacks=config.llm.provider_allow_fallbacks,
-            provider_force=config.llm.provider_force,
-            timeout=config.llm.call_timeout_seconds,
-        )
-        rt.set_llm(llm)
+        rt.set_llm(registry.select())
     return rt
