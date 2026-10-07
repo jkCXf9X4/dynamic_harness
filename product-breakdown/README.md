@@ -63,7 +63,7 @@ Full protocol: the method skill's `guidelines/browsing-protocol.md`.
 
 - New decision records go under `decisions/`. Update `traceability-map.md` when a claim, decision, or artifact changes.
 - After editing any node, run the skill's `pb check --strict` and `pb node-size --strict` from this directory and resolve violations (trim → link → split).
-- Run `pb registers --sync-footers` after record/leaf edits to regenerate `decisions/README.md`, leaf `## Decisions` footers, and index `## Contents` lists.
+- The registers, leaf `## Decisions` footers, and index `## Contents` lists are generated — release builds regenerate them (`pb registers --sync-footers`); never hand-edit one (the banner marks it). Between releases, `pb registers --clear` removes every generated surface; release builds restore them.
 - Every new/edited IMP is cross-listed in `06-evolution/README.md` with its stage.
 - Follow the skill's layer hygiene and the repo's own information-hygiene rule (canonical state, no duplication). When writing a node, apply the readability rules (one fact per line, scannable structure, plain language, proportional-never-padded) in the generic method's [`guidelines/readability-rules.md`](../../3rd_party/agent_methods_and_tools/src/agent_methods/methods/product-breakdown/guidelines/readability-rules.md). Where the repo's rules conflict with the pattern, the repo's rules win.
 

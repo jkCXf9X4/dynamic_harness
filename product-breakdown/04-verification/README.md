@@ -23,10 +23,6 @@ Verification is evidence-first, matching the repo's "verify before synthesize" e
 
 ## Contents
 
-<!-- pb:index:start -->
-- [Gap Analysis — Concepts & Use-Cases vs Implementation](gap-analysis/README.md) — Honest audit of what the concepts (VISION, delegation model, artifact system, self-healing) and use-cases promise versus what the runtime and tools deliver: missing machinery, dead plumbing, and doc drift, each labeled P0/P1/P2 with evidence, the use-case it breaks, a fix direction, and status.
-<!-- pb:index:end -->
-
 ## Tests
 
 The executable test suite lives at the repo root: `tests/`. Run `pytest` from the repo root (see [05-operation runbook](../05-operation/runbook/README.md)). Open verification gaps from the [gap analysis](gap-analysis/README.md) are registered as IMPs in [06-evolution/roadmap.md](../06-evolution/roadmap.md).

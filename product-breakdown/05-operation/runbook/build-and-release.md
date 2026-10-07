@@ -26,4 +26,5 @@ Deliberately lightweight (solo/small project):
 3. **Version** — bump `version` in `pyproject.toml` (currently `0.1.0`); keep it in sync with the package metadata.
 4. **Build** — `python -m build`, sanity-install the wheel into a clean venv (`pip install dist/*.whl`) and smoke-run `dynamic-harness --help` / one benchmark cell.
 5. **Document** — reflect any user-visible change in the layer docs (this runbook, `01-product/requirements.md` if the CLI changes, `06-evolution/roadmap.md` if open work moved).
-6. **Ship** — tag with the version (`git tag v0.1.0`), push. License: MIT.
+6. **Regenerate the breakdown's generated surfaces** — `pb registers --sync-footers` from the repo root: refreshes the registers, leaf `## Decisions` footers, and index `## Contents` lists (banner-marked); commit the result. Nothing regenerates them outside release builds — never hand-edit one.
+7. **Ship** — tag with the version (`git tag v0.1.0`), push. License: MIT.

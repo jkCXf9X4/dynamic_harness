@@ -24,10 +24,3 @@ as needed.
 See `../../../../docs/api/artifacts.md`.
 
 ## Contents
-
-<!-- pb:index:start -->
-- **INFO-034** [Relationship to Commits](commits.md) — Every artifact is linked to a commit in the Repository
-- **INFO-035** [Design Principles](design-principles.md) — Write to disk, not memory — state is durable, not ephemeral
-- **INFO-036** [Progressive Disclosure](progressive-disclosure.md) — In a naive agent framework, a child agent might return 30,000 tokens of raw findings to its parent. The parent's context window fills with data it may…
-- **INFO-037** [Immutability, Storage & Access](storage.md) — Artifacts are write-once, never modified. Once an agent calls , the Runtime creates the artifact and it becomes immutable. This ensures
-<!-- pb:index:end -->

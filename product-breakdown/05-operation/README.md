@@ -20,8 +20,3 @@ The operation layer makes the build/test/benchmark/release workflow explicit and
 - Backlog, roadmap → `06-evolution/`
 
 ## Contents
-
-<!-- pb:index:start -->
-- [Operation Guides](guides/README.md) — Workflow-specific guides complementing the runbook
-- [Runbook — dynamic_harness (Index)](runbook/README.md) — How authors install, test, benchmark, and release. All commands run from the repo root unless noted; Python 3.10+ required. Created 2026-09-21 (fills…
-<!-- pb:index:end -->

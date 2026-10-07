@@ -24,10 +24,6 @@ The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async acto
 
 ## Contents
 
-<!-- pb:index:start -->
-
-<!-- pb:index:end -->
-
 ## Pointers (assets that stay at repo root)
 
 - `src/dynamic_harness/` — the runtime source (module map in AGENTS.md)
