@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -255,3 +256,46 @@ async def test_parent_resume_from_disk_rebuild_preserves_linkage(runtime: Runtim
     # the very next resume/status on the recovered id is not confused
     status = json.loads(await parent.resume_child(effective.id))
     assert status["status"] == "already_delivered"
+
+
+@pytest.mark.asyncio
+async def test_resume_recovers_crashed_but_running_child(runtime: Runtime) -> None:
+    """A crashed turn can leave the record marked running while its failure
+    payload is already delivered (the field-observed limbo). resume() must
+    treat "running + failure payload + no in-flight run task" as resumable
+    instead of refusing — otherwise kill() is the only way out."""
+    runtime.set_llm(_FailThenSucceedLLM())
+    parent, child = _parent_with_failed_child(runtime)
+    await child.run()
+    assert child.last_failure is not None
+    child.task.status = TaskStatus.running  # the limbo state
+
+    result = json.loads(await parent.resume_child(child.id))
+
+    assert result["healed"] is True
+    assert result["status"] == "completed"
+    assert child.task.status == TaskStatus.completed
+
+
+@pytest.mark.asyncio
+async def test_resume_refuses_genuinely_running_child(runtime: Runtime) -> None:
+    """A child with a LIVE run task is still working — refused, and the
+    refusal points at the converse()/kill() alternatives."""
+    runtime.set_llm(_FailThenSucceedLLM())
+    parent, child = _parent_with_failed_child(runtime)
+    in_flight = asyncio.create_task(asyncio.sleep(3600))
+    runtime.set_agent_run_task(child.id, in_flight)
+    try:
+        child.task.status = TaskStatus.running
+
+        result = json.loads(await parent.resume_child(child.id))
+
+        assert "still running" in result["error"]
+        assert "converse()" in result["error"]
+        assert "kill()" in result["error"]
+    finally:
+        in_flight.cancel()
+        try:
+            await in_flight
+        except asyncio.CancelledError:
+            pass

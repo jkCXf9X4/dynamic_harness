@@ -1360,7 +1360,13 @@ class Runtime:
 
     def get_heal_count(self, agent_id: str, key: str) -> int:
         """Healed-action count (``resume`` / ``fresh``) for an agent id."""
-        return self._heal_counts.get(agent_id, {}).get(key, 0)
+        # The per-child counters are HealBudget instances, so read them via
+        # the budget's own interface. A dict-style ``.get(...)`` chain only
+        # works for the MISSING case (the ``{}`` default) and raised
+        # AttributeError exactly when the child had a heal budget — i.e. in
+        # the failed-child state where status()/kill() need this block most.
+        counts = self._heal_counts.get(agent_id)
+        return counts.get(key) if counts is not None else 0
 
     def track_agent_task(self, task: asyncio.Task[Any]) -> None:
         """Track a spawned agent run task (used by the delegate tool) so reset()
@@ -1372,6 +1378,17 @@ class Runtime:
         """Record the live asyncio task driving an agent's run (created by the
         delegate tool). The ``kill`` tool cancels it to stop the child."""
         self._agent_run_tasks_by_agent[agent_id] = task
+
+    def run_in_flight(self, agent_id: str) -> bool:
+        """True when a live asyncio run task is still driving this agent.
+
+        The ``delegate`` tool and the fresh-restart path register the task
+        driving an agent's run (``set_agent_run_task``); ``kill_agent`` pops
+        it. A registered-but-done task means the agent's record is
+        authoritative — nothing is in flight, so a crashed-but-marked-running
+        record (status "running" + failure payload) can be resumed."""
+        task = self._agent_run_tasks_by_agent.get(agent_id)
+        return task is not None and not task.done()
 
     def kill_agent(
         self, agent_id: str, *, reason: str = "", recursive: bool = False

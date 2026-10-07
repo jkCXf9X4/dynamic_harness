@@ -40,7 +40,7 @@ decisions and wording without coupling to the harness core.
 | `AgentPolicy` | `agent.py` | Per-agent construction knobs (safety, retry, budget, context) — the single config source for `Runtime.delegate()`. `from_config()` / `agent_ctor_kwargs()` / `post_construct()` / `root_timeout()`. |
 | `SpawnPolicy` | `spawn.py` | Delegation caps (agents / depth / same-target) + refusal and budget/warning wording. |
 | `HealPolicy` | `heal.py` | Layered self-heal decisions: blunt-vs-rot diagnosis, deliverable gate, resume/fresh message builders. |
-| `HealBudget` | `heal.py` | Shared per-child used-counter for resume/fresh heal attempts (dict-like `can`/`bump`). |
+| `HealBudget` | `heal.py` | Shared per-child used-counter for resume/fresh heal attempts (dict-like `can`/`bump`/`get`). |
 | `ResumePlanner` | `heal.py` | Decision half of the parent-driven `resume` ladder: strategy validation, rot refusal, layer ordering, budget messages. |
 | `LoopGuard` | `loop_guard.py` | Stateful repeated-call / near-identical loop detection + the nudge→fail recovery ladder (returns structured `LoopAction` verdicts). |
 | `ResultCachePolicy` | `result_cache.py` | Result-handle cacheability (`DEFAULT_NON_CACHEABLE`) and token-window rendering / paging footers. |

@@ -2222,7 +2222,10 @@ class Agent:
 
         Guards mirror ``kill``/``status``: only direct children, never an
         escalated child, never a *killed* child (a deliberately-killed agent
-        must not be resurrected). Both layers are budgeted by the child's own
+        must not be resurrected). A child marked running is refused only while
+        a run task is actually in flight — a crashed turn can leave the record
+        marked running while its failure payload is already delivered (limbo),
+        and that state is resumable. Both layers are budgeted by the child's own
         heal counts (``self_heal.max_resumes`` / ``max_fresh_retries``); when a
         layer is exhausted the child is left as-is and the parent is told why.
         The (possibly fresh) effective agent is returned resolved as JSON.
@@ -2240,9 +2243,16 @@ class Agent:
                 "error": f"agent {agent_id} {target.task.status.value}; "
                          "escalations are never resumed",
             })
-        if target.task.status is TaskStatus.running:
+        if target.task.status is TaskStatus.running and self._runtime.run_in_flight(
+            agent_id,
+        ):
             return json.dumps({
-                "error": f"agent {agent_id} is still running; nothing to resume",
+                "error": (
+                    f"agent {agent_id} is still running; nothing to resume. "
+                    f"Wait for it to settle — or use converse() to send it "
+                    f"input mid-run, or kill() it if its work is no longer "
+                    f"needed."
+                ),
             })
         if target._killed:
             return json.dumps({

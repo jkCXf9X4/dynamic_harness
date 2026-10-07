@@ -123,6 +123,9 @@ class HealBudget:
         self._used[key] += 1
         return self._used[key]
 
+    def get(self, key: str, default: int = 0) -> int:
+        return self._used.get(key, default)
+
     def as_dict(self) -> dict[str, int]:
         return dict(self._used)
 

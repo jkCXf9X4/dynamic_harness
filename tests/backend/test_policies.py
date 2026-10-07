@@ -226,6 +226,16 @@ def test_heal_budget_shared_counters() -> None:
     assert b.as_dict() == {"resume": 1, "fresh": 0}
 
 
+def test_heal_budget_mapping_get() -> None:
+    # Regression: status()/kill() snapshots read the per-child counts through
+    # a dict-style ``.get``; HealBudget must answer it for both layers and
+    # honor a default, or every budgeted child poisons those tools.
+    b = HealBudget(resume=2)
+    assert b.get("resume") == 2
+    assert b.get("fresh") == 0
+    assert b.get("missing", 5) == 5
+
+
 def test_heal_policy_diagnosis() -> None:
     assert HealPolicy.diagnose(True) == "rot"
     assert HealPolicy.diagnose(False) == "blunt"

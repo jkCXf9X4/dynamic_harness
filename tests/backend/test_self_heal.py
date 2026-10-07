@@ -420,3 +420,23 @@ def test_fresh_restart_carries_mission_command_brief(runtime: Runtime) -> None:
     assert fresh.task.constraints == task.constraints
     assert fresh.task.authority == task.authority
     assert task.description in fresh.task.description
+
+
+@pytest.mark.asyncio
+async def test_status_snapshot_heal_block_with_budget(runtime: Runtime) -> None:
+    """Regression: status()/kill() build the per-child ``heal`` block through
+    ``Runtime.get_heal_count``. A dict-style ``.get(...)`` chain there raised
+    AttributeError on the HealBudget instance exactly when the child HAD a
+    heal budget — i.e. after self-heal ran, the state where the parent most
+    needs status()/kill() for that child."""
+    parent = runtime.delegate(Task(description="parent"))
+    child = parent.delegate("child unit")
+    # A child that self-heal already touched carries a HealBudget.
+    runtime._heal_counts_for(child.id).bump("resume")
+
+    snap = child.runtime_snapshot()
+
+    assert snap["heal"]["resumes"] == 1
+    assert snap["heal"]["fresh"] == 0
+    assert runtime.get_heal_count(child.id, "resume") == 1
+    assert runtime.get_heal_count("no-such-agent", "resume") == 0
