@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from ..core.runtime import Runtime
+from ..core.task import ActivityEvent, ActivityEventType, TaskStatus
 
 ID_CHARS = 8
 TREE_DESC_CHARS = 40
@@ -50,6 +52,43 @@ def fmt_int(n: int) -> str:
     return f"{n:,}".replace(",", "'")
 
 
+def fmt_age(seconds: float) -> str:
+    """Compact duration: 12 → ``12s``, 135 → ``2m15s``."""
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m{s % 60:02d}s"
+
+
+def activity_brief(event: ActivityEvent) -> str:
+    """Ultra-compact label of an agent's most recent activity, for the tree.
+
+    The tree renders the brief plus its age (``(tool web_search 12s)``) so a
+    live agent's static line can be told apart from a long in-flight call —
+    especially during LLM calls, which emit no start event and are the longest
+    quiet stretch in a turn.
+    """
+    d = event.data
+    et = event.event_type
+    if et in (ActivityEventType.TOOL_CALL_START, ActivityEventType.TOOL_CALL_END):
+        return f"tool {d.get('tool_name', '?')}"
+    if et == ActivityEventType.LLM_CALL_END:
+        return "llm"
+    if et == ActivityEventType.ITERATION:
+        return f"turn {d.get('turn', '?')}"
+    if et == ActivityEventType.ASSISTANT_REPLY:
+        return "reply"
+    if et == ActivityEventType.DELEGATION_START:
+        return "delegate"
+    if et == ActivityEventType.COMPRESSION:
+        return "compress"
+    if et == ActivityEventType.SAFETY_WARNING:
+        return "warn"
+    if et == ActivityEventType.SELF_HEAL:
+        return f"heal {d.get('action', 'heal')}"
+    return et.value
+
+
 @dataclass
 class AgentNode:
     """Tree node view-model: engine-agnostic representation of one agent."""
@@ -67,6 +106,8 @@ class AgentNode:
     cum_cost_usd: float = 0.0
     artifact_ids: list[str] = field(default_factory=list)
     trace_path: str | None = None
+    activity: str | None = None
+    activity_age_s: float | None = None
     children: list[AgentNode] = field(default_factory=list)
 
     @property
@@ -121,13 +162,21 @@ class Stats:
     cost_usd: float = 0.0
 
 
-def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
+def build_agent_tree(
+    runtime: Runtime,
+    last_activity: dict[str, tuple[float, str]] | None = None,
+) -> list[AgentNode]:
     """Walk runtime task graph into nested AgentNode view-models (roots only).
 
     Provenance (artifact ids, commit ids) is resolved in a single pass via
     ``runtime.provenance_index()`` instead of ``runtime.provenance()`` per node,
     so total cost stays linear in agent count rather than O(N·C log C) (the old
     per-node re-sort of every commit).
+
+    ``last_activity`` maps agent_id → (epoch seconds, brief label) of the most
+    recent activity event; live agents (pending/running) get the label and its
+    age rendered next to them so a fresh snapshot can be told apart from a
+    stalled one.
     """
     g = runtime.task_graph()
     agents = runtime.all_agents()
@@ -157,6 +206,14 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
         )
+        activity: str | None = None
+        activity_age_s: float | None = None
+        if agent.task.status in (TaskStatus.pending, TaskStatus.running):
+            recorded = (last_activity or {}).get(aid)
+            if recorded:
+                ts, label = recorded
+                activity = label
+                activity_age_s = max(0.0, time.time() - ts)
         return AgentNode(
             agent_id=agent.id,
             description=agent.task.description,
@@ -177,6 +234,8 @@ def build_agent_tree(runtime: Runtime) -> list[AgentNode]:
             cum_cost_usd=cost_usd + sum(c.cum_cost_usd for c in children),
             artifact_ids=p.get("artifact_ids", []),
             trace_path=trace_path(agent.id),
+            activity=activity,
+            activity_age_s=activity_age_s,
             children=children,
         )
 
@@ -208,8 +267,11 @@ def render_text_tree(nodes: list[AgentNode]) -> str:
     count, a compact token breakdown, and USD cost markers — own cost (``$``)
     and subtree cost including all descendants (``Σ$``), when the provider
     reports cost or prices are configured — enough to spot a stuck/looping
-    agent without a live dashboard. Engine-agnostic (no terminal-library
-    markup) so it can be persisted to disk.
+    agent without a live dashboard. Live agents additionally show what they
+    did last and how long ago (``(tool web_search 12s)``); the age keeps
+    climbing during quiet stretches (e.g. a long in-flight LLM call), which is
+    the progress signal. Engine-agnostic (no terminal-library markup) so it
+    can be persisted to disk.
     """
     if not nodes:
         return "(no agents)\n"
@@ -220,10 +282,13 @@ def render_text_tree(nodes: list[AgentNode]) -> str:
         for i, node in enumerate(nodes):
             is_last = i == len(nodes) - 1
             branch = "└" if is_last else "├"
-            lines.append(
+            line = (
                 f"{prefix}{branch} {node.short_id} [{node.status}] "
                 f"{node.short_description}{node.usage}"
             )
+            if node.activity is not None:
+                line += f" ({node.activity} {fmt_age(node.activity_age_s or 0.0)})"
+            lines.append(line)
             child_prefix = prefix + ("  " if is_last else "│ ")
             walk(node.children, child_prefix, is_last)
 

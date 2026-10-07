@@ -15,7 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from ..core.runtime import Runtime
-from .present import AgentNode, build_agent_tree, build_stats, render_text_tree
+from .present import (
+    AgentNode,
+    activity_brief,
+    build_agent_tree,
+    build_stats,
+    fmt_usd,
+    render_text_tree,
+)
 
 
 def _node_dict(node: AgentNode) -> dict[str, Any]:
@@ -34,6 +41,8 @@ def _node_dict(node: AgentNode) -> dict[str, Any]:
         "cum_cost_usd": node.cum_cost_usd,
         "artifact_ids": node.artifact_ids,
         "trace_path": node.trace_path,
+        "activity": node.activity,
+        "activity_age_s": node.activity_age_s,
         "children": [_node_dict(c) for c in node.children],
     }
 
@@ -54,9 +63,17 @@ class StateWriter:
         self.agents_txt_path = self.root / "agents.txt"
         # Throttle for activity-driven snapshots: don't rewrite the tree on
         # every LLM/tool event (build_agent_tree has a cost per call), only at
-        # most once per interval. Terminal events always force a flush.
+        # most once per interval. Terminal events and the CLI heartbeat's
+        # flush() always bypass it.
         self.snapshot_interval = snapshot_interval
         self._last_snapshot = 0.0
+        # agent_id → (epoch seconds, brief label) of the agent's most recent
+        # activity event; feeds the per-agent age marker in the tree.
+        self._last_activity: dict[str, tuple[float, str]] = {}
+
+    def note_activity(self, agent_id: str, label: str, ts: float) -> None:
+        """Record an agent's most recent activity (label + when it happened)."""
+        self._last_activity[agent_id] = (ts, label)
 
     def snapshot(self, runtime: Runtime, *, force: bool = False) -> None:
         """Rewrite agent_tree.json + stats.json + agents.txt (text overview).
@@ -69,18 +86,39 @@ class StateWriter:
         now = time.monotonic()
         if not force and now - self._last_snapshot < self.snapshot_interval:
             return
-        self._last_snapshot = now
+        self._write(runtime)
+
+    def flush(self, runtime: Runtime) -> None:
+        """Time-based refresh for the CLI heartbeat.
+
+        Bypasses the activity-event throttle — the heartbeat rate-limits
+        itself — so ``tail -f agents.txt`` stays fresh even during long LLM
+        calls, which emit no activity events while in flight.
+        """
+        self._write(runtime)
+
+    def _write(self, runtime: Runtime) -> None:
+        self._last_snapshot = time.monotonic()
         # Build the tree once and reuse for both JSON and text output (building
         # it twice doubles the provenance-index scan on every terminal event).
-        nodes = build_agent_tree(runtime)
+        stats = build_stats(runtime)
+        nodes = build_agent_tree(runtime, last_activity=self._last_activity)
+        generated_at = datetime.now(timezone.utc)
         self.tree_path.write_text(
             json.dumps([_node_dict(n) for n in nodes], indent=2)
         )
         self.stats_path.write_text(
-            json.dumps(asdict(build_stats(runtime)), indent=2)
+            json.dumps(
+                {**asdict(stats), "generated_at": generated_at.isoformat()},
+                indent=2,
+            )
+        )
+        header = (
+            f"# generated {generated_at.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            f" · {stats.agents} agents · ${fmt_usd(stats.cost_usd)}"
         )
         self.agents_txt_path.write_text(
-            render_text_tree(nodes)
+            header + "\n" + render_text_tree(nodes)
         )
 
     def append_event(
@@ -126,7 +164,11 @@ def attach_events(runtime: Runtime, writer: StateWriter) -> None:
             "data": event.data,
         }, ts=event.timestamp)
         # Keep the tree fresh while work progresses (throttled), not only on
-        # terminal events.
+        # terminal events — and remember what each agent did last so the tree
+        # can show a per-agent age marker.
+        writer.note_activity(
+            event.agent_id, activity_brief(event), event.timestamp.timestamp()
+        )
         writer.snapshot(runtime)
 
     runtime.on_report(on_report)

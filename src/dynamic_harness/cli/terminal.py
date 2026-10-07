@@ -25,6 +25,12 @@ from .state import StateWriter, attach_events
 
 console = Console()
 
+# The CLI heartbeat rewrites the run-overview files (agents.txt etc.) on this
+# cadence, independent of events. Long LLM calls emit no activity events while
+# in flight, so an event-driven writer goes silent exactly while the most
+# expensive work happens; the timer keeps `tail -f agents.txt` live regardless.
+HEARTBEAT_INTERVAL_S = 3
+
 _history: InMemoryHistory | None = None
 
 # Lines typed against a run whose root has already reached a terminal state
@@ -388,10 +394,21 @@ async def _run(
         )
 
     task = asyncio.ensure_future(run_task())
+    async def heartbeat() -> None:
+        """Flush the run overview on a timer, independent of events.
+
+        ``flush`` is fully synchronous, so a cancellation landing at the sleep
+        can never interrupt a write mid-file."""
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+            writer.flush(runtime)
+
+    hb_task = asyncio.ensure_future(heartbeat())
     streamed_last: dict[str, str] = {}
     try:
         root = await _drive(runtime, task, question_queue, answer_queue, label_state, streamed_last)
     finally:
+        _retire_task(hb_task)
         writer.snapshot(runtime, force=True)
     return root, writer, streamed_last
 

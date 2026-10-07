@@ -26,7 +26,7 @@ The terminal stays prompt-only, but a full, continuously-refreshed overview is
 written to the **run directory** (`.dynamic-harness/<timestamp>_<id>/`, the
 parent of `artifacts/`, `repo/`, and `traces/`):
 
-- `agents.txt` — plain-text agent tree: id, `[status]`, description, cumulative messages, token usage, USD cost markers — own cost (`$`) and subtree cost including all descendants (`Σ$`), from the provider's per-request cost when reported (e.g. OpenRouter) or configured prices as a fallback. Rewritten on every terminal event, so you can tail it while a run is live.
+- `agents.txt` — plain-text agent tree: id, `[status]`, description, cumulative messages, token usage, USD cost markers — own cost (`$`) and subtree cost including all descendants (`Σ$`), from the provider's per-request cost when reported (e.g. OpenRouter) or configured prices as a fallback. Live agents also show what they did last and how long ago (`(tool web_search 12s)`) — a climbing age means the agent is mid-call, likely a long LLM request. Rewritten continuously while a run is live (≈1/s heartbeat, plus on every event), so you can tail it and always know how fresh it is.
 - `agent_tree.json` — same tree as structured JSON (for machine parsing).
 - `stats.json` — aggregate counts (agents, commits, tokens).
 - `events.jsonl` — append-only structured event stream (report/failure/escalation/activity).
