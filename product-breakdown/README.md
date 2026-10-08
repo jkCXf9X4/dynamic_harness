@@ -11,7 +11,7 @@ Read top-down. Each layer answers one primary question and must NOT duplicate ow
 | `00-intent/` | Why does the project exist, who is it for? | VISION.md, competitive-differentiation/ |
 | `01-product/` | What is delivered, out of scope? | requirements/ (CLI sub-spec), use-cases/ |
 | `02-architecture/` | How are deliverables, evidence, and work organized? | methodology/, concepts/, examples/ |
-| `03-implementation/` | With what concrete assets is it realized? | index only; src/, prompts/, resources/, scripts/, pyproject.toml, harness.json.example stay in place at repo root |
+| `03-implementation/` | With what concrete assets is it realized? | index only; src/, prompts/, resources/, scripts/, pyproject.toml, dynamic_harness.json.example stay in place at repo root |
 | `04-verification/` | How do we know it satisfies requirements? | gap-analysis/ (G1–G13 register); the communication-structures evidence chain lives under `06-evolution/investigations/` |
 | `05-operation/` | How do authors run, maintain, release? | runbook/, guides/ |
 | `06-evolution/` | What controlled changes come next? | roadmap.md, backlog.md, selected/ (IMPs), implemented/, investigations/ |

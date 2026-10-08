@@ -46,6 +46,6 @@ For OpenAI directly:
 # ~/.bashrc or ~/.zshrc
 export OPENAI_API_KEY=sk-your-key-here
 
-# harness.json
-{"llm": {"model": "gpt-4o", "base_url": "https://api.openai.com/v1"}}
+# dynamic_harness.json
+{"root_model": "openai/gpt-4o", "providers": {"openai": {"env": ["OPENAI_API_KEY"], "base_url": "https://api.openai.com/v1"}}}
 ```

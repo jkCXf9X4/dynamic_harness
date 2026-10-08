@@ -14,13 +14,14 @@ status: current
 Ensure `OPENROUTER_API_KEY` or `OPENAI_API_KEY` is set in your shell config
 (e.g. `~/.bashrc`), or pass `--api-key` on the command line.
 
-### Missing harness.json
+### Missing dynamic_harness.json
 
-If you rely only on defaults or the common base, no local `harness.json` is
-needed — settings come from `~/.config/dynamic-harness/harness.json` (common
-base) plus built-in defaults. To override per-project, copy
-`harness.json.example` to `harness.json` and edit. Without any file, sensible
-defaults are used (deepseek-v4-flash on OpenRouter).
+If you rely only on defaults or the common base, no local
+`dynamic_harness.json` is needed — settings come from
+`~/.config/dynamic_harness/dynamic_harness.json` (common base) plus built-in
+defaults. To override per-project, copy `dynamic_harness.json.example` to
+`dynamic_harness.json` and edit. Without any file, sensible defaults are used
+(deepseek-v4-flash on OpenRouter).
 
 ### Agent runs forever
 

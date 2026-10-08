@@ -17,7 +17,7 @@ python -m dynamic_harness.benchmark.run --seed-only
 python -m dynamic_harness.benchmark.run --report profile
 ```
 
-Compares prompts against all tasks from the single canonical task source `src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`), ranked by a weighted rubric; metrics written to `.optimize_benchmarks/metrics.json` / `.md`. Variants are read from a JSON file mapping `prompt_id -> system_prompt text` (or null = seed). Needs `OPENROUTER_API_KEY` + `harness.json` pointing at a tool-calling model (default: deepseek flash with a `provider_ignore` list).
+Compares prompts against all tasks from the single canonical task source `src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`), ranked by a weighted rubric; metrics written to `.optimize_benchmarks/metrics.json` / `.md`. Variants are read from a JSON file mapping `prompt_id -> system_prompt text` (or null = seed). Needs `OPENROUTER_API_KEY` + `dynamic_harness.json` pointing at a tool-calling model (default: deepseek flash with a `provider_ignore` list).
 
 Related optimization runners (see `prompt-optimization`):
 

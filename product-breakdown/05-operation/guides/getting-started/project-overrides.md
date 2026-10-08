@@ -13,16 +13,18 @@ Copy the template into the project and edit only the keys you need — they
 override the common base:
 
 ```bash
-cp harness.json.example harness.json
+cp dynamic_harness.json.example dynamic_harness.json
 ```
 
 ```json
 {
-  "llm": {
-    "model": "deepseek/deepseek-v4-flash-0731",
-    "base_url": "https://openrouter.ai/api/v1",
-    "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
-    "provider_allow_fallbacks": true
+  "root_model": "openrouter/deepseek/deepseek-v4-flash-0731",
+  "providers": {
+    "openrouter": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "provider_ignore": ["gmicloud", "SiliconFlow", "Baidu"],
+      "provider_allow_fallbacks": true
+    }
   },
   "safety": {
     "max_iterations": 500,

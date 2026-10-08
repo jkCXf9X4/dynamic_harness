@@ -7,11 +7,11 @@ summary: With what concrete assets is it realized?
 
 **With what concrete assets is it realized?**
 
-The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async actor-model agent runtime, `Runtime` orchestrator, `Agent` loop, ToolRegistry with 25 tools, artifact store, repository/commit layer, config), plus `prompts/` (variant-generation + refinement prompts), `resources/`, `scripts/` (optimization runners), `pyproject.toml` (build/packaging), and `harness.json.example` (layered config template). These assets **stay in place** at the repo root. This layer owns the plugin-readiness investigation (interface economy: ~7 narrow seams, host-agnostic policies, **no loader / no late injection**) and the implementation-side rationale that shapes how those assets are structured.
+The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async actor-model agent runtime, `Runtime` orchestrator, `Agent` loop, ToolRegistry with 25 tools, artifact store, repository/commit layer, config), plus `prompts/` (variant-generation + refinement prompts), `resources/`, `scripts/` (optimization runners), `pyproject.toml` (build/packaging), and `dynamic_harness.json.example` (layered config template). These assets **stay in place** at the repo root. This layer owns the plugin-readiness investigation (interface economy: ~7 narrow seams, host-agnostic policies, **no loader / no late injection**) and the implementation-side rationale that shapes how those assets are structured.
 
 ## Owns
 - Repo layout notes, build modules, scripts, model resources
-- Interfaces and config conventions (harness.json layering, policy seams)
+- Interfaces and config conventions (dynamic_harness.json layering, policy seams)
 - Plugin-readiness direction (interface economy, `core/policies/` host-agnostic objects)
 - Implementation decisions (ADRs with `IMD` prefix) and rationale
 
@@ -29,6 +29,6 @@ The runtime is realized in Python 3.10+ under `src/dynamic_harness/` (async acto
 - `src/dynamic_harness/` — the runtime source (module map in AGENTS.md)
 - `prompts/`, `resources/`, `scripts/`
 - `pyproject.toml` — build system, entry point `dynamic-harness = dynamic_harness.cli.terminal:main`
-- `harness.json.example` — layered config template (common base `~/.config/dynamic-harness/harness.json` + local overlay)
+- `dynamic_harness.json.example` — layered config template (common base `~/.config/dynamic_harness/dynamic_harness.json` + local overlay)
 
 Implementation status is tracked in `06-evolution/`; verify with the tests in `tests/` (see `../05-operation/runbook/README.md`).

@@ -1,9 +1,9 @@
 ---
-title: "Configuration Reference (harness.json)"
+title: "Configuration Reference (dynamic_harness.json)"
 category: api
 module: dynamic_harness.config
 summary: >
-  Every setting in the `harness.json` config file — the four sections
+  Every setting in the `dynamic_harness.json` config file — the four sections
   (`llm`, `safety`, `self_heal`, `agent`), their default values, the
   disabled-by-`0`/`None` convention, and how each setting maps to runtime /
   agent behavior.
@@ -16,7 +16,7 @@ related:
 
 # Configuration
 
-All runtime behavior is configured through a single JSON file, `harness.json`, loaded by
+All runtime behavior is configured through a single JSON file, `dynamic_harness.json`, loaded by
 `config.load_harness_config()`. This document is the canonical reference for every setting.
 
 ## How the Config File Is Found
@@ -25,10 +25,11 @@ Config is loaded from a **layered merge** of (up to) two files, from lowest to
 highest priority — the *common base* is always applied first, then the *local
 overlay* overrides it on a per-key basis:
 
-1. **Common base:** `~/.config/dynamic-harness/harness.json` (XDG user-global,
-   shared across all your projects).
-2. **Local overlay:** `./harness.json` (current working directory), or an
-   explicit `--config path/to/harness.json`.
+1. **Common base:** `~/.config/dynamic_harness/dynamic_harness.json` (XDG
+   user-global, shared across all your projects; `$XDG_CONFIG_HOME` is honored
+   when set, e.g. `$XDG_CONFIG_HOME/dynamic_harness/dynamic_harness.json`).
+2. **Local overlay:** `./dynamic_harness.json` (current working directory), or
+   an explicit `--config path/to/dynamic_harness.json`.
 
 The two files are deep-merged: section objects (`llm`, `safety`, `self_heal`,
 `agent`) merge field-by-field, so a local config can override a single setting
@@ -45,7 +46,7 @@ applies:
 - neither → built-in defaults (no file needed)
 
 If no file is found at all, sensible defaults are used. All fields are optional
-— an empty `harness.json` (`{}`) is valid and yields the defaults below.
+— an empty `dynamic_harness.json` (`{}`) is valid and yields the defaults below.
 
 > **Defaults are the single source of truth.** A bare `Runtime()` (no `config`
 > passed) now constructs the same defaults as a default `HarnessConfig()` —

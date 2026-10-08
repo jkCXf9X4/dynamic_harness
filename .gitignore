@@ -4,7 +4,6 @@
 .agents/
 tmp/
 .coverage
-harness.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -165,8 +164,8 @@ ENV/
 env.bak/
 venv.bak/
 
-# Config (secrets/nuanced settings — use harness.json.example as template)
-harness.json
+# Config (secrets/nuanced settings — use dynamic_harness.json.example as template)
+dynamic_harness.json
 
 # Spyder project settings
 .spyderproject

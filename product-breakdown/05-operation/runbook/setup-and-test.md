@@ -12,7 +12,7 @@ status: current
 ## Environment & Config
 
 - API key: `export OPENROUTER_API_KEY=sk-...` (or OpenAI key) — read from the environment.
-- Config is **layered**: common base `~/.config/dynamic-harness/harness.json` merged field-by-field with local overlay `./harness.json` (or `--config <path>`); deep-merged per section, scalars/lists replaced wholesale. Neither file present → built-in defaults. `harness.json.example` is the template.
+- Config is **layered**: common base `~/.config/dynamic_harness/dynamic_harness.json` merged field-by-field with local overlay `./dynamic_harness.json` (or `--config <path>`); deep-merged per section, scalars/lists replaced wholesale. Neither file present → built-in defaults. `dynamic_harness.json.example` is the template.
 - Key safety knobs: `safety.max_iterations`, `max_agent_tokens` (force-fail an agent past a token cap), `timeout_seconds`, `disable_root_timeout`, `max_agents`, `max_depth`, `max_same_target_delegations`. `agent.stream_children` enables streaming fan-out (opt-in, not default).
 
 ## Install

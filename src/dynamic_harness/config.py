@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from typing import Any
@@ -8,8 +9,19 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-DEFAULT_CONFIG_FILENAME = "harness.json"
-XDG_CONFIG_DIR = Path.home() / ".config" / "dynamic-harness"
+DEFAULT_CONFIG_FILENAME = "dynamic_harness.json"
+XDG_CONFIG_SUBDIR = "dynamic_harness"
+
+
+def _xdg_config_dir() -> Path:
+    """User-global config directory, per the XDG base-dir spec.
+
+    ``$XDG_CONFIG_HOME`` is honored when set; otherwise ``~/.config``. The
+    directory is read at call time (not import time) so the environment stays
+    testable with plain ``monkeypatch.setenv``.
+    """
+    base = os.environ.get("XDG_CONFIG_HOME")
+    return (Path(base) if base else Path.home() / ".config") / XDG_CONFIG_SUBDIR
 
 
 class ModelLimit(BaseModel):
@@ -612,8 +624,8 @@ class HarnessConfig(BaseModel):
     @classmethod
     def _legacy_model_key(cls, data: Any) -> Any:
         """Accept the pre-rename top-level ``model`` key as an alias for
-        ``root_model`` so existing harness.json files keep loading. An explicit
-        ``root_model`` wins when both are present."""
+        ``root_model`` so existing dynamic_harness.json files keep loading. An
+        explicit ``root_model`` wins when both are present."""
         if isinstance(data, dict) and "model" in data and "root_model" not in data:
             data = dict(data)
             data["root_model"] = data.pop("model")
@@ -671,17 +683,17 @@ class HarnessConfig(BaseModel):
 def _discover_path(explicit: str | None = None) -> Path | None:
     """Return the single most-specific config file that applies.
 
-    Backward-compatible first-match lookup (explicit → `./harness.json` →
-    XDG user-global). Loading itself uses :func:`_discover_config_files` to
-    layer the XDG base under the local overlay; this helper only reports which
-    file would take precedence.
+    Backward-compatible first-match lookup (explicit →
+    `./dynamic_harness.json` → XDG user-global). Loading itself uses
+    :func:`_discover_config_files` to layer the XDG base under the local
+    overlay; this helper only reports which file would take precedence.
     """
     if explicit:
         return Path(explicit)
     cwd_candidate = Path.cwd() / DEFAULT_CONFIG_FILENAME
     if cwd_candidate.exists():
         return cwd_candidate
-    xdg_candidate = XDG_CONFIG_DIR / DEFAULT_CONFIG_FILENAME
+    xdg_candidate = _xdg_config_dir() / DEFAULT_CONFIG_FILENAME
     if xdg_candidate.exists():
         return xdg_candidate
     return None
@@ -690,15 +702,17 @@ def _discover_path(explicit: str | None = None) -> Path | None:
 def _discover_config_files(explicit: str | None = None) -> list[Path]:
     """Config files to merge, from lowest (common base) to highest (local overlay) priority.
 
-    The XDG user-global ``harness.json``
-    (``~/.config/dynamic-harness/harness.json``) acts as the common base shared
-    across all projects; the working-directory ``harness.json`` — or an explicit
-    ``--config`` path — is the local overlay that overrides it. Only files that
-    exist are collected, except an explicit path is always appended so a missing
-    explicit file still raises when read.
+    The XDG user-global ``dynamic_harness.json``
+    (``~/.config/dynamic_harness/dynamic_harness.json``, or
+    ``$XDG_CONFIG_HOME/dynamic_harness/dynamic_harness.json`` when that env var
+    is set) acts as the common base shared across all projects; the
+    working-directory ``dynamic_harness.json`` — or an explicit ``--config``
+    path — is the local overlay that overrides it. Only files that exist are
+    collected, except an explicit path is always appended so a missing explicit
+    file still raises when read.
     """
     files: list[Path] = []
-    xdg_candidate = XDG_CONFIG_DIR / DEFAULT_CONFIG_FILENAME
+    xdg_candidate = _xdg_config_dir() / DEFAULT_CONFIG_FILENAME
     if xdg_candidate.exists():
         files.append(xdg_candidate)
     if explicit:

@@ -152,7 +152,7 @@ export OPENROUTER_API_KEY=sk-or-v1-your-key    # Primary key
 export OPENAI_API_KEY=sk-...                   # Fallback key
 ```
 
-**`harness.json`** — structured settings:
+**`dynamic_harness.json`** — structured settings:
 ```json
 {
   "model": "openrouter/deepseek/deepseek-v4-flash-0731",
@@ -179,9 +179,9 @@ The top-level `root_model` selects the default model in `<provider>/<model>` for
 provider's credential source (`env`), endpoint, OpenRouter routing, and model
 catalog.
 
-**Discovery (layered)**: `~/.config/dynamic-harness/harness.json` is the common base, overlaid by `./harness.json` (or explicit `--config`); local keys override the base per-field.
+**Discovery (layered)**: `~/.config/dynamic_harness/dynamic_harness.json` (or `$XDG_CONFIG_HOME/dynamic_harness/…`) is the common base, overlaid by `./dynamic_harness.json` (or explicit `--config`); local keys override the base per-field.
 
-**Precedence**: CLI args (`--model`, `--provider`, `--base-url`, `--api-key`) → `harness.json` → built-in defaults.
+**Precedence**: CLI args (`--model`, `--provider`, `--base-url`, `--api-key`) → `dynamic_harness.json` → built-in defaults.
 
 ## `ProviderRegistry` (named providers from config → built instances)
 

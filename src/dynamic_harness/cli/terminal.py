@@ -73,7 +73,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("prompt", nargs="*", help="Task description (inline)")
     parser.add_argument("-m", metavar="FILE", help="Read task prompt from file")
-    parser.add_argument("--config", help="Path to harness.json config file")
+    parser.add_argument("--config", help="Path to dynamic_harness.json config file")
     parser.add_argument("--temp", action="store_true", help="Use temporary directories")
     parser.add_argument("--model", help="Root LLM model ref in '<provider>/<model>' form (the top-level agent's model; the first slash splits; e.g. 'openrouter/deepseek/deepseek-v4-flash')")
     parser.add_argument("--provider", help="Provider id from the config's 'providers' map; uses the config model when it names this provider, else the provider's first model")

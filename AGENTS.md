@@ -85,7 +85,7 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 ```
 src/dynamic_harness/
 ├── __main__.py          → entry: python -m dynamic_harness
-├── config.py            → HarnessConfig, ProviderConfig, ModelSpec, ResolvedModel, LLMSettings, harness.json loading
+├── config.py            → HarnessConfig, ProviderConfig, ModelSpec, ResolvedModel, LLMSettings, dynamic_harness.json loading
 ├── api/harness.py       → Harness (high-level programmatic API)
 ├── core/
 │   ├── agent.py         → Agent class + system prompt + run() loop + safety
@@ -120,7 +120,7 @@ per module. **Do not restate it here**; read the page instead.
 | Runtime lifecycle, events, resume | `docs/api/runtime.md` |
 | Task / ReportPayload models | `docs/api/task.md` |
 | All 34 tools (parameters, terminal tools, result caching) | `docs/api/tools.md` |
-| Every harness.json setting (0/null = cap off) | `docs/api/config.md` |
+| Every dynamic_harness.json setting (0/null = cap off) | `docs/api/config.md` |
 | Policies layer | `docs/api/policies.md` |
 | Artifacts, commits, LLM providers | `docs/api/artifacts.md`, `docs/api/repository.md`, `docs/api/llm.md` |
 

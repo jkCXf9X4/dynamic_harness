@@ -16,6 +16,7 @@ from dynamic_harness.config import (
     _deep_merge,
     _discover_config_files,
     _discover_path,
+    _xdg_config_dir,
     load_harness_config,
     resolve_model_ref,
 )
@@ -218,13 +219,16 @@ class TestResolveModelRef:
 
 
 class TestLoadHarnessConfig:
-    def test_load_from_file(self, tmp_path: Path) -> None:
+    def test_load_from_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Isolate the XDG base so the machine's global config can never
+        # leak into an explicit-path load.
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
         config_data = {
             "root_model": "openrouter/test-model",
             "providers": {"openrouter": {"base_url": "http://localhost"}},
             "safety": {"max_iterations": 100, "repeated_call_limit": 3, "timeout_seconds": 90},
         }
-        cfg_path = tmp_path / "harness.json"
+        cfg_path = tmp_path / "dynamic_harness.json"
         cfg_path.write_text(json.dumps(config_data))
 
         cfg = load_harness_config(str(cfg_path))
@@ -245,9 +249,7 @@ class TestLoadHarnessConfig:
         built-in defaults, not machine state."""
 
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-        monkeypatch.setattr(
-            "dynamic_harness.config.XDG_CONFIG_DIR", tmp_path / "xdg"
-        )
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
         cfg = load_harness_config()
         assert cfg.root_model == "openrouter/deepseek/deepseek-v4-flash"
 
@@ -262,12 +264,12 @@ class TestDiscoverPath:
     def test_cwd_overrides_xdg(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         cwd = tmp_path / "project"
         cwd.mkdir()
-        (cwd / "harness.json").write_text("{}")
+        (cwd / "dynamic_harness.json").write_text("{}")
 
         monkeypatch.setattr(Path, "cwd", lambda: cwd)
 
         result = _discover_path()
-        assert result == cwd / "harness.json"
+        assert result == cwd / "dynamic_harness.json"
 
 
 class TestDeepMerge:
@@ -309,13 +311,10 @@ class TestLayeredLoading:
         cwd = tmp_path / "empty"
         cwd.mkdir()
         monkeypatch.setattr(Path, "cwd", lambda: cwd)
-        monkeypatch.setattr(
-            "dynamic_harness.config.XDG_CONFIG_DIR",
-            tmp_path / "xdg",
-        )
-        xdg_dir = tmp_path / "xdg"
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        xdg_dir = tmp_path / "dynamic_harness"
         xdg_dir.mkdir()
-        (xdg_dir / "harness.json").write_text(
+        (xdg_dir / "dynamic_harness.json").write_text(
             json.dumps(
                 {
                     "root_model": "openrouter/base-model",
@@ -334,10 +333,10 @@ class TestLayeredLoading:
         cwd = tmp_path / "project"
         cwd.mkdir()
         monkeypatch.setattr(Path, "cwd", lambda: cwd)
-        xdg_dir = tmp_path / "xdg"
+        xdg_dir = tmp_path / "dynamic_harness"
         xdg_dir.mkdir()
-        monkeypatch.setattr("dynamic_harness.config.XDG_CONFIG_DIR", xdg_dir)
-        (xdg_dir / "harness.json").write_text(
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        (xdg_dir / "dynamic_harness.json").write_text(
             json.dumps(
                 {
                     "root_model": "openrouter/base-model",
@@ -352,7 +351,7 @@ class TestLayeredLoading:
                 }
             )
         )
-        (cwd / "harness.json").write_text(
+        (cwd / "dynamic_harness.json").write_text(
             json.dumps(
                 {
                     "root_model": "openrouter/local-model",
@@ -373,10 +372,10 @@ class TestLayeredLoading:
         cwd = tmp_path / "project"
         cwd.mkdir()
         monkeypatch.setattr(Path, "cwd", lambda: cwd)
-        xdg_dir = tmp_path / "xdg"
+        xdg_dir = tmp_path / "dynamic_harness"
         xdg_dir.mkdir()
-        monkeypatch.setattr("dynamic_harness.config.XDG_CONFIG_DIR", xdg_dir)
-        (xdg_dir / "harness.json").write_text(
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        (xdg_dir / "dynamic_harness.json").write_text(
             json.dumps({"providers": {"openrouter": {"base_url": "http://base"}}})
         )
         explicit = tmp_path / "custom.json"
@@ -390,10 +389,10 @@ class TestLayeredLoading:
         cwd = tmp_path / "project"
         cwd.mkdir()
         monkeypatch.setattr(Path, "cwd", lambda: cwd)
-        xdg_dir = tmp_path / "xdg"
+        xdg_dir = tmp_path / "dynamic_harness"
         xdg_dir.mkdir()
-        monkeypatch.setattr("dynamic_harness.config.XDG_CONFIG_DIR", xdg_dir)
-        (xdg_dir / "harness.json").write_text("{ not json")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        (xdg_dir / "dynamic_harness.json").write_text("{ not json")
 
         with pytest.raises(ValueError, match="Invalid JSON"):
             load_harness_config()
@@ -402,11 +401,29 @@ class TestLayeredLoading:
         cwd = tmp_path / "project"
         cwd.mkdir()
         monkeypatch.setattr(Path, "cwd", lambda: cwd)
-        xdg_dir = tmp_path / "xdg"
+        xdg_dir = tmp_path / "dynamic_harness"
         xdg_dir.mkdir()
-        monkeypatch.setattr("dynamic_harness.config.XDG_CONFIG_DIR", xdg_dir)
-        (xdg_dir / "harness.json").write_text("{}")
-        (cwd / "harness.json").write_text("{}")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        (xdg_dir / "dynamic_harness.json").write_text("{}")
+        (cwd / "dynamic_harness.json").write_text("{}")
 
         files = _discover_config_files()
-        assert files == [xdg_dir / "harness.json", cwd / "harness.json"]
+        assert files == [xdg_dir / "dynamic_harness.json", cwd / "dynamic_harness.json"]
+
+
+class TestXdgConfigDir:
+    def test_honors_xdg_config_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        assert _xdg_config_dir() == tmp_path / "dynamic_harness"
+
+    def test_defaults_to_home_config_when_unset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        assert _xdg_config_dir() == tmp_path / ".config" / "dynamic_harness"
+
+    def test_empty_env_var_falls_back_to_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", "")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        assert _xdg_config_dir() == tmp_path / ".config" / "dynamic_harness"
