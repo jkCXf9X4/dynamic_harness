@@ -158,7 +158,7 @@ def test_agents_txt_shows_model(runtime, tmp_path):
     w.snapshot(runtime)
     txt = tmp_path.joinpath("agents.txt").read_text()
     # No profile configured → the resolved default model id is shown instead.
-    assert f"@{root.model_info.model_id}" in txt
+    assert f"[@{root.model_info.model_id}]" in txt
     tree = json.loads(w.tree_path.read_text())
     assert tree[0]["model_profile"] is None
     assert tree[0]["model"] == root.model_info.model_id
@@ -176,8 +176,8 @@ def test_agents_txt_shows_profile_name(tmp_path, monkeypatch):
     w.snapshot(runtime)
     txt = tmp_path.joinpath("agents.txt").read_text()
     # Profiled child shows the tier; the unprofiled root shows its model id.
-    assert "@strong" in txt
-    assert f"@{root.model_info.model_id}" in txt
+    assert "[@strong]" in txt
+    assert f"[@{root.model_info.model_id}]" in txt
     tree = json.loads(w.tree_path.read_text())
     child_node = tree[0]["children"][0]
     assert child_node["model_profile"] == "strong"
@@ -198,12 +198,17 @@ def test_render_text_tree_flat_and_nested():
     )
     tree = render_text_tree([root])
     lines = tree.splitlines()
-    # Two lines for the root (identity + metrics), one for each bare child.
-    assert lines[0] == "└ aaaaaaaa [✓ completed] root"
-    assert lines[1] == "  msgs 3 · tokens 100"
-    assert "├" in lines[2] and "child1" in lines[2]
-    assert "└" in lines[3] and "child2" in lines[3]
-    assert len(lines) == 4
+    # One two-line block per agent (identity + detail), blank-line separated,
+    # numbered in pre-order and indented by depth.
+    assert lines[0] == "1. aaaaaaaa root"
+    assert lines[1] == "   [✓ completed] msgs 3 · tokens 100"
+    assert lines[2] == ""
+    assert lines[3] == "  2. cccccccc child1"
+    assert lines[4] == "     [▶ running]"
+    assert lines[5] == ""
+    assert lines[6] == "  3. dddddddd child2"
+    assert lines[7] == "     [· pending]"
+    assert len(lines) == 8
 
 
 def test_render_text_tree_shows_profile_marker():
@@ -211,7 +216,7 @@ def test_render_text_tree_shows_profile_marker():
         agent_id="a" * 12, description="d", status="running",
         model_profile="fast", model="openai/gpt-5.2",
     )
-    assert "d · @fast" in render_text_tree([node])  # profile wins over model id
+    assert "[@fast] d" in render_text_tree([node])  # profile wins over model id
 
 
 def test_render_text_tree_falls_back_to_model_id():
@@ -219,7 +224,7 @@ def test_render_text_tree_falls_back_to_model_id():
         agent_id="a" * 12, description="d", status="running",
         model="deepseek/deepseek-v4-flash",
     )
-    assert "d · @deepseek/deepseek-v4-flash" in render_text_tree([node])
+    assert "[@deepseek/deepseek-v4-flash] d" in render_text_tree([node])
 
 
 def test_render_text_tree_no_marker_without_model():
@@ -227,18 +232,18 @@ def test_render_text_tree_no_marker_without_model():
     assert "@" not in render_text_tree([node])
 
 
-def test_metrics_line_combines_usage_and_activity():
+def test_detail_line_combines_status_activity_and_usage():
     node = AgentNode(
         agent_id="a" * 12, description="d", status="running",
         tokens=100, activity="tool echo", activity_age_s=12.0,
     )
-    # Activity leads the continuation line — the live progress signal.
-    assert node.metrics_line == "(tool echo 12s) · tokens 100"
+    # Status leads, then the live progress marker, then usage.
+    assert node.detail_line == "[▶ running] (tool echo 12s) · tokens 100"
 
 
-def test_metrics_line_empty_without_usage_or_activity():
+def test_detail_line_is_status_only_without_usage_or_activity():
     node = AgentNode(agent_id="a" * 12, description="d", status="running")
-    assert node.metrics_line == ""
+    assert node.detail_line == "[▶ running]"
 
 
 def test_fmt_age():

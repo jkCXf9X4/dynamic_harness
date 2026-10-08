@@ -40,16 +40,16 @@ class TestAgentNode:
         node = AgentNode(agent_id="id", description="d", status="running", tokens=100, messages=3)
         assert node.usage == " (msgs 3 · tokens 100)"
 
-    def test_status_tag_glyphs_and_alignment(self) -> None:
+    def test_status_tag_glyphs(self) -> None:
         def tag(status: str) -> str:
             return AgentNode(agent_id="id", description="d", status=status).status_tag
-        assert tag("completed").startswith("[✓ completed]")
-        assert tag("running").startswith("[▶ running]")
-        assert tag("pending").startswith("[· pending]")
-        assert tag("failed").startswith("[✗ failed]")
-        assert tag("escalated").startswith("[⚑ escalated]")
-        # All states pad to the same width so descriptions stay column-aligned.
-        assert len({len(tag(s)) for s in ("pending", "running", "completed", "failed", "escalated")}) == 1
+        assert tag("completed") == "[✓ completed]"
+        assert tag("running") == "[▶ running]"
+        assert tag("pending") == "[· pending]"
+        assert tag("failed") == "[✗ failed]"
+        assert tag("escalated") == "[⚑ escalated]"
+        # Glyph-less fallback keeps the icon slot (space) for rhythm.
+        assert tag("unknown-state") == "[  unknown-state]"
 
     def test_usage_renders_cache_hit_rate(self) -> None:
         node = AgentNode(

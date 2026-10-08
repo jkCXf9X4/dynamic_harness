@@ -42,19 +42,23 @@ Every task creates a tree of agents, available on disk as `agents.txt` (updates
 continuously) and on demand via `/tree`:
 
 ```
-└ 3a1f9c02 [✓ completed]  analyze codebase · @deepseek/deepseek-v4-flash
-    msgs 14 · tokens 1'200
-  ├ b2e8d4aa [✓ completed]  Security Auditor · @fast
-    msgs 9 · tokens 800
-  ├ c9f3e771 [✓ completed]  Test Coverage Checker · @fast
-    msgs 12 · tokens 1'100
-  └ d4a5b2ef [✗ failed]   Style Checker · @deepseek/deepseek-v4-flash
-    msgs 6 · tokens 300
-    └ e6f0c113 [✓ completed]  Style Checker (retry) · @fast
-      msgs 10 · tokens 900
+1. 3a1f9c02 [@deepseek/deepseek-v4-flash] analyze codebase
+   [✓ completed] msgs 14 · tokens 1'200
+
+  2. b2e8d4aa [@fast] Security Auditor
+     [✓ completed] msgs 9 · tokens 800
+
+  3. c9f3e771 [@fast] Test Coverage Checker
+     [✓ completed] msgs 12 · tokens 1'100
+
+  4. d4a5b2ef [@deepseek/deepseek-v4-flash] Style Checker
+     [✗ failed] msgs 6 · tokens 300
+
+    5. e6f0c113 [@fast] Style Checker (retry)
+       [✓ completed] msgs 10 · tokens 900
 ```
 
-The status glyph (✓/✗/▶/⚑) is padded so descriptions align across states,
-the profile/model marker the agent runs on, and messages + token usage per
-agent are enough to spot a stuck or looping prompt at a glance — and to see
-at a glance which tier each branch of the tree ran on.
+Each agent is a numbered, depth-indented block: an identity line (id, the
+profile/model marker it runs on, description) and a detail line (status with
+its glyph ✓/✗/▶/⚑, live activity, token usage). Blocks are blank-line
+separated, so state, tier, and cost per agent are readable at a glance.

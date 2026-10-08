@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import time
 from dataclasses import dataclass, field
 
@@ -17,7 +18,6 @@ STATUS_ICONS: dict[str, str] = {
     "failed": "✗",
     "escalated": "⚑",
 }
-STATUS_TAG_WIDTH = max(len(f"[{icon} {status}]") for status, icon in STATUS_ICONS.items())
 
 
 def _clip(text: str, n: int) -> str:
@@ -138,11 +138,9 @@ class AgentNode:
 
     @property
     def status_tag(self) -> str:
-        """Bracketed status with its at-a-glance glyph, padded to the widest
-        tag so descriptions on every agent line line up vertically across
-        states."""
+        """Bracketed status with its at-a-glance glyph."""
         icon = STATUS_ICONS.get(self.status, " ")
-        return f"[{icon} {self.status}]".ljust(STATUS_TAG_WIDTH)
+        return f"[{icon} {self.status}]"
 
     @property
     def model_marker(self) -> str:
@@ -181,15 +179,19 @@ class AgentNode:
         return f" ({' · '.join(parts)})" if parts else ""
 
     @property
-    def metrics_line(self) -> str:
-        """Most-recent activity + usage for the continuation line (no leading
-        space). Activity leads — it is the live progress marker a long
-        in-flight call shows — and keeps its ``(label age)`` form."""
-        parts: list[str] = []
+    def detail_line(self) -> str:
+        """Second line of the agent block: status tag, then the live progress
+        marker (what the agent did last and how long ago, keeping its
+        ``(label age)`` form), then the dot-separated usage metrics. Status
+        always leads (single-spaced from the rest), so the line is never
+        empty."""
+        rest: list[str] = []
         if self.activity is not None:
-            parts.append(f"({self.activity} {fmt_age(self.activity_age_s or 0.0)})")
-        parts.extend(self._usage_parts())
-        return " · ".join(parts)
+            rest.append(f"({self.activity} {fmt_age(self.activity_age_s or 0.0)})")
+        rest.extend(self._usage_parts())
+        if rest:
+            return f"{self.status_tag} " + " · ".join(rest)
+        return self.status_tag
 
 
 @dataclass
@@ -308,40 +310,38 @@ def build_stats(runtime: Runtime) -> Stats:
 def render_text_tree(nodes: list[AgentNode]) -> str:
     """Plain-text agent tree for quick operator evaluation.
 
-    Two lines per agent: an identity line (id, status with an at-a-glance
-    glyph, description, and the profile/model marker — what the agent runs on)
-    and a continuation line with the live progress marker (what the agent did
-    last and how long ago, e.g. ``(tool web_search 12s)``) followed by the
-    dot-separated usage metrics — live context size, message count, a compact
-    token breakdown, and USD cost markers (own cost ``$`` and subtree cost
-    including all descendants ``Σ$``, when the provider reports cost or prices
-    are configured). The split keeps lines short enough to stay readable, and
-    the glyph + padding keep status and description aligned so a scan picks
-    out state at a glance. The activity age keeps climbing during quiet
-    stretches (e.g. a long in-flight LLM call), which is the progress signal.
-    Engine-agnostic (no terminal-library markup) so it can be persisted to disk.
+    Each agent is a two-line block, numbered in pre-order tree sequence and
+    indented by depth (number + indent replace box-drawing branches): an
+    identity line (id, the profile/model marker in brackets — what the agent
+    runs on — and the description) and a detail line (status with its
+    at-a-glance glyph, the live progress marker — what the agent did last and
+    how long ago, e.g. ``(tool web_search 12s)`` — then the dot-separated
+    usage metrics: live context size, message count, a compact token
+    breakdown, and USD cost markers, own cost ``$`` and subtree cost including
+    all descendants ``Σ$``, when the provider reports cost or prices are
+    configured). Blocks are separated by a blank line so each agent reads as a
+    card. The activity age keeps climbing during quiet stretches (e.g. a long
+    in-flight LLM call), which is the progress signal. Engine-agnostic (no
+    terminal-library markup) so it can be persisted to disk.
     """
     if not nodes:
         return "(no agents)\n"
 
-    lines: list[str] = []
+    blocks: list[str] = []
+    counter = itertools.count(1)
 
-    def walk(nodes: list[AgentNode], prefix: str, last: bool) -> None:
-        for i, node in enumerate(nodes):
-            is_last = i == len(nodes) - 1
-            branch = "└" if is_last else "├"
-            marker = f" · @{node.model_marker}" if node.model_marker else ""
-            lines.append(
-                f"{prefix}{branch} {node.short_id} {node.status_tag}"
-                f" {node.short_description}{marker}"
+    def walk(nodes: list[AgentNode], depth: int) -> None:
+        indent = "  " * depth
+        for node in nodes:
+            model = f" [@{node.model_marker}]" if node.model_marker else ""
+            # Three spaces aligns the detail line under the id (past the
+            # ``N. `` number prefix).
+            blocks.append(
+                f"{indent}{next(counter)}. {node.short_id}{model} "
+                f"{node.short_description}\n"
+                f"{indent}   {node.detail_line}"
             )
-            metrics = node.metrics_line
-            if metrics:
-                # Two spaces aligns the metrics under the short_id (past the
-                # single-char branch + separator).
-                lines.append(f"{prefix}  {metrics}")
-            child_prefix = prefix + ("  " if is_last else "│ ")
-            walk(node.children, child_prefix, is_last)
+            walk(node.children, depth + 1)
 
-    walk(nodes, "", last=True)
-    return "\n".join(lines) + "\n"
+    walk(nodes, 0)
+    return "\n\n".join(blocks) + "\n"

@@ -543,7 +543,7 @@ def _print_tree(runtime: Runtime) -> None:
 
     Lines are printed one at a time with ``soft_wrap=True`` so rich doesn't
     reflow long lines across the terminal width — reflowing would break the
-    box-drawing branch characters and indent the continuation oddly.
+    numbered block layout and the detail-line indentation.
     """
     for line in render_text_tree(build_agent_tree(runtime)).splitlines():
         console.print(line, markup=False, soft_wrap=True)
