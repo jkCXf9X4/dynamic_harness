@@ -67,6 +67,14 @@ class RetryPolicy:
         "engine_overloaded", "upstream_provider_shared_pool",
     )
 
+    #: Keywords marking a GATEWAY total-time timeout in a 5xx body (the SAGA
+    #: vLLM gateway 504s with ``gateway_timeout: Request timed out after 300
+    #: seconds``). A 504 is a gateway timeout by definition and is classified
+    #: without keyword matching; other 5xx need the wording to count.
+    _GATEWAY_TIMEOUT_KEYWORDS: tuple[str, ...] = (
+        "gateway_timeout", "gateway timeout", "timed out after",
+    )
+
     #: Keywords that mark a PERMANENT failure — retrying cannot succeed until
     #: something outside the runtime changes (billing, plan, quota reset).
     #: Checked before every transient/rate-limit signal: OpenAI reports
@@ -144,6 +152,29 @@ class RetryPolicy:
         return any(keyword in error_str for keyword in RetryPolicy._RETRYABLE_KEYWORDS)
 
     @staticmethod
+    def is_gateway_timeout(exc: Exception) -> bool:
+        """True for a server-side 5xx whose body says the GATEWAY gave up on
+        the request's total time (e.g. the SAGA vLLM gateway 504
+        ``gateway_timeout: Request timed out after 300 seconds``).
+
+        Such a failure is deterministic in SIZE, not in TIME: an identical
+        retry of the same (too large) call hits the same wall. The caller must
+        shrink the call — prompt via context prune, generation via
+        ``max_tokens`` — before retrying instead of resending it unchanged.
+        Client-side deadlines (``asyncio.TimeoutError`` / httpx timeouts) are
+        NOT gateway timeouts: the server never answered at all.
+        """
+        if not isinstance(exc, APIStatusError):
+            return False
+        status = getattr(exc, "status_code", None)
+        if status is None or not (500 <= status < 600):
+            return False
+        if status == 504:
+            return True
+        error_str = str(exc).lower()
+        return any(k in error_str for k in RetryPolicy._GATEWAY_TIMEOUT_KEYWORDS)
+
+    @staticmethod
     def retry_after_seconds(exc: Exception) -> float | None:
         """Seconds to wait before retrying, from a provider Retry-After header
         (if one was sent). Returns None when absent. Only the seconds form is
@@ -217,4 +248,17 @@ class RetryPolicy:
         return (
             f"LLM call failed after {attempts} attempt(s) "
             f"({label} retry budget exhausted): {last_error}"
+        )
+
+    def gateway_timeout_exhausted_message(self, *, last_error: Exception, attempts: int) -> str:
+        """Distinct error for a gateway total-time timeout that outlived its
+        (shrinking) retries — the call still did not fit the gateway's window,
+        so the operator needs the sizing levers, not a generic retry note."""
+        return (
+            f"LLM call exceeded the gateway's total-time limit on all {attempts} "
+            f"attempt(s) (the context was pruned and the generation capped "
+            f"before each retry): {last_error}. The request still did not fit "
+            f"the gateway window — reduce the context further, lower "
+            f"llm.gateway_timeout_max_tokens / llm.gateway_timeout_prompt_budget, "
+            f"or use a faster model/endpoint."
         )

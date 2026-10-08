@@ -503,3 +503,114 @@ async def test_interactive_resume_converts_timeout_to_failure(runtime: Runtime) 
 
     assert task.last_failure is not None
     assert llm.calls > calls_after_first_run
+
+
+# -- gateway total-time timeout (504) -> adaptive shrink retry -----------
+
+
+def _gateway_504() -> InternalServerError:
+    """The exact shape of the SAGA vLLM gateway's total-time kill (from the
+    field: ``gateway_timeout: Request timed out after 300 seconds``)."""
+    request = httpx.Request("POST", "http://provider.invalid/v1/chat/completions")
+    return InternalServerError(
+        message=(
+            "Error code: 504 - {'error': {'type': 'gateway_timeout', "
+            "'code': None, 'message': 'Request timed out after 300 seconds.', "
+            "'param': None}}"
+        ),
+        response=httpx.Response(504, request=request),
+        body={"error": {"type": "gateway_timeout",
+                        "message": "Request timed out after 300 seconds."}},
+    )
+
+
+class _GatewayTimeoutLLM(LLMProvider):
+    """Raises a gateway 504 for the first ``fail_calls`` generations, then
+    completes normally. Records each call's LLMConfig and payload size so the
+    test can observe the adaptive shrink (smaller prompt + capped
+    generation on the retry)."""
+
+    def __init__(self, fail_calls: int) -> None:
+        self.fail_calls = fail_calls
+        self.calls = 0
+        self.configs: list = []
+        self.payload_chars: list[int] = []
+
+    async def generate(self, system: str, user: str, config=None):
+        raise NotImplementedError
+
+    async def generate_with_tools(self, messages: list[dict], tools: list[dict], config=None):
+        self.calls += 1
+        self.configs.append(config)
+        self.payload_chars.append(sum(len(str(m.get("content", ""))) for m in messages))
+        if self.calls <= self.fail_calls:
+            raise _gateway_504()
+        return ToolCallResponse(content="done", model="mock")
+
+    async def generate_structured(self, system, user, response_model, config=None):
+        raise NotImplementedError
+
+
+def _agent_with_fat_context(runtime: Runtime, turns: int = 6, chars: int = 2000) -> Agent:
+    task = Task(description="test")
+    task.status = TaskStatus.running
+    agent = Agent("gw-test", task, runtime)
+    runtime._agents[agent.id] = agent
+    for i in range(turns):
+        agent.context.commit_turn(
+            {"role": "assistant", "content": f"step {i}"},
+            [{"role": "tool", "tool_call_id": f"c{i}", "name": "bash", "content": "x" * chars}],
+        )
+    return agent
+
+
+@pytest.mark.asyncio
+async def test_gateway_timeout_shrinks_context_and_caps_retry(runtime: Runtime) -> None:
+    """A 504 ``gateway_timeout`` is retried SHRUNK, not resent unchanged: the
+    oldest committed turns are pruned down to the prompt budget and the
+    retry's generation is capped at ``gateway_timeout_max_tokens``."""
+    runtime._self_heal_mode = False
+    agent = _agent_with_fat_context(runtime)
+    llm = _GatewayTimeoutLLM(fail_calls=1)
+    runtime.set_llm(llm)
+    agent._llm = llm
+    agent.gateway_timeout_prompt_budget = 500  # force the prune on a small ctx
+    agent.gateway_timeout_max_tokens = 4096
+    _no_sleep(agent)
+
+    result = await agent._llm_call_with_retry(tools=[])
+
+    assert result.content == "done"
+    assert llm.calls == 2  # the 504 was retried, not given up on
+    # The original call was uncapped; the retry was capped.
+    assert llm.configs[0].max_tokens is None
+    assert llm.configs[1].max_tokens == 4096
+    # The session pin survived the shrink (prompt-cache warmth preserved).
+    assert llm.configs[1].session_id == agent.session_id
+    # The pruned payload is materially smaller and carries a PRUNED marker.
+    assert llm.payload_chars[1] < llm.payload_chars[0]
+    assert agent.context.pruned
+    assert any(
+        "[PRUNED" in str(m.get("content", "")) for m in agent.context.messages
+    )
+    # The prune is reversible.
+    victim = next(iter(agent.context.pruned))
+    agent.context.restore(victim)
+    assert victim not in agent.context.pruned
+
+
+@pytest.mark.asyncio
+async def test_gateway_timeout_exhaustion_reports_gateway(runtime: Runtime) -> None:
+    """When the shrunk retries still hit the gateway's window, the failure
+    says so explicitly (the sizing levers), not a generic transient note."""
+    runtime._self_heal_mode = False
+    agent = _agent_with_fat_context(runtime)
+    llm = _GatewayTimeoutLLM(fail_calls=10_000)
+    runtime.set_llm(llm)
+    agent._llm = llm
+    agent.gateway_timeout_prompt_budget = 500
+    _no_sleep(agent)
+
+    with pytest.raises(RuntimeError, match="gateway"):
+        await agent._llm_call_with_retry(tools=[])
+    assert llm.calls == agent.retry_max_attempts  # generic transient budget

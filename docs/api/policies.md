@@ -44,7 +44,7 @@ decisions and wording without coupling to the harness core.
 | `ResumePlanner` | `heal.py` | Decision half of the parent-driven `resume` ladder: strategy validation, rot refusal, layer ordering, budget messages. |
 | `LoopGuard` | `loop_guard.py` | Stateful repeated-call / near-identical loop detection + the nudge→fail recovery ladder (returns structured `LoopAction` verdicts). |
 | `ResultCachePolicy` | `result_cache.py` | Result-handle cacheability (`DEFAULT_NON_CACHEABLE`) and token-window rendering / paging footers. |
-| `RetryPolicy` | `retry.py` | Per-failure-class LLM retry/backoff: classification (billing/quota exhaustion is permanent and never retried, even as a 429), budgets, exponential delay, `Retry-After` handling, session-pin drop. |
+| `RetryPolicy` | `retry.py` | Per-failure-class LLM retry/backoff: classification (billing/quota exhaustion is permanent and never retried, even as a 429; a gateway total-time timeout — 504 `gateway_timeout`, or other 5xx with timeout wording — is retried only after the agent shrinks the call), budgets, exponential delay, `Retry-After` handling, session-pin drop. |
 | `DisclosurePolicy` | `disclosure.py` | Progressive-disclosure tier building + selection (`views_from_report`, `build_view_dict`, `VIEW_LEVELS`, `reveal_fields` / `first_deeper_content`). |
 | `BudgetPolicy` | `budget.py` | Grant/deny for mid-run token-budget requests (with a structured `BudgetVerdict`). |
 | `TimeoutPolicy` | `budget.py` | Whole-run wall-clock (`safety.timeout_seconds`) decisions. |

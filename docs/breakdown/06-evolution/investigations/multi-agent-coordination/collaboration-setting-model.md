@@ -82,7 +82,3 @@ Design consequences:
 4. **Implementation shape.** One `CollaborationCapability` mixin bundled into
    `Agent` (like the tool set), backed by runtime-registered team workspaces; the
    member/founder split is enforced by the scoping policy, not agent classes.
-
-## Decisions
-
-- AD-005 — Founding Boundary-Scoped, Participation Universal

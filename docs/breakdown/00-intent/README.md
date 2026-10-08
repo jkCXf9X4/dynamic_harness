@@ -26,3 +26,9 @@ This layer is the "why". It holds the founding thesis (fresh context is cheaper 
 - Backlog, roadmap → `06-evolution/`
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- [Competitive Differentiation](competitive-differentiation/README.md) — What separates Dynamic Harness from other agent harnesses (CrewAI, LangGraph, AutoGen, OpenAI Agents SDK, Claude Code, MCP-based tools): the mechanically-enforced guarantees that survive model disobedience, separated from prompt-level advice shared with the field.
+- **INFO-001** [VISION](VISION.md) — Dynamic Harness is a recursive agent runtime that maximizes LLM output quality while minimizing cost — by enforcing disciplined task decomposition, st…
+<!-- pb:index:end -->

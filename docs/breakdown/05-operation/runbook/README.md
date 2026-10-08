@@ -15,3 +15,10 @@ Release decisions (bumping, breaking changes) are operation decisions recorded a
 `OD`-prefixed ADRs per the product-breakdown convention.
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- **INFO-136** [Benchmark Runners](benchmarks.md) — Benchmark Runners
+- **INFO-137** [Build & Release](build-and-release.md) — Build & Release
+- **INFO-138** [Setup & Test](setup-and-test.md) — API key: (or OpenAI key) — read from the environment
+<!-- pb:index:end -->

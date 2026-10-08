@@ -201,6 +201,44 @@ class AgentContext:
             "chars_saved": chars_saved,
         }
 
+    def prune_oldest_to(self, target_tokens: int, keep_recent: int = 3) -> dict[str, Any] | None:
+        """Emergency mechanical shrink: prune the OLDEST committed turns
+        (newest kept) until the live context estimates at or under
+        ``target_tokens``.
+
+        Unlike ``compress`` this never calls the LLM — it is the shrink the
+        gateway-timeout retry path uses when the provider's gateway killed the
+        request for exceeding its total-time window. Pruned turns stay
+        restorable via ``restore``. Returns a summary dict (``turns_pruned``,
+        ``chars_saved``) or None when nothing was pruned (already small
+        enough, nothing prunable, or a 0/None target — 0 disables the shrink).
+        """
+        if not self.turns or not target_tokens:
+            return None
+        target = int(target_tokens)
+        if self.estimate_prompt_tokens() <= target:
+            return None
+        candidates = [pid for pid in self.turn_order if pid not in self.pruned]
+        if len(candidates) <= max(int(keep_recent), 0):
+            return None
+        prunable = candidates[: len(candidates) - max(int(keep_recent), 0)]  # oldest first
+        turns_pruned: list[str] = []
+        chars_saved = 0
+        for pid in prunable:
+            result = self.prune(pid)
+            if result and result.get("action"):
+                turns_pruned.extend(result["turns_pruned"])
+                chars_saved += result["chars_saved"]
+            if self.estimate_prompt_tokens() <= target:
+                break
+        if not turns_pruned:
+            return None
+        return {
+            "action": True,
+            "turns_pruned": turns_pruned,
+            "chars_saved": chars_saved,
+        }
+
     def restore(self, prune_id: str) -> str:
         """Bring a pruned turn back, re-appending it at the end of the context."""
         prune_id = str(prune_id)

@@ -76,7 +76,3 @@ Recommended structure: **build the spine; mount the advanced processes as policy
 layers over it** (the codebase's own pattern — see `policies/verify.py`). The
 collaboration-setting spec is demoted to the advanced layer: its AC-1..11 still
 hold, but as *policy-layer* acceptance on top of the spine.
-
-## Decisions
-
-- AD-006 — Spine = Runtime `_links` + Reuse of Converse/_inject_queue + Artifact/Result Pointers; Spec Demoted to Advanced Policy Layer

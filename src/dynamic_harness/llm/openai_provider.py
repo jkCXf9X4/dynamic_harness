@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 
 from .provider import LLMConfig, LLMProvider, LLMResponse, ToolCallData, ToolCallResponse
 
@@ -15,6 +16,22 @@ def _extract_json(text: str) -> object:
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
     return json.loads(text)
+
+
+def _parse_arguments(raw: str) -> dict[str, Any]:
+    """Parse a tool-call argument string.
+
+    Malformed or truncated payloads (a streamed call cut off mid-JSON by
+    ``max_tokens``) degrade to ``{}`` — the agent sees an empty argument set
+    instead of a provider-level crash."""
+    try:
+        args = json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            args = _extract_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            return {}
+    return args if isinstance(args, dict) else {}
 
 
 def _extract_usage(usage: object | None) -> dict | None:
@@ -56,6 +73,7 @@ class OpenAIProvider(LLMProvider):
         provider_force: str | None = None,
         timeout: httpx.Timeout | float = 500.0,
         max_retries: int = 0,
+        stream: bool = True,
     ) -> None:
         http_client = httpx.AsyncClient(verify=verify_ssl, timeout=timeout)
         self._http_client = http_client
@@ -82,6 +100,17 @@ class OpenAIProvider(LLMProvider):
         self._provider_ignore = provider_ignore or []
         self._provider_allow_fallbacks = provider_allow_fallbacks
         self._provider_force = provider_force
+        # Streamed completions keep the wire active while the model generates,
+        # so a gateway with a total-request-time cap (the SAGA vLLM gateway
+        # 504s ``gateway_timeout`` after 300s) does not kill a long generation
+        # the way it kills a silent non-streamed request. ``stream=False``
+        # restores the legacy single-response call for endpoints that cannot
+        # forward chunked responses.
+        self._stream = bool(stream)
+        # Endpoints that reject ``stream_options`` (older vLLM / stripping
+        # proxies) get one automatic retry without it: streaming is kept,
+        # usage reporting is dropped (``usage`` -> None).
+        self._stream_include_usage = True
         # ``session_id`` is an OpenRouter-specific field; OpenAI's native API
         # rejects unknown body keys, so only forward it to OpenRouter.
         self._is_openrouter = base_url is not None and "openrouter" in base_url.lower()
@@ -125,12 +154,11 @@ class OpenAIProvider(LLMProvider):
             kwargs["extra_body"] = extra
         if cfg.max_tokens is not None:
             kwargs["max_tokens"] = cfg.max_tokens
-        resp = await self.client.chat.completions.create(**kwargs)
-        choice = resp.choices[0]
+        content, _, usage, _ = await self._create_chat(**kwargs)
         return LLMResponse(
-            content=choice.message.content or "",
+            content=content,
             model=cfg.model,
-            usage=_extract_usage(resp.usage),
+            usage=usage,
         )
 
     async def generate_with_tools(
@@ -151,34 +179,129 @@ class OpenAIProvider(LLMProvider):
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
+        content, tool_calls, usage, _ = await self._create_chat(**kwargs)
+        return ToolCallResponse(
+            content=content or None,
+            tool_calls=tool_calls,
+            model=cfg.model,
+            usage=usage,
+        )
+
+    # -- chat completion: streamed by default -------------------------------
+
+    async def _create_chat(
+        self, **kwargs
+    ) -> tuple[str, list[ToolCallData] | None, dict | None, str | None]:
+        """Run one chat completion, streamed by default.
+
+        Returns ``(content, tool_calls, usage, finish_reason)``. Streaming
+        keeps the wire active while the model generates, so a gateway or
+        load balancer with a total-request-time cap (the SAGA vLLM gateway
+        returns a 504 ``gateway_timeout`` after 300s) does not kill a long
+        generation the way it kills a silent non-streamed request.
+        """
+        if not self._stream:
+            return await self._create_non_streamed(**kwargs)
+        try:
+            return await self._create_streamed(**kwargs)
+        except BadRequestError as e:
+            detail = str(e).lower()
+            if "stream_options" in detail and self._stream_include_usage:
+                # Endpoint rejects stream_options (older vLLM / a proxy that
+                # strips unknown body keys): keep streaming, drop the usage
+                # request (``usage`` -> None). One-shot per provider instance.
+                self._stream_include_usage = False
+                return await self._create_streamed(**kwargs)
+            if "stream" in detail:
+                # Endpoint rejects streaming altogether: fall back to the
+                # single-response call for this provider instance's lifetime.
+                self._stream = False
+                return await self._create_non_streamed(**kwargs)
+            raise
+
+    async def _create_streamed(
+        self, **kwargs
+    ) -> tuple[str, list[ToolCallData] | None, dict | None, str | None]:
+        """Stream a chat completion, reassembling content, tool calls
+        (arguments arrive in fragments across chunks, keyed by index), and the
+        trailing usage chunk (``stream_options.include_usage``)."""
+        request = dict(kwargs)
+        request["stream"] = True
+        if self._stream_include_usage:
+            request["stream_options"] = {"include_usage": True}
+        stream = await self.client.chat.completions.create(**request)
+        content_parts: list[str] = []
+        tool_acc: dict[int, dict] = {}
+        usage: object | None = None
+        finish_reason: str | None = None
+        try:
+            async for chunk in stream:
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+                for choice in chunk.choices:
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+                    delta = choice.delta
+                    if delta is None:
+                        continue
+                    if delta.content:
+                        content_parts.append(delta.content)
+                    for tc in delta.tool_calls or []:
+                        idx = tc.index if tc.index is not None else 0
+                        slot = tool_acc.setdefault(
+                            idx, {"id": None, "name": None, "arguments": ""}
+                        )
+                        if tc.id:
+                            slot["id"] = tc.id
+                        fn = tc.function
+                        if fn is not None:
+                            if fn.name:
+                                slot["name"] = fn.name
+                            if fn.arguments:
+                                slot["arguments"] += fn.arguments
+        except BaseException:
+            # Cancellation (the agent's per-call deadline) tears the stream
+            # down instead of leaking the connection.
+            await stream.close()
+            raise
+        tool_calls: list[ToolCallData] = []
+        for idx in sorted(tool_acc):
+            slot = tool_acc[idx]
+            tool_calls.append(ToolCallData(
+                id=slot["id"] or f"stream-tool-{idx}",
+                name=slot["name"] or "",
+                arguments=_parse_arguments(slot["arguments"]),
+            ))
+        return (
+            "".join(content_parts),
+            tool_calls or None,
+            _extract_usage(usage),
+            finish_reason,
+        )
+
+    async def _create_non_streamed(
+        self, **kwargs
+    ) -> tuple[str, list[ToolCallData] | None, dict | None, str | None]:
+        """The legacy single-response call (``stream=False`` providers and the
+        streaming fallbacks)."""
         resp = await self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
-
         tool_calls = None
         if msg.tool_calls:
-            parsed: list[ToolCallData] = []
-            for tc in msg.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError:
-                    try:
-                        args = _extract_json(tc.function.arguments)
-                    except (json.JSONDecodeError, ValueError):
-                        args = {}
-                parsed.append(ToolCallData(
+            tool_calls = [
+                ToolCallData(
                     id=tc.id,
                     name=tc.function.name,
-                    arguments=args if isinstance(args, dict) else {},
-                ))
-            if parsed:
-                tool_calls = parsed
-
-        return ToolCallResponse(
-            content=msg.content,
-            tool_calls=tool_calls,
-            model=cfg.model,
-            usage=_extract_usage(resp.usage),
+                    arguments=_parse_arguments(tc.function.arguments),
+                )
+                for tc in msg.tool_calls
+            ]
+        return (
+            msg.content or "",
+            tool_calls or None,
+            _extract_usage(resp.usage),
+            choice.finish_reason,
         )
 
     async def generate_structured(

@@ -25,3 +25,10 @@ The architecture is the ISO/IEC 15288 systems-engineering shape applied to agent
 The strongest rationale artifacts from this layer — the multi-agent INVESTIGATION and the verifier's evidence chain — are preserved under `06-evolution/investigations/`; the layer structure *wraps* them, it does not replace them.
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- [Agent Methodology](methodology/README.md) — The guidelines governing how every agent decomposes, delegates, verifies, synthesizes, and terminates. Derived from VISION.md and the agent system pro…
+- [Architecture Concepts](concepts/README.md) — The load-bearing model concepts. Each is a folder of single-concern leaves
+- [Worked Examples](examples/README.md) — Concrete good-vs-bad examples that make the methodology operational
+<!-- pb:index:end -->

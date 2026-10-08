@@ -50,3 +50,9 @@ Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analys
 - Roadmap, backlog → `06-evolution/`
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- [Requirements — CLI Sub-Spec (Index)](requirements/README.md) — Requirements governing the delivered terminal surface and the persisted overview (DL-12). The runtime's product definition lives in ; this folder pins…
+- [Use-Cases — Index](use-cases/README.md) — Deduced taxonomy of plausible use-cases for Dynamic Harness, grounded in the concepts and the actual tools/runtime. Each family links to the capabilities it relies on; the fitness filter decides whether a task belongs here at all.
+<!-- pb:index:end -->

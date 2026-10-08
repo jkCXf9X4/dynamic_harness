@@ -258,6 +258,13 @@ class Agent:
         self.retry_jitter_seconds: float = 0.5
         self.rate_limit_backoff_multiplier: float = 3.0
         self.fallback_on_rate_limit: bool = True
+        # Gateway total-time timeout (504 ``gateway_timeout``) adaptive retry:
+        # the retry of a gateway-killed call is SHRUNK instead of resent
+        # unchanged — the oldest committed context turns are pruned down to
+        # this estimated prompt budget (0 disables the prune) and the retry's
+        # generation is capped at this many tokens (0/None disables the cap).
+        self.gateway_timeout_prompt_budget: int = 20_000
+        self.gateway_timeout_max_tokens: int | None = 4096
         self._started_at: float | None = None
         # Delegated child runs currently executing. While any child of this
         # agent is running its wall-clock timeout is suspended (a parent must
@@ -987,6 +994,7 @@ class Agent:
             except Exception as e:
                 last_error = e
                 rate_limited = policy.is_rate_limit(e)
+                gw_timeout = policy.is_gateway_timeout(e)
                 attempts[rate_limited] += 1
                 if not policy.is_retryable(e) or attempts[rate_limited] >= budgets[rate_limited]:
                     if (
@@ -1005,12 +1013,33 @@ class Agent:
                         # The retry budget ran out after real retries — say so,
                         # instead of re-raising bare and letting `_run_guarded`
                         # report a retried failure as "Unhandled agent error".
-                        raise RuntimeError(
-                            policy.exhausted_message(
+                        if gw_timeout:
+                            message = policy.gateway_timeout_exhausted_message(
+                                last_error=e, attempts=attempts[rate_limited],
+                            )
+                        else:
+                            message = policy.exhausted_message(
                                 rate_limited=rate_limited, last_error=e,
                             )
-                        ) from e
+                        raise RuntimeError(message) from e
                     raise
+                if gw_timeout or (
+                    isinstance(e, asyncio.TimeoutError)
+                    and self._call_timeout_seconds is not None
+                ):
+                    # A gateway total-time timeout (or a client per-call deadline
+                    # hit) means the call did not fit its time window: the
+                    # identical call hits the same wall. Shrink the prompt (prune
+                    # oldest committed turns) and cap the retry's generation
+                    # before resending.
+                    cap = int(self.gateway_timeout_max_tokens or 0) or None
+                    if cap is not None:
+                        cfg = LLMConfig(
+                            model=llm.default_model,
+                            session_id=cfg.session_id,
+                            max_tokens=cap,
+                        )
+                    msgs = self._shrink_context_for_gateway_retry(msgs, messages)
                 self._runtime.record_retry(self.id)
                 # Adaptive backoff: exponential in the retry count for this
                 # failure class, scaled up for rate limits, honoring a provider
@@ -1032,6 +1061,41 @@ class Agent:
                     cfg = LLMConfig(model=llm.default_model)
         if last_error is not None:
             raise last_error
+
+    def _shrink_context_for_gateway_retry(
+        self, msgs: list[dict[str, Any]], messages: list[dict[str, Any]] | None
+    ) -> list[dict[str, Any]]:
+        """Emergency shrink before retrying a gateway-total-time-killed call.
+
+        The gateway killed the request for exceeding its total-time window, so
+        the retry is sent SMALLER, not identical: the oldest committed turns
+        are pruned (restorable via ``restore``) until the live context estimates
+        at or under ``gateway_timeout_prompt_budget`` tokens. Returns the wire
+        snapshot to send — rebuilt from the pruned buffer, preserving any
+        caller-appended tail that extended beyond the pre-shrink buffer.
+        """
+        budget = int(self.gateway_timeout_prompt_budget or 0)
+        if budget <= 0:
+            return msgs
+        buffer_len = len(self.context.messages)
+        result = self.context.prune_oldest_to(budget)
+        if not result:
+            return msgs
+        self.emit_activity(ActivityEvent(
+            agent_id=self.id,
+            event_type=ActivityEventType.COMPRESSION,
+            data={
+                "trigger": "gateway_timeout_retry",
+                "turns_pruned": result["turns_pruned"],
+                "chars_saved": result["chars_saved"],
+            },
+        ))
+        # Persist the pruned state: a crash before the retry must not resurrect
+        # the too-large context on resume.
+        self.persist_checkpoint()
+        if messages is None:
+            return list(self.context.messages)
+        return list(self.context.messages) + msgs[buffer_len:]
 
     @staticmethod
     def _is_rate_limit(exc: Exception) -> bool:

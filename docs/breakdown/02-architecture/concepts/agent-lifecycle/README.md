@@ -24,3 +24,12 @@ paths, and the Agent/Runtime split.
 See `../../../../docs/api/agent.md`, `runtime.md`, `task.md`.
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- **INFO-029** [The Run Loop](run-loop.md) — initializes the conversation, then executes the tool-calling loop until a terminal tool fires
+- **INFO-030** [Safety Invariants](safety-invariants.md) — Three independent timeouts apply to different resource types
+- **INFO-031** [Agent States & Creation](states-and-creation.md) — Every agent's task moves through a fixed set of states, and every agent is created by the Runtime — never instantiated directly outside tests
+- **INFO-032** [Termination & Resumption](termination.md) — Three terminal paths, all triggered by tool calls, plus automatic safety force-fails. After termination the agent's history and last report stay acces…
+- **INFO-033** [Usage & Responsibilities](usage-and-responsibilities.md) — The Runtime records per-agent consumption after each LLM response
+<!-- pb:index:end -->

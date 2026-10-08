@@ -82,7 +82,3 @@ truncated each round; heavier than A, riskier than A.
 - Parent context pressure: A high (pollutes), B low, C medium.
 - Implementation size: A — (rejected), B medium–large, C medium.
 - Pick if: A —, B collaboration is the product, C shared-state teamwork with guardrails.
-
-## Decisions
-
-- AD-001 — Reject Parent-Mediated Relaying for Collaboration

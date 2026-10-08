@@ -49,6 +49,8 @@ class AgentPolicy:
         retry_jitter_seconds: float = 0.5,
         rate_limit_backoff_multiplier: float = 3.0,
         fallback_on_rate_limit: bool = True,
+        gateway_timeout_prompt_budget: int = 20_000,
+        gateway_timeout_max_tokens: int | None = 4096,
         # -- budget --
         max_agent_tokens: int | None = None,
         # -- context / behavior --
@@ -88,6 +90,10 @@ class AgentPolicy:
         self.retry_jitter_seconds = float(retry_jitter_seconds)
         self.rate_limit_backoff_multiplier = float(rate_limit_backoff_multiplier)
         self.fallback_on_rate_limit = bool(fallback_on_rate_limit)
+        self.gateway_timeout_prompt_budget = int(gateway_timeout_prompt_budget)
+        self.gateway_timeout_max_tokens: int | None = (
+            int(gateway_timeout_max_tokens) if gateway_timeout_max_tokens else None
+        )
         self.max_agent_tokens: int | None = (
             int(max_agent_tokens) if max_agent_tokens else None
         )
@@ -135,6 +141,8 @@ class AgentPolicy:
             retry_jitter_seconds=llm.retry_jitter_seconds,
             rate_limit_backoff_multiplier=llm.rate_limit_backoff_multiplier,
             fallback_on_rate_limit=llm.fallback_on_rate_limit,
+            gateway_timeout_prompt_budget=llm.gateway_timeout_prompt_budget,
+            gateway_timeout_max_tokens=llm.gateway_timeout_max_tokens,
             max_agent_tokens=s.max_agent_tokens,
             active_turn_window=a.active_turn_window,
             stream_children=a.stream_children,
@@ -203,6 +211,8 @@ class AgentPolicy:
         agent.retry_jitter_seconds = self.retry_jitter_seconds
         agent.rate_limit_backoff_multiplier = self.rate_limit_backoff_multiplier
         agent.fallback_on_rate_limit = self.fallback_on_rate_limit
+        agent.gateway_timeout_prompt_budget = self.gateway_timeout_prompt_budget
+        agent.gateway_timeout_max_tokens = self.gateway_timeout_max_tokens
 
     # -- ramar rendering ---------------------------------------------------
 

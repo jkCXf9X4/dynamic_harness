@@ -160,6 +160,7 @@ class ProviderRegistry:
                 or self.api_key_for(provider_id)
             ),
             verify_ssl=self._llm.verify_ssl,
+            stream=self._llm.stream,
             provider_ignore=pc.provider_ignore or None,
             provider_allow_fallbacks=pc.provider_allow_fallbacks,
             provider_force=pc.provider_force,

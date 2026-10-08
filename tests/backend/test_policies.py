@@ -7,6 +7,7 @@ Runtime or Agent — proving they are the standalone units a plugin host
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from dynamic_harness.core.policies.agent import AgentPolicy
@@ -348,7 +349,59 @@ def test_quota_exhaustion_is_never_retryable() -> None:
     ) is True
 
 
-def test_retry_delay_formula_and_budgets() -> None:
+def test_gateway_timeout_classification() -> None:
+    """A 5xx whose body says the GATEWAY killed the request's total time must
+    be classified as a gateway timeout (retry must shrink, not resend
+    unchanged); client-side deadlines are NOT gateway timeouts."""
+    from openai import APIStatusError, APITimeoutError, RateLimitError
+    import httpx
+
+    request = httpx.Request("POST", "http://provider.invalid/v1/chat/completions")
+    saga_504 = APIStatusError(
+        message=("Error code: 504 - {'error': {'type': 'gateway_timeout', "
+                 "'message': 'Request timed out after 300 seconds.'}}"),
+        response=httpx.Response(504, request=request),
+        body=None,
+    )
+    plain_504 = APIStatusError(
+        message="Error code: 504 - upstream",
+        response=httpx.Response(504, request=request),
+        body=None,
+    )
+    ouch_502 = APIStatusError(
+        message="Error code: 502 - upstream request timed out after 120 seconds",
+        response=httpx.Response(502, request=request),
+        body=None,
+    )
+    plain_500 = APIStatusError(
+        message="Error code: 500 - server error",
+        response=httpx.Response(500, request=request),
+        body=None,
+    )
+    assert RetryPolicy.is_gateway_timeout(saga_504) is True
+    # A 504 is a gateway timeout by definition, regardless of the body.
+    assert RetryPolicy.is_gateway_timeout(plain_504) is True
+    assert RetryPolicy.is_gateway_timeout(ouch_502) is True
+    assert RetryPolicy.is_gateway_timeout(plain_500) is False
+    # Rate limits, client-side timeouts, and bare errors are not.
+    assert RetryPolicy.is_gateway_timeout(
+        RateLimitError(message="429", response=httpx.Response(429, request=request), body=None)
+    ) is False
+    assert RetryPolicy.is_gateway_timeout(APITimeoutError(request=request)) is False
+    assert RetryPolicy.is_gateway_timeout(asyncio.TimeoutError()) is False
+    assert RetryPolicy.is_gateway_timeout(ValueError("timed out after 300 seconds")) is False
+    # Gateway timeouts stay retryable (the shrunk retry can succeed).
+    assert RetryPolicy.is_retryable(saga_504) is True
+
+
+def test_gateway_timeout_exhausted_message() -> None:
+    pol = RetryPolicy(retry_max_attempts=4)
+    err = ValueError("Error code: 504 - gateway_timeout")
+    msg = pol.gateway_timeout_exhausted_message(last_error=err, attempts=4)
+    assert "4 attempt(s)" in msg
+    assert "gateway" in msg
+    assert "gateway_timeout_max_tokens" in msg
+    assert str(err) in msg
     pol = RetryPolicy(
         retry_max_attempts=4, rate_limit_max_attempts=6,
         retry_base_delay_seconds=1.0, retry_max_delay_seconds=7.0,

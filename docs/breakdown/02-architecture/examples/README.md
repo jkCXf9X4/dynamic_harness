@@ -16,3 +16,11 @@ operational.
 | [Anti-patterns](anti_patterns.md) | Symptoms, causes, and fixes (P0–P6) |
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- **INFO-052** [Anti-Patterns](anti_patterns.md) — The most common failure modes observed in agent behavior. All of them are methodology violations
+- **INFO-053** [Delegation Descriptions: Good vs Bad](delegation_descriptions.md) — Concrete examples of delegation descriptions. A sub-agent's description + role is its entire world — write it with care
+- **INFO-054** [Execution Patterns: Good vs Bad](execution_patterns.md) — The difference between grinding through work yourself and orchestrating sub-agents. One approach burns tokens and degrades focus; the other stays lean…
+- **INFO-055** [Task Framing: Root-Level Tasks](task_framing.md) — The quality of the root task description directly determines the entire agent tree's behavior. A vague root task produces wandering agents; a precise…
+<!-- pb:index:end -->

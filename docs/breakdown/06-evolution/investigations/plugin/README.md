@@ -18,3 +18,8 @@ of host-agnostic seams with **no loader / no late injection**.
 | Next steps & success | [next-steps](investigation/next-steps.md), [success-criteria](investigation/success-criteria.md) |
 
 ## Contents
+
+<!-- pb:index:start -->
+<!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
+- [Investigation — Interface Economy: Decoupling Toward a Plugin-Ready Structure](investigation/README.md) — Direction work for making Dynamic Harness' internals decoupled and isolated: a minimal set of narrow, stable common interfaces between components, so the structure is plugin-ready (seams first) without a plugin architecture or late code injection.
+<!-- pb:index:end -->

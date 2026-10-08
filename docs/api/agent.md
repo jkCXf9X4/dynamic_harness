@@ -68,7 +68,13 @@ rather than inline in `Agent`. The agent owns/uses:
   loop detection and the nudge→fail recovery ladder.
 - `RetryPolicy` (`core/policies/retry.py`) — per-failure-class LLM retry /
   backoff: `_llm_call_with_retry` drives the loop and asks `RetryPolicy` for
-  each classification, delay, and drop-session-pin decision.
+  each classification, delay, and drop-session-pin decision. A gateway
+  total-time timeout (504 `gateway_timeout`) or a `call_timeout_seconds`
+  deadline hit is retried **shrunk**, not resent unchanged: the oldest
+  committed turns are pruned down to `gateway_timeout_prompt_budget`
+  estimated tokens (a `COMPRESSION` activity event with
+  `trigger: "gateway_timeout_retry"` marks it; pruned turns stay restorable)
+  and the retry's generation is capped at `gateway_timeout_max_tokens`.
 - `TimeoutPolicy` / `TokenBudgetPolicy` (`core/policies/budget.py`) — the
   whole-run wall clock and the total-token hard cap.
 - `NudgePolicy` (`core/policies/nudge.py`) — the delegate-rarity and

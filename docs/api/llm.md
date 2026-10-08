@@ -137,10 +137,38 @@ OpenAIProvider(
     provider_ignore: list[str] | None = None,    # OpenRouter providers to exclude
     provider_allow_fallbacks: bool = True,       # Allow OpenRouter fallback routing
     provider_force: str | None = None,           # Pin a single OpenRouter provider (disables fallbacks)
+    timeout: httpx.Timeout | float = 500.0,      # httpx + SDK timeout (see llm.call_timeout_seconds)
+    max_retries: int = 0,                     # SDK-level retries; 0 so the agent owns retry/backoff
+    stream: bool = True,                      # Streamed completions (see below)
 )
 ```
 
 Supports both OpenAI and OpenRouter endpoints. For OpenRouter, set `base_url="https://openrouter.ai/api/v1"`.
+
+### Streaming
+
+`generate` and `generate_with_tools` stream by default (`stream=True`) and
+reassemble the response: content fragments are concatenated, tool calls are
+accumulated by index across chunks (arguments arrive as fragments), and the
+trailing `usage` chunk (`stream_options.include_usage`) feeds token/cost
+accounting. `generate_structured` stays non-streamed (the `parse` API).
+
+Why: a gateway or load balancer with a **total-request-time cap** kills a
+silent non-streamed request mid-generation (the SAGA vLLM gateway returns a
+504 `gateway_timeout` after 300s — observed in the field to kill long
+agentic turns), while a streamed request keeps the wire active and completes
+past the cap (verified: a 321s streamed generation returned HTTP 200).
+
+Automatic per-instance fallbacks, each applied at most once and then sticky:
+
+- the endpoint rejects `stream_options` (400) → keep streaming, drop the
+  usage request (`usage` becomes `None`);
+- the endpoint rejects `stream` itself (400) → switch to the legacy
+  single-response call for the provider's lifetime;
+- `stream=False` at construction → always the single-response call.
+
+A truncated streamed tool call (cut off mid-JSON by `max_tokens`) degrades to
+an empty argument dict rather than a provider-level crash.
 
 ### Configuration
 

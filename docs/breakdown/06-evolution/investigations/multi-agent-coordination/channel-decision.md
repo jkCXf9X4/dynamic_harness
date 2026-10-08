@@ -56,7 +56,3 @@ Residual items the theory does **not** fully decide:
 The channel question itself is **anchored in practice**: workspace-first +
 bounded message-exception is exactly how git-team coordination and blackboard
 architectures work, and media richness gives the selection rule.
-
-## Decisions
-
-- AD-003 — Collaboration Channel = Workspace-Primary, Messages-as-Exception

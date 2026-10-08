@@ -64,10 +64,6 @@ Full protocol: the method skill's `guidelines/browsing-protocol.md`.
 
 - New decision records are added to the archive via `pb archive add <file>` (retired material via `pb archive add <file> --deprecated`); the loose file is deleted by the command. Update `traceability-map.md` when a claim, decision, or artifact changes.
 - After editing any node, run the skill's `pb check --strict` and `pb node-size --strict` from this directory (or the repo root) and resolve violations (trim → link → split).
-- The registers, leaf `## Decisions` footers, and index `## Contents` lists are generated — release builds regenerate them (`pb registers --sync-footers`); never hand-edit one (the banner marks it). Between releases, `pb registers --clear` removes every generated surface; release builds restore them.
+- The registers (index and log beside the archive) and index `## Contents` lists are generated — `pb registers` regenerates them; never hand-edit one (the banner marks it). Between releases, `pb registers --clear` removes every generated surface — including legacy `## Decisions` footer blocks, which are no longer generated at all.
 - Every new/edited IMP is cross-listed in `06-evolution/README.md` with its stage.
 - Follow the skill's layer hygiene and the repo's own information-hygiene rule (canonical state, no duplication). When writing a node, apply the readability rules (one fact per line, scannable structure, plain language, proportional-never-padded) in the generic method's [`guidelines/readability-rules.md`](../../3rd_party/agent_methods_and_tools/src/agent_methods/methods/product-breakdown/guidelines/readability-rules.md). Where the repo's rules conflict with the pattern, the repo's rules win.
-
-## Decisions
-
-- AD-009 — Node Model — Budgeted, Navigational Definition State

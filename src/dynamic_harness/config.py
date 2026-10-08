@@ -131,10 +131,19 @@ class LLMSettings(BaseModel):
     verify_ssl: bool = True
     call_timeout_seconds: float = Field(
         default=500.0, gt=0,
-        description="Timeout for a single LLM request, in seconds. A slow or stuck "
-                    "provider call is abandoned after this; the agent may retry "
-                    "transient failures and keeps a separate full-run budget "
-                    "(`safety.timeout_seconds`) spanning its whole context.",
+        description="Hard total deadline for a single LLM request, in seconds "
+                    "(enforced via asyncio.wait_for around the call). A slow or "
+                    "stuck provider call is abandoned after this; the agent may "
+                    "retry transient failures — and a deadline hit triggers the "
+                    "same adaptive shrink as a gateway total-time timeout — and "
+                    "keeps a separate full-run budget (`safety.timeout_seconds`) "
+                    "spanning its whole context. Note: with `stream: true` (the "
+                    "default) the SAGA vLLM gateway's 300s total-time cap no "
+                    "longer binds (streamed requests keep the wire active past "
+                    "it), so this deadline — not the gateway — is the effective "
+                    "ceiling per call; do not lower it below your longest "
+                    "legitimate generation. The provider-level httpx timeout "
+                    "additionally bounds a stalled stream (idle per read).",
     )
     retry_max_attempts: int = Field(
         default=4, ge=1,
@@ -190,6 +199,36 @@ class LLMSettings(BaseModel):
                     "prompt cache), so OpenRouter can route the retry to a "
                     "different provider. Only the retried calls drop the pin; the "
                     "next turn resumes normal session pinning.",
+    )
+    stream: bool = Field(
+        default=True,
+        description="Stream chat completions (``generate`` / ``generate_with_tools``). "
+                    "Streaming keeps the wire active while the model generates, so a "
+                    "gateway with a total-request-time cap (the SAGA vLLM gateway "
+                    "returns a 504 ``gateway_timeout`` after 300s) does not kill a "
+                    "long generation the way it kills a silent non-streamed request. "
+                    "Set false for endpoints that cannot forward chunked responses; "
+                    "the provider then falls back to the single-response call.",
+    )
+    gateway_timeout_prompt_budget: int = Field(
+        default=20_000,
+        ge=0,
+        description="Adaptive-retry prompt size (estimated tokens) for a call the "
+                    "provider's gateway killed with a total-time timeout "
+                    "(504 ``gateway_timeout``). The retry prunes the OLDEST committed "
+                    "context turns (restorable via ``restore``) until the live context "
+                    "estimates at or under this budget, so the resent call is smaller "
+                    "than the one that hit the gateway's window. 0 disables the prune "
+                    "(the retry is then only bounded by gateway_timeout_max_tokens).",
+    )
+    gateway_timeout_max_tokens: int | None = Field(
+        default=4096,
+        ge=0,
+        description="Generation cap applied ONLY to the retry of a call the "
+                    "gateway killed with a total-time timeout: bounding the "
+                    "completion keeps the retry inside the gateway's window even "
+                    "when the prefill already fits. 0/None disables the cap. The "
+                    "original (non-retried) call is never capped by this.",
     )
 
 
