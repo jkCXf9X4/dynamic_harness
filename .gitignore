@@ -4,6 +4,7 @@
 .agents/
 tmp/
 .coverage
+harness.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

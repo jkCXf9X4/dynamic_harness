@@ -319,6 +319,35 @@ def test_retry_classification() -> None:
     assert RetryPolicy.is_retryable(ValueError("bad request")) is False
 
 
+def test_quota_exhaustion_is_never_retryable() -> None:
+    """OpenAI reports exhausted billing as a 429 typed ``RateLimitError`` — it
+    must classify as permanent so a dead account fails on the first call
+    instead of burning the rate-limit budget on futile backoff sleeps."""
+    from openai import RateLimitError
+    import httpx
+
+    request = httpx.Request("POST", "http://provider.invalid/v1/chat/completions")
+    quota_429 = RateLimitError(
+        message=(
+            "Error code: 429 - {'error': {'message': 'You exceeded your current "
+            "quota, please check your plan and billing details.', "
+            "'type': 'insufficient_quota', 'code': 'insufficient_quota'}}"
+        ),
+        response=httpx.Response(429, request=request), body=None,
+    )
+    # Budget-class flags rate limit, but the permanent override wins.
+    assert RetryPolicy.is_rate_limit(quota_429) is True
+    assert RetryPolicy.is_retryable(quota_429) is False
+    # Unknown providers raising bare exceptions with quota text: same verdict.
+    assert RetryPolicy.is_retryable(ValueError("insufficient credits")) is False
+    assert RetryPolicy.is_retryable(ValueError("quota exceeded for the month")) is False
+    # A genuine rate limit stays retryable.
+    assert RetryPolicy.is_retryable(
+        RateLimitError(message="429 slow down",
+                       response=httpx.Response(429, request=request), body=None)
+    ) is True
+
+
 def test_retry_delay_formula_and_budgets() -> None:
     pol = RetryPolicy(
         retry_max_attempts=4, rate_limit_max_attempts=6,

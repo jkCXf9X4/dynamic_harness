@@ -166,6 +166,48 @@ Example:
 
 ---
 
+## `profiles` — named model tiers for delegated children
+
+A map of profile name → model selection. When non-empty, the `delegate` tool
+gains a `model_profile` parameter so a parent agent can pick the
+capability/speed tier for each child: a delegated child then runs on its
+profile's model instead of inheriting the runtime's model.
+
+Each entry is a model ref (bare-string shorthand) or an object:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `ref` | *(required)* | Model ref in `<provider>/<model>` form (same grammar as `model`). |
+| `description` | `""` | What the tier is good at — shown to agents choosing a profile. |
+
+```json
+{
+  "profiles": {
+    "fast": "openrouter/deepseek/deepseek-v4-flash",
+    "strong": {
+      "ref": "openrouter/openai/gpt-5.2",
+      "description": "Hard reasoning: architecture, debugging, review"
+    }
+  }
+}
+```
+
+Semantics:
+
+- **Empty (default):** `model_profile` is not offered and every agent uses
+  the runtime's model — behavior is exactly as if the feature were absent.
+- **Selection:** a child with `model_profile` set is built on that profile's
+  provider + model at delegation time. An unknown profile name, an
+  unresolvable ref, or a missing credential fails the delegation BEFORE any
+  child agent is created.
+- **Scope:** delegation only. The root agent's model stays governed by
+  `model` / `--model`, and agents cannot switch models mid-run.
+- **Registry:** materializing a per-child provider requires the runtime's
+  `provider_registry` (the CLI and API hosts build it from config
+  automatically); a bare `Runtime()` without one rejects profile delegations.
+
+---
+
 ## `safety` — loop, timeout, token, and delegation caps
 
 ### Loop termination

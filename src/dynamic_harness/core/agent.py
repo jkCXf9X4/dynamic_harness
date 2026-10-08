@@ -55,6 +55,7 @@ from .task import (
 )
 
 if TYPE_CHECKING:
+    from ..config import ResolvedModel
     from ..llm.provider import LLMProvider
     from .environment import EnvironmentInfo
     from .runtime import Runtime
@@ -113,6 +114,14 @@ class Agent:
         parent: Agent | None = None,
         *,
         system_prompt: str | None = None,
+        # The LLM provider this agent calls. Defaults to the runtime's active
+        # provider; Runtime.delegate() sets a profile-specific instance when
+        # the task carries a model_profile, so the child runs on that tier's
+        # model while siblings keep theirs.
+        llm: LLMProvider | None = None,
+        # The fully resolved model this agent calls (tracing/report); defaults
+        # to the runtime's model_info.
+        model_info: ResolvedModel | None = None,
         safety_max_iterations: int = 500,
         repeated_call_limit: int = 5,
         repeated_recovery_attempts: int = 2,
@@ -340,7 +349,8 @@ class Agent:
         self._runtime = runtime
         self._event_bus = runtime.event_bus
         self._tool_registry = runtime.tool_registry
-        self._llm = runtime.provider
+        self._llm = llm or runtime.provider
+        self.model_info = model_info or runtime.model_info
         self._artifact_store = runtime.artifact_store
         self._generated_root = runtime.generated_root
         self._reference_root = runtime.reference_root
@@ -1904,6 +1914,7 @@ class Agent:
         agent_type: str | None = None,
         role: str | None = None,
         system_prompt: str | None = None,
+        model_profile: str | None = None,
         intent: str | None = None,
         end_state: str | None = None,
         constraints: Sequence[str] | None = None,
@@ -1915,6 +1926,7 @@ class Agent:
             role=role,
             system_prompt=system_prompt,
             parent_id=self.task.id,
+            model_profile=model_profile,
             intent=intent,
             end_state=end_state,
             constraints=list(constraints) if constraints else [],
@@ -2152,6 +2164,7 @@ class Agent:
         role: str | None = None,
         system_prompt: str | None = None,
         agent_type: str | None = None,
+        model_profile: str | None = None,
         intent: str | None = None,
         end_state: str | None = None,
         constraints: Sequence[str] | None = None,
@@ -2165,9 +2178,11 @@ class Agent:
         run loop; otherwise it runs to completion here. Streaming mode: the
         child is always spawned fire-and-forget and registered in
         ``_stream_pending``; the run loop re-admits the parent as each child
-        settles so it can act on child events before siblings finish. ``agent_type``
-        selects a registered custom agent class; unknown names are rejected
-        (never silently downgraded to the base Agent).
+        settles so it can act on child events before siblings finish.
+        ``agent_type`` selects a registered custom agent class; unknown names
+        are rejected (never silently downgraded to the base Agent).
+        ``model_profile`` selects a configured model tier for the child
+        (unknown names are rejected the same way).
         """
         if agent_type and not self._runtime.has_agent_class(agent_type):
             known = self._runtime.registered_agent_classes()
@@ -2175,9 +2190,16 @@ class Agent:
                 "error": f"unknown agent_type '{agent_type}'. "
                         f"Registered custom classes: {known or '(none)'}",
             }, indent=2)
+        if model_profile is not None and model_profile not in self._runtime.model_profiles:
+            known = ", ".join(sorted(self._runtime.model_profiles)) or "(none)"
+            return json.dumps({
+                "error": f"unknown model_profile '{model_profile}'. "
+                        f"Configured profiles: {known}",
+            }, indent=2)
         try:
             child = self.delegate(
                 description, agent_type=agent_type, role=role, system_prompt=system_prompt,
+                model_profile=model_profile,
                 intent=intent, end_state=end_state,
                 constraints=constraints, authority=authority,
             )
@@ -2215,6 +2237,7 @@ class Agent:
                 "child_id": child.id,
                 "description": description[:200],
                 "role": role,
+                **({"model_profile": model_profile} if model_profile else {}),
             },
         ))
         task = asyncio.create_task(child.run())

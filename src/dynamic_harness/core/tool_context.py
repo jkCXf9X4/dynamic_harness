@@ -163,6 +163,7 @@ class ToolContext:
         role: str | None = None,
         system_prompt: str | None = None,
         agent_type: str | None = None,
+        model_profile: str | None = None,
         intent: str | None = None,
         end_state: str | None = None,
         constraints: Sequence[str] | None = None,
@@ -171,7 +172,8 @@ class ToolContext:
     ) -> str:
         return await self._agent.run_delegate_tool(
             description, role=role, system_prompt=system_prompt,
-            agent_type=agent_type, intent=intent, end_state=end_state,
+            agent_type=agent_type, model_profile=model_profile,
+            intent=intent, end_state=end_state,
             constraints=constraints, authority=authority,
             tool_call_id=tool_call_id,
         )

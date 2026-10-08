@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 DEFAULT_CONFIG_FILENAME = "harness.json"
@@ -44,6 +46,29 @@ class ModelSpec(BaseModel):
     name: str | None = Field(default=None, description="Display name.")
     limit: ModelLimit | None = None
     cost: ModelCost | None = None
+
+
+class ModelProfile(BaseModel):
+    """One preset model profile: a named capability/speed tier.
+
+    ``ref`` is a model reference in ``<provider>/<model>`` form; ``description``
+    tells agents what the tier is good at when they choose a profile. A bare
+    string (``"fast": "openrouter/..."``) is accepted as shorthand for
+    ``{"ref": "openrouter/..."}``.
+    """
+
+    ref: str = Field(description="Model reference in '<provider>/<model>' form.")
+    description: str = Field(
+        default="",
+        description="What this tier is good at; shown to agents choosing a profile.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_ref(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            return {"ref": data}
+        return data
 
 
 class ProviderConfig(BaseModel):
@@ -589,6 +614,16 @@ class HarnessConfig(BaseModel):
                     "OpenRouter routing, and model catalog. The built-in default "
                     "is OpenRouter.",
     )
+    profiles: dict[str, ModelProfile] = Field(
+        default_factory=dict,
+        description="Named model profiles (capability/speed tiers) a parent agent "
+                    "may select via delegate(model_profile=...) so each child runs "
+                    "on the tier that fits the task. Each entry maps a profile "
+                    "name to a model ref ('<provider>/<model>', bare-string "
+                    "shorthand allowed) plus an optional description shown to "
+                    "agents. Empty = the model_profile parameter is not offered "
+                    "and every agent uses the runtime's model.",
+    )
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     self_heal: SelfHealConfig = Field(default_factory=SelfHealConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
@@ -604,6 +639,20 @@ class HarnessConfig(BaseModel):
         """
 
         return resolve_model_ref(self.providers, self.model, model_ref, provider)
+
+    def resolve_profile(self, profile: str) -> ResolvedModel:
+        """Resolve a profile name to the provider + model it points at.
+
+        Raises ``ValueError`` for an unknown profile, and (delegating to
+        :func:`resolve_model_ref`) for a ref that does not resolve.
+        """
+
+        if profile not in self.profiles:
+            known = ", ".join(sorted(self.profiles)) or "(none)"
+            raise ValueError(
+                f"unknown model profile '{profile}' — configured profiles: {known}"
+            )
+        return resolve_model_ref(self.providers, self.model, self.profiles[profile].ref)
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:

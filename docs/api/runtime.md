@@ -92,6 +92,7 @@ await agent.run()
 
 - If `parent` is provided, the child is added to the parent's `children` list and linked in `_task_graph`.
 - If `agent_type` matches a registered class (via `register_agent_class()`), that class is used instead of `Agent`.
+- If `task.model_profile` is set, the child is built on that profile's provider + model (resolved through the config, provider via `ProviderRegistry.provider_for`) instead of the runtime's — a bad profile raises BEFORE the agent is constructed, like a spawn-cap refusal. Requires an attached `provider_registry`.
 - All per-agent construction kwargs now come from `agent_policy.agent_ctor_kwargs(timeout=...)` (the resolved per-spawn budget, root exempt when `disable_root_timeout` is set), and post-construction values are applied from `agent_policy.post_construct(agent)` — the base- and custom-class branches no longer duplicate the kwargs list verbatim.
 - Delegation caps (agents / depth / same-target) are enforced here by the `SpawnPolicy` before the agent is constructed; a refusal raises `DelegationLimit`.
 

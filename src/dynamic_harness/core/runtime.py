@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
-from ..config import HarnessConfig
+from ..config import HarnessConfig, ModelProfile, ResolvedModel
 from ..memory.repository import Commit, Repository
 from .comms import CommsLog, build_backend
 from .agent import Agent, progress_summary_block
@@ -256,7 +256,10 @@ class Runtime:
         self._active_root: Agent | None = None
 
         self.tool_registry = ToolRegistry()
-        register_default_tools(self.tool_registry)
+        register_default_tools(
+            self.tool_registry,
+            model_profiles=[(name, p.description) for name, p in config.profiles.items()],
+        )
 
         # Metric-reactive policy factories (the plugin seam). A host registers a
         # factory producing a fresh ``ReactivePolicy`` per agent; every
@@ -657,6 +660,17 @@ class Runtime:
     def set_llm(self, llm: LLMProvider | None) -> None:
         self._llm = llm
 
+    @property
+    def model_profiles(self) -> dict[str, ModelProfile]:
+        """The configured model profiles (name → profile).
+
+        Non-empty when ``config.profiles`` is set; the ``delegate`` tool then
+        offers a ``model_profile`` parameter, and a task carrying one runs its
+        agent on that profile's model (see :meth:`delegate`).
+        """
+
+        return self._config.profiles
+
     def switch_provider(self, model_ref: str) -> None:
         """Swap the active LLM provider for agents created from now on.
 
@@ -791,6 +805,9 @@ class Runtime:
             end_state=cp.task.end_state,
             constraints=list(cp.task.constraints or []),
             authority=cp.task.authority,
+            # Carry the model profile through the rebuild — a checkpointed
+            # child must come back on the same tier it was delegated with.
+            model_profile=cp.task.model_profile,
         )
         agent = self.delegate(task, agent_type=cp.agent_type, parent=parent)
         agent._has_run = True
@@ -965,6 +982,9 @@ class Runtime:
             end_state=task.end_state,
             constraints=list(task.constraints or []),
             authority=task.authority,
+            # The replacement worker inherits the failed agent's model profile:
+            # a self-heal retry should run on the same tier the parent picked.
+            model_profile=task.model_profile,
         )
         try:
             fresh = self.delegate(new_task, parent=agent.parent, agent_type=agent.agent_type)
@@ -1098,16 +1118,40 @@ class Runtime:
             raise DelegationLimit(verdict.reason)
         if self.spawn_policy.max_same_target is not None:
             ledger.record(sig)
+        # -- model profile ---------------------------------------------------
+        # A task carrying a model_profile runs its agent on that tier's model.
+        # Resolved BEFORE construction so a bad profile (unknown name,
+        # unresolvable ref, missing credential) never creates an agent — same
+        # contract as a refused spawn.
+        child_llm: LLMProvider | None = None
+        child_model_info: ResolvedModel | None = None
+        if task.model_profile is not None:
+            child_model_info = self._config.resolve_profile(task.model_profile)
+            if self.provider_registry is None:
+                raise RuntimeError(
+                    f"task carries model_profile '{task.model_profile}' but "
+                    "this runtime has no provider registry to build a "
+                    "per-child provider — attach a provider_registry (via a "
+                    "config) or drop the profile"
+                )
+            child_llm = self.provider_registry.provider_for(
+                self._config.profiles[task.model_profile].ref
+            )
         if agent_type and agent_type in self._agent_registry:
             cls = self._agent_registry[agent_type]
         else:
             cls = Agent
         # All per-agent construction knobs come from the single AgentPolicy
         # bundle (config-derived); the base- and custom-class branches no longer
-        # duplicate the kwargs list verbatim.
+        # duplicate the kwargs list verbatim. The profile's provider + resolved
+        # model override the inherited runtime provider for THIS agent only.
+        ctor_kwargs = self.agent_policy.agent_ctor_kwargs(timeout=timeout)
+        if child_llm is not None:
+            ctor_kwargs["llm"] = child_llm
+            ctor_kwargs["model_info"] = child_model_info
         agent = cls(
             agent_id, task, self, parent,
-            **self.agent_policy.agent_ctor_kwargs(timeout=timeout),
+            **ctor_kwargs,
         )
         # Post-construction values: applied as instance attributes so a caller
         # (or test) can still override them per-agent without mutating a shared

@@ -32,6 +32,8 @@ Agent(
     parent: Agent | None = None, # Parent agent (None for root)
 
     system_prompt: str | None = None,  # Override default AGENT_SYSTEM_PROMPT
+    llm: LLMProvider | None = None,    # Per-agent provider (default: runtime.provider)
+    model_info: ResolvedModel | None = None,  # Model this agent calls (default: runtime.model_info)
     safety_max_iterations: int = 500,  # Max turns before force-fail
     repeated_call_limit: int = 5,      # Repeated identical calls before force-fail
     safety_timeout_seconds: float | None = None,  # Optional wall-clock timeout
@@ -42,7 +44,7 @@ Agent(
 )
 ```
 
-**Note:** Agents should be created via `runtime.delegate()` or `agent.delegate()` — never instantiated directly outside of tests. For runtime-spawned agents, the knobs are config-plumbed via the single `AgentPolicy` bundle: `delegate_nudge_threshold`/`delegate_nudge_attempts` (previously dormant in the runtime) are now delivered to the agent as constructor kwargs by `AgentPolicy.agent_ctor_kwargs()` — see `docs/api/policies.md`.
+**Note:** Agents should be created via `runtime.delegate()` or `agent.delegate()` — never instantiated directly outside of tests. For runtime-spawned agents, the knobs are config-plumbed via the single `AgentPolicy` bundle: `delegate_nudge_threshold`/`delegate_nudge_attempts` (previously dormant in the runtime) are now delivered to the agent as constructor kwargs by `AgentPolicy.agent_ctor_kwargs()` — see `docs/api/policies.md`. `llm`/`model_info` are set by `runtime.delegate()` when the task carries a `model_profile`: the child is built on that profile's provider + model (via `ProviderRegistry.provider_for`) while every other agent keeps the runtime's provider.
 
 ### Properties
 
@@ -51,7 +53,8 @@ agent.id: str                    # 12-char hex ID
 agent.task: Task                 # The assigned task (status updates in place)
 agent.parent: Agent | None       # Parent agent
 agent.children: list[Agent]      # Child agents
-agent.llm: LLMProvider | None    # LLM from runtime (read-only)
+agent.llm: LLMProvider | None    # LLM this agent calls (runtime's, or the profile's)
+agent.model_info: ResolvedModel  # The fully resolved model this agent calls
 agent.guidelines: str            # AGENT_SYSTEM_PROMPT text
 ```
 

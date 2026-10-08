@@ -8,7 +8,8 @@ benchmarks) stop duplicating ``OpenAIProvider(...)`` wiring:
   provider instance, via the config-level :func:`resolve_model_ref` grammar.
 - Credentials walk the provider's ordered ``env`` variable names in the
   environment only — never the config file.
-- Built instances are cached per provider id; ``close_all`` releases them.
+- Built instances are cached per (provider id, model id); ``close_all``
+  releases them.
 
 This is the runtime side of the opencode-style ``providers`` config: a named
 map keyed by provider id, with per-provider credential source (``env``),
@@ -71,7 +72,7 @@ class ProviderRegistry:
         self._provider_override = provider
         self._api_key_override = api_key
         self._base_url_override = base_url
-        self._built: dict[str, LLMProvider] = {}
+        self._built: dict[tuple[str, str], LLMProvider] = {}
         self._active: LLMProvider | None = None
         self._active_ref = resolve_model_ref(
             providers, model_ref, provider=self._provider_override
@@ -126,22 +127,24 @@ class ProviderRegistry:
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> LLMProvider:
-        """Construct and cache the provider for ``provider_id``.
+        """Construct and cache the provider for ``provider_id`` + ``model_id``.
 
-        Repeated builds return the cached instance. ``model_id`` selects the
-        catalog key whose ``model_id`` is sent upstream (default: the
-        provider's first models key). ``api_key``/``base_url`` default to the
-        provider's resolved credential/endpoint; the registry-level overrides
-        apply when building the active provider.
+        Repeated builds of the same provider+model pair return the cached
+        instance; different models on the same provider get distinct instances
+        (each with its own ``default_model``). ``model_id`` selects the catalog
+        key whose ``model_id`` is sent upstream (default: the provider's first
+        models key). ``api_key``/``base_url`` default to the provider's resolved
+        credential/endpoint; the registry-level overrides apply when building
+        the active provider.
         """
 
-        cached = self._built.get(provider_id)
-        if cached is not None:
-            return cached
         pc = self._providers[provider_id]
         if not pc.models:
             raise ValueError(f"provider '{provider_id}' has no models configured; add a models entry")
         model_key = model_id or next(iter(pc.models))
+        cached = self._built.get((provider_id, model_key))
+        if cached is not None:
+            return cached
         spec = pc.models.get(model_key) or ModelSpec()
         active_provider = provider_id == self.model_info.provider_id
         llm = OpenAIProvider(
@@ -162,7 +165,7 @@ class ProviderRegistry:
             provider_force=pc.provider_force,
             timeout=self._llm.call_timeout_seconds,
         )
-        self._built[provider_id] = llm
+        self._built[(provider_id, model_key)] = llm
         return llm
 
     def select(self, model_ref: str | None = None) -> LLMProvider:
@@ -187,6 +190,29 @@ class ProviderRegistry:
         )
         self._active = llm
         return llm
+
+    def provider_for(self, model_ref: str | None = None) -> LLMProvider:
+        """Build (or return the cached) provider for ``model_ref`` WITHOUT
+        changing the active selection.
+
+        Unlike :meth:`select`, the runtime's active provider is untouched —
+        use this for per-task model overrides (e.g. delegated children on a
+        model profile) where each consumer keeps its own instance. Raises
+        ``ProviderCredentialError`` when no credential resolves.
+        """
+
+        resolved = self.resolve(model_ref)
+        api_key = self._api_key_override or self.api_key_for(resolved.provider_id)
+        if api_key is None:
+            raise ProviderCredentialError(
+                resolved.provider_id, self._providers[resolved.provider_id].env
+            )
+        return self.build(
+            resolved.provider_id,
+            model_id=resolved.model_id,
+            api_key=api_key,
+            base_url=self._base_url_override,
+        )
 
     @property
     def active_provider_id(self) -> str:

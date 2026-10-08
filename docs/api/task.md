@@ -44,6 +44,11 @@ class Task(BaseModel):
     status: TaskStatus         # Current state, defaults to pending
     created_at: datetime       # UTC, auto-generated
     metadata: dict             # Arbitrary key-value pairs
+    intent: str | None         # Why the task matters (the child's decision criterion)
+    end_state: str | None      # Desired final condition ("what done looks like")
+    constraints: list[str]     # Boundaries and limits
+    authority: str | None      # License to adapt within the intent + report deviations
+    model_profile: str | None  # Model tier name (into config.profiles); None = inherit the runtime's model
 ```
 
 ### Lifecycle

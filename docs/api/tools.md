@@ -248,7 +248,8 @@ Terminal tools (report, escalate, fail) set the agent's task status and stop the
   "parameters": {
     "description": { "type": "string", "description": "Description of the task for the sub-agent" },
     "role": { "type": "string", "description": "Optional role tag scoping the sub-agent's focus" },
-    "system_prompt": { "type": "string", "description": "Optional custom system prompt override" }
+    "system_prompt": { "type": "string", "description": "Optional custom system prompt override" },
+    "model_profile": { "type": "string", "enum": ["fast", "strong"], "description": "Model tier the child runs on — present only when config.profiles is set" }
   },
   "required": ["description"]
 }
@@ -258,6 +259,13 @@ This is the core orchestration tool. It:
 1. Creates a child `Agent` with the given description + role
 2. Batch-delegates with any other `delegate()` calls in the same turn (parallel), running children to completion before returning
 3. Returns status, summary, artifact IDs, and confidence as JSON
+
+**`model_profile`** (present only when `config.profiles` is non-empty):
+selects the model tier the child runs on. The parameter's description lists
+the configured profiles with their descriptions, and the steer is to pick the
+weakest tier that can reliably handle the task. An unknown profile returns an
+error listing the valid ones and creates no child; omitted, the child
+inherits the runtime's model.
 
 **Returns (JSON):**
 ```json

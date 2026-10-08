@@ -32,6 +32,10 @@ class Task(BaseModel):
     end_state: str | None = None     # målbild — desired final condition ("what done looks like")
     constraints: list[str] = Field(default_factory=list)  # ramar — boundaries, limits, interface rules
     authority: str | None = None     # handlingsfrihet — license to adapt within the intent + report deviations
+    # Model profile selected for this task (a name into config.profiles): the
+    # agent runs on that profile's model instead of inheriting the runtime's.
+    # None = inherit the runtime's active model.
+    model_profile: str | None = None
 
 
 class ReportPayload(BaseModel):

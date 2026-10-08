@@ -67,6 +67,18 @@ class RetryPolicy:
         "engine_overloaded", "upstream_provider_shared_pool",
     )
 
+    #: Keywords that mark a PERMANENT failure — retrying cannot succeed until
+    #: something outside the runtime changes (billing, plan, quota reset).
+    #: Checked before every transient/rate-limit signal: OpenAI reports
+    #: exhausted billing as a 429 typed ``RateLimitError``, which would
+    #: otherwise burn the whole rate-limit budget on backoff sleeps that can
+    #: never succeed. The strings are specific enough that transient failures
+    #: are not misclassified.
+    _NON_RETRYABLE_KEYWORDS: tuple[str, ...] = (
+        "insufficient_quota", "exceeded your current quota",
+        "insufficient credits", "quota exceeded",
+    )
+
     def __init__(
         self,
         *,
@@ -109,7 +121,18 @@ class RetryPolicy:
         """True for transient failures (timeouts, connection drops, rate limits,
         server errors) that are safe to retry. Classifies by exception type where
         possible, falling back to message/keyword matching for unknown providers.
+
+        Permanent failures (billing/quota exhaustion) are never retryable — even
+        when the provider reports them as a 429 — so a dead account fails on the
+        first call instead of burning the rate-limit budget.
         """
+        # The permanent check must precede the type check: OpenAI's quota 429
+        # arrives typed as ``RateLimitError``.
+        error_str = str(exc).lower()
+        if any(
+            keyword in error_str for keyword in RetryPolicy._NON_RETRYABLE_KEYWORDS
+        ):
+            return False
         for cls in RetryPolicy._RETRYABLE_TYPES:
             if isinstance(exc, cls):
                 return True
@@ -118,7 +141,6 @@ class RetryPolicy:
             status = getattr(exc, "status_code", None)
             if status is not None and 500 <= status < 600:
                 return True
-        error_str = str(exc).lower()
         return any(keyword in error_str for keyword in RetryPolicy._RETRYABLE_KEYWORDS)
 
     @staticmethod

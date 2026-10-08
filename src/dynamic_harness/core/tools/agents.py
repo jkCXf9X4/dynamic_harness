@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 
 from ..policies.disclosure import DisclosurePolicy
 from ..policies.permissions import ToolPermissionPolicy
@@ -14,43 +14,81 @@ if TYPE_CHECKING:
     from ...core.tool_context import ToolContext
 
 
-TOOL_DELEGATE_DEF = ToolDef(
-    name="delegate",
-    description="Delegate a task to a sub-agent that handles it autonomously. "
-                "The sub-agent sees ONLY your description, role, and optional "
-                "system_prompt/intent fields — nothing from your parent. "
-                "Brief the child as a mission-command order (uppdragstaktik): "
-                "description is WHAT to achieve; intent is WHY it matters (the "
-                "child's decision criterion when the plan changes); end_state is "
-                "the desired final condition; constraints are the boundaries and "
-                "limits; authority grants the child freedom of action to deviate "
-                "within the intent and obliges it to report deviations. "
-                "Use system_prompt to override the sub-agent's default behavior. "
-                "Set role to 'orchestrator' to force deeper decomposition: the "
-                "sub-agent becomes a sub-orchestrator that must split and delegate "
-                "its own work (it cannot do hands-on work itself). "
-                "Optionally set agent_type to a registered custom agent class "
-                "name to instantiate a specialist sub-agent; unknown names are "
-                "rejected. Returns the child's status, ID, report summary, "
-                "artifact IDs, and confidence (if set). For failed children, "
-                "returns the failure reason. The result also carries the child's "
-                "runtime limits (token cap / wall-clock) so you know the ramar it "
-                "was working under.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "description": {"type": "string", "description": "Description of the task for the sub-agent"},
-            "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.'). Set role to 'orchestrator' to create a sub-orchestrator that must further decompose and delegate its own sub-tree — use when a delegated task is itself large enough to be split."},
-            "system_prompt": {"type": "string", "description": "Optional custom system prompt for the sub-agent. Overrides the default agent behavior. Use for A/B testing different prompt strategies."},
-            "agent_type": {"type": "string", "description": "Optional registered custom agent class name (via Runtime.register_agent_class) to instantiate for the sub-agent. Unknown names are rejected — the base Agent is never used as a silent fallback."},
-            "intent": {"type": "string", "description": "Why this task matters to your larger objective (syfte/avsikt). The child's decision criterion: when the original plan becomes infeasible, it adapts to honor this intent."},
-            "end_state": {"type": "string", "description": "Desired final condition — what 'done' looks like from your perspective (målbild). The child steers toward this when the path changes."},
-            "constraints": {"type": "array", "items": {"type": "string"}, "description": "Boundaries and limits (ramar): what the child must NOT do, resource/scope limits, interface rules with sibling agents, deadlines."},
-            "authority": {"type": "string", "description": "Freedom of action (handlingsfrihet): explicit license to deviate from the stated plan when the situation changes, provided the intent is honored — and the obligation to report the deviation and why in report()/escalate()."},
-        },
-        "required": ["description"],
-    },
+_DELEGATE_DESCRIPTION = (
+    "Delegate a task to a sub-agent that handles it autonomously. "
+    "The sub-agent sees ONLY your description, role, and optional "
+    "system_prompt/intent fields — nothing from your parent. "
+    "Brief the child as a mission-command order (uppdragstaktik): "
+    "description is WHAT to achieve; intent is WHY it matters (the "
+    "child's decision criterion when the plan changes); end_state is "
+    "the desired final condition; constraints are the boundaries and "
+    "limits; authority grants the child freedom of action to deviate "
+    "within the intent and obliges it to report deviations. "
+    "Use system_prompt to override the sub-agent's default behavior. "
+    "Set role to 'orchestrator' to force deeper decomposition: the "
+    "sub-agent becomes a sub-orchestrator that must split and delegate "
+    "its own work (it cannot do hands-on work itself). "
+    "Optionally set agent_type to a registered custom agent class "
+    "name to instantiate a specialist sub-agent; unknown names are "
+    "rejected. Returns the child's status, ID, report summary, "
+    "artifact IDs, and confidence (if set). For failed children, "
+    "returns the failure reason. The result also carries the child's "
+    "runtime limits (token cap / wall-clock) so you know the ramar it "
+    "was working under."
 )
+
+
+def _model_profile_property(profiles: Sequence[tuple[str, str]]) -> dict[str, Any]:
+    """The ``model_profile`` schema property for a configured profile set."""
+
+    tiers = [
+        f"'{name}' — {description}" if description else f"'{name}'"
+        for name, description in profiles
+    ]
+    return {
+        "type": "string",
+        "enum": [name for name, _ in profiles],
+        "description": (
+            "Model profile the child runs on (a capability/speed tier). "
+            f"Available profiles: {'; '.join(tiers)}. "
+            "Pick the weakest tier that can reliably handle the task: "
+            "fast/cheap tiers for mechanical work (extraction, formatting, "
+            "simple lookups), the strongest tier for hard reasoning "
+            "(architecture, debugging, review). Omit to inherit your model."
+        ),
+    }
+
+
+def make_delegate_def(profiles: Sequence[tuple[str, str]] = ()) -> ToolDef:
+    """The ``delegate`` tool definition.
+
+    ``profiles`` is the configured (name, description) list from
+    ``config.profiles``; when non-empty it adds a ``model_profile``
+    parameter whose enum + per-tier descriptions let the parent choose the
+    child's model tier. Empty = the parameter is absent, so the feature is
+    invisible when no profiles are configured.
+    """
+
+    properties: dict[str, Any] = {
+        "description": {"type": "string", "description": "Description of the task for the sub-agent"},
+        "role": {"type": "string", "description": "Optional role tag scoping the sub-agent's focus (e.g. 'You are a Security Auditor. Flag issues, do not fix them.'). Set role to 'orchestrator' to create a sub-orchestrator that must further decompose and delegate its own sub-tree — use when a delegated task is itself large enough to be split."},
+        "system_prompt": {"type": "string", "description": "Optional custom system prompt for the sub-agent. Overrides the default agent behavior. Use for A/B testing different prompt strategies."},
+        "agent_type": {"type": "string", "description": "Optional registered custom agent class name (via Runtime.register_agent_class) to instantiate for the sub-agent. Unknown names are rejected — the base Agent is never used as a silent fallback."},
+        "intent": {"type": "string", "description": "Why this task matters to your larger objective (syfte/avsikt). The child's decision criterion: when the original plan becomes infeasible, it adapts to honor this intent."},
+        "end_state": {"type": "string", "description": "Desired final condition — what 'done' looks like from your perspective (målbild). The child steers toward this when the path changes."},
+        "constraints": {"type": "array", "items": {"type": "string"}, "description": "Boundaries and limits (ramar): what the child must NOT do, resource/scope limits, interface rules with sibling agents, deadlines."},
+        "authority": {"type": "string", "description": "Freedom of action (handlingsfrihet): explicit license to deviate from the stated plan when the situation changes, provided the intent is honored — and the obligation to report the deviation and why in report()/escalate()."},
+    }
+    if profiles:
+        properties["model_profile"] = _model_profile_property(list(profiles))
+    return ToolDef(
+        name="delegate",
+        description=_DELEGATE_DESCRIPTION,
+        input_schema={"type": "object", "properties": properties, "required": ["description"]},
+    )
+
+
+TOOL_DELEGATE_DEF = make_delegate_def()
 
 TOOL_REPORT_DEF = ToolDef(
     name="report",
@@ -274,13 +312,15 @@ async def delegate(
     *, ctx: ToolContext, description: str,
     role: str | None = None, system_prompt: str | None = None,
     agent_type: str | None = None,
+    model_profile: str | None = None,
     intent: str | None = None, end_state: str | None = None,
     constraints: list[str] | None = None, authority: str | None = None,
     _tool_call_id: str = "",
 ) -> str:
     return await ctx.run_delegate_tool(
         description, role=role, system_prompt=system_prompt,
-        agent_type=agent_type, intent=intent, end_state=end_state,
+        agent_type=agent_type, model_profile=model_profile,
+        intent=intent, end_state=end_state,
         constraints=constraints, authority=authority,
         tool_call_id=_tool_call_id,
     )

@@ -188,10 +188,15 @@ catalog.
 `ProviderRegistry.from_config(config)` builds a registry from a harness
 config; `resolve(model_ref)` turns a `<provider>/<model>` ref into a
 `ResolvedModel` (pure — constructs nothing); `select()` builds the provider for
-the ref and marks it active; `api_key_for(provider_id)` walks the provider's
-ordered `env` names in the environment only; `close_all()` releases every built
-instance. Credentials are never read from the config file — a run with no
-credential stays keyless and the agent fails with a recorded reason.
+the ref and marks it active; `provider_for(model_ref)` does the same WITHOUT
+changing the active selection — for per-task/per-child model overrides (e.g.
+model profiles), where each consumer keeps its own instance;
+`api_key_for(provider_id)` walks the provider's ordered `env` names in the
+environment only; `close_all()` releases every built instance. Built instances
+are cached per (provider id, model id), so two models on one provider yield
+two instances with their own `default_model`. Credentials are never read from
+the config file — a run with no credential stays keyless and the agent fails
+with a recorded reason.
 
 ```python
 from dynamic_harness.config import HarnessConfig

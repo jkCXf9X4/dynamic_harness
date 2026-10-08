@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 from . import agents as _agents
 from . import artifacts as _artifacts
 from . import comms as _comms
@@ -14,7 +16,16 @@ from . import skills as _skills
 from .registry import ToolRegistry
 
 
-def register_default_tools(registry: ToolRegistry) -> None:
+def register_default_tools(
+    registry: ToolRegistry,
+    model_profiles: Sequence[tuple[str, str]] = (),
+) -> None:
+    """Register the default tool set.
+
+    ``model_profiles`` is the configured (name, description) list from
+    ``config.profiles``; non-empty it adds the ``model_profile`` parameter to
+    the ``delegate`` tool so agents can pick a child's model tier.
+    """
     registry.register(_filesystem.TOOL_READ_DEF, _filesystem.read)
     registry.register(_filesystem.TOOL_WRITE_DEF, _filesystem.write)
     registry.register(_filesystem.TOOL_GLOB_DEF, _filesystem.glob)
@@ -22,7 +33,7 @@ def register_default_tools(registry: ToolRegistry) -> None:
     registry.register(_process.TOOL_BASH_DEF, _process.bash)
     registry.register(_network.TOOL_WEBFETCH_DEF, _network.webfetch)
     registry.register(_filesystem.TOOL_EDIT_DEF, _filesystem.edit)
-    registry.register(_agents.TOOL_DELEGATE_DEF, _agents.delegate)
+    registry.register(_agents.make_delegate_def(model_profiles), _agents.delegate)
     registry.register(_agents.TOOL_REPORT_DEF, _agents.report)
     registry.register(_agents.TOOL_ESCALATE_DEF, _agents.escalate)
     registry.register(_agents.TOOL_FAIL_DEF, _agents.fail)
