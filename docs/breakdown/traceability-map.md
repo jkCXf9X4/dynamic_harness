@@ -1,6 +1,6 @@
 # Traceability Map — dynamic_harness
 
-Seed map linking **Claim/Need → Decision Record(s) → Realizing artifact/evidence**, created 2026-09-21 from `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md` (draft traceability map). **This is a seed to be maintained:** it is the repo-level V-model closure ("every output traced to a requirement", VISION), and it must be updated whenever a claim, decision, or artifact changes — and reconciled to the record IDs (AD-001…) once they land in `decisions/`. Paths are the **post-move** canonical homes (RL-* are root/docs/reference paths that stay in place).
+Seed map linking **Claim/Need → Decision Record(s) → Realizing artifact/evidence**, created 2026-09-21 from `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md` (draft traceability map). **This is a seed to be maintained:** it is the repo-level V-model closure ("every output traced to a requirement", VISION), and it must be updated whenever a claim, decision, or artifact changes — and reconciled to the record IDs (AD-001…), which are archived in `docs/archive/archive.zip`. Paths are the **post-move** canonical homes (RL-* are root/docs/reference paths that stay in place).
 
 | Need / Claim | Decision(s) | Realizing artifact / evidence |
 |--------------|-------------|-------------------------------|
@@ -16,7 +16,7 @@ Seed map linking **Claim/Need → Decision Record(s) → Realizing artifact/evid
 | "Composable CLI for automation" | DL-12 (CLI-first minimal) | `01-product/requirements/README.md` FR/NFR, `06-evolution/backlog.md` |
 | "Delegate when it pays; right-size ceremony" | DL-13 (golden delegation rule) | `02-architecture/methodology/README.md`, `3rd_party/agent_methods_and_tools/src/agent_methods/methods/delegation-guidelines/SKILL.md`, `3rd_party/agent_methods_and_tools/src/agent_methods/methods/tool-motivations/SKILL.md` |
 | "Child autonomy safe via intent" | DL-15 (mission-command briefs) | `3rd_party/agent_methods_and_tools/src/agent_methods/methods/mission-command/SKILL.md`, `02-architecture/concepts/delegation-model/README.md`, `03-implementation/` policies (BriefPolicy) |
-| "Definition state stays navigable and canonical, not accumulated" | DL-17 (node model) | `decisions/AD-009-node-model-budgeted-navigational-definition-state.md`, `README.md` (Node Model), `docs/references/information_hygiene.md` |
+| "Definition state stays navigable and canonical, not accumulated" | DL-17 (node model) | `AD-009` (archive), `README.md` (Node Model), `docs/references/information_hygiene.md` |
 
 ## What Is Not Yet Traced (open work)
 

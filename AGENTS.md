@@ -104,8 +104,9 @@ src/dynamic_harness/
 └── llm/                 → LLMProvider ABC + OpenAIProvider + ProviderRegistry (named providers from config → built instances)
 
 tests/                   → pytest suite (backend/ + cli/)
-product-breakdown/       → systems-engineering record (seven layers; start at its README.md)
 docs/                    → api/ (module-level API reference) + references/ (rationale library)
+docs/breakdown/          → systems-engineering record (seven layers; start at its README.md)
+docs/archive/            → decision archive (archive.zip: records + deprecated tombstones; generated index)
 .agents/skills/          → installed skills (gitignored; source: 3rd_party/agent_methods_and_tools)
 ```
 
@@ -161,7 +162,8 @@ Data flow, in one line: `User/CLI → Runtime.delegate(Task) → Agent.run()` (t
 | Change commit/persistence | `memory/repository.py` |
 | Change LLM integration | `llm/openai_provider.py` |
 | Change terminal interface | `cli/terminal.py` |
-| Change agent methodology | `product-breakdown/02-architecture/methodology/README.md` |
+| Change agent methodology | `docs/breakdown/02-architecture/methodology/README.md` |
+| Decision archive (records/tombstones) | `docs/archive/` — read via the `product-breakdown` skill's `pb archive` commands, never browsed |
 | Change rationale / reference library | `core/references.py` + `docs/references/` + installed skills (`3rd_party/agent_methods_and_tools/src/agent_methods/methods/` → `.agents/skills/`) |
 
 

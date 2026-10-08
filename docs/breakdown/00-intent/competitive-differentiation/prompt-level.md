@@ -41,4 +41,4 @@ are fire-and-forget and the parent is re-admitted to its loop as each child
 settles (`[child settled]` injected), letting it react to one child before
 siblings finish — re-delegate a failed branch, cancel stragglers, or report
 early. The cost trade-off is documented in
-delegation-model (`product-breakdown/02-architecture/concepts/delegation-model.md`).
+delegation-model (`docs/breakdown/02-architecture/concepts/delegation-model/README.md`).

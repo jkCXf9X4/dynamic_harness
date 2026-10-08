@@ -6,7 +6,7 @@ summary: "Interface-economy investigation feeding DL-8/DL-9 and AD-007: the runt
 # Plugin Investigation
 
 Interface-economy investigation feeding [DL-8/DL-9](../../decision-log.md) and
-[AD-007](../../../decisions/AD-007-plugin-direction-interface-economy-7-seams-no-loader-late-injection.md): the runtime's plugin direction is a small set
+`AD-007` (archive): the runtime's plugin direction is a small set
 of host-agnostic seams with **no loader / no late injection**.
 
 | Part | Leaves |

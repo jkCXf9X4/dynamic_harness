@@ -27,7 +27,7 @@ Other open candidates are listed in the [roadmap.md](roadmap.md) register (IMP-0
 
 ## Excludes
 - Current definition, current baseline → `00-intent/`, `01-product/`
-- Decision records → the owning layer's `decisions/` (there is no `ED-*` class)
+- Decision records → the decision archive (`docs/archive/archive.zip`; there is no `ED-*` class)
 - Runbook → `05-operation/`
 - Existing-evidence claims → `04-verification/`
 

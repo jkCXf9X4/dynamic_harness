@@ -19,7 +19,7 @@ status: current
 Mainstream harnesses *tell* the model to behave ("verify your children", "prune
 your context", "don't loop"). Measured behavior shows the model rarely complies —
 it almost never calls `prune` in the manyfiles task, and token use balloons to
-200–680K (self-healing (`product-breakdown/02-architecture/concepts/self-healing.md`)). Dynamic
+200–680K (self-healing (`docs/breakdown/02-architecture/concepts/self-healing/README.md`)). Dynamic
 Harness enforces the equivalent safety in `_run_loop()`.
 
 ## Loop detection

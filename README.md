@@ -10,11 +10,11 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 | Section | Description |
 |---------|-------------|
-| [Getting Started](product-breakdown/05-operation/guides/getting-started/README.md) | Installation, setup, first task |
+| [Getting Started](docs/breakdown/05-operation/guides/getting-started/README.md) | Installation, setup, first task |
 | [AGENTS.md](AGENTS.md) | AI agent onboarding reference |
-| [VISION.md](product-breakdown/00-intent/VISION.md) | Architecture vision and success criteria |
-| [Agent Methodology](product-breakdown/02-architecture/methodology/README.md) | Mandatory workflow and anti-patterns |
-| [Product Breakdown](product-breakdown/README.md) | Layered definition state (intent → evolution) |
+| [VISION.md](docs/breakdown/00-intent/VISION.md) | Architecture vision and success criteria |
+| [Agent Methodology](docs/breakdown/02-architecture/methodology/README.md) | Mandatory workflow and anti-patterns |
+| [Product Breakdown](docs/breakdown/README.md) | Layered definition state (intent → evolution) |
 
 ### API Reference
 
@@ -32,17 +32,17 @@ A recursive agent runtime that maximizes LLM output quality while minimizing cos
 
 | Guide | Description |
 |-------|-------------|
-| [Programmatic Usage](product-breakdown/05-operation/guides/programmatic-usage/README.md) | Embed as a library |
-| [Custom Agents](product-breakdown/05-operation/guides/custom-agents/README.md) | Subclass and register agent types |
-| [Extending Tools](product-breakdown/05-operation/guides/extending-tools/README.md) | Register custom tools |
+| [Programmatic Usage](docs/breakdown/05-operation/guides/programmatic-usage/README.md) | Embed as a library |
+| [Custom Agents](docs/breakdown/05-operation/guides/custom-agents/README.md) | Subclass and register agent types |
+| [Extending Tools](docs/breakdown/05-operation/guides/extending-tools/README.md) | Register custom tools |
 
 ### Concepts
 
 | Concept | Document |
 |---------|----------|
-| Delegation model | [concepts/delegation-model](product-breakdown/02-architecture/concepts/delegation-model/README.md) |
-| Artifact system | [concepts/artifact-system](product-breakdown/02-architecture/concepts/artifact-system/README.md) |
-| Agent lifecycle | [concepts/agent-lifecycle](product-breakdown/02-architecture/concepts/agent-lifecycle/README.md) |
+| Delegation model | [concepts/delegation-model](docs/breakdown/02-architecture/concepts/delegation-model/README.md) |
+| Artifact system | [concepts/artifact-system](docs/breakdown/02-architecture/concepts/artifact-system/README.md) |
+| Agent lifecycle | [concepts/agent-lifecycle](docs/breakdown/02-architecture/concepts/agent-lifecycle/README.md) |
 
 ## Architectural principles
 
@@ -144,7 +144,7 @@ is busy or applied immediately when it is waiting on its children.
 **Everything else is persisted to the run directory** (`.dynamic-harness/<ts>_<id>/`)
 for traceability and automated inspection: `agents.txt` (text agent tree,
 updated live), `agent_tree.json`, `stats.json`, `events.jsonl`, `index.jsonl`.
-See [requirements](product-breakdown/01-product/requirements/README.md).
+See [requirements](docs/breakdown/01-product/requirements/README.md).
 
 ### Single-shot
 
@@ -183,7 +183,7 @@ async def main():
 asyncio.run(main())
 ```
 
-See [docs/guides/programmatic-usage.md](product-breakdown/05-operation/guides/programmatic-usage/README.md) for patterns and examples.
+See [docs/guides/programmatic-usage.md](docs/breakdown/05-operation/guides/programmatic-usage/README.md) for patterns and examples.
 
 ## Without an LLM
 

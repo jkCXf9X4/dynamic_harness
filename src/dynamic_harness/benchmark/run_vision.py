@@ -14,7 +14,7 @@ possible if the whole chain works end-to-end: the ``read`` tool attached the
 image as a data URI, the provider forwarded the ``image_url`` content part,
 and the model actually saw the pixels. Results are written as a markdown
 report + raw metrics JSON under
-``../../../product-breakdown/06-evolution/investigations/vision-live/``.
+``../../../docs/breakdown/06-evolution/investigations/vision-live/``.
 
 The configured model must be vision-capable; a text-only model completes the
 run but fails verification (``mismatch``/``nothing`` in the note), which is
@@ -47,7 +47,7 @@ from .vision_asset import VISION_DIGITS, render_code_image
 
 load_dotenv()
 
-OUT_DIR = REPO_ROOT / "product-breakdown" / "06-evolution" / "investigations" / "vision-live"
+OUT_DIR = REPO_ROOT / "docs" / "breakdown" / "06-evolution" / "investigations" / "vision-live"
 
 
 def _render_markdown(meta: dict, results: list) -> str:

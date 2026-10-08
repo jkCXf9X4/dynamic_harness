@@ -14,22 +14,30 @@ intentionally small and should stay that way.
   are installed from the generic `3rd_party/agent_methods_and_tools` library
   into `.agents/skills/` and wired via `agent.skills_dir` (see the skills
   section of `../AGENTS.md`).
+- `breakdown/` — the repo's **definition state**: the seven-layer product
+  breakdown (intent, product, architecture, implementation, verification,
+  operation, evolution) — VISION, requirements, methodology, concepts,
+  examples, use-cases, gap-analysis, guides. Start at its README.md.
+- `archive/` — the decision **archive**: `archive.zip` cold-stores every
+  committed choice (decision records) and retired material (tombstones),
+  beside the generated index and log. History is read deliberately via the
+  `product-breakdown` skill's `pb archive list` / `pb archive read <ID>` —
+  never globbed or unzipped into the tree.
 
 ## What does NOT live here
 
-The repo's **definition state** — the layered product breakdown (intent,
-product, architecture, implementation, verification, operation, evolution) —
-lives in [`product-breakdown/`](../product-breakdown/README.md). VISION,
-requirements, methodology, concepts, examples, use-cases, gap-analysis, and
-guides all moved there. Task-specific instruction packages (skills) are
-installed into [`.agents/skills/`](../.agents/skills/), not stored in `docs/`.
+Task-specific instruction packages (skills) are installed into
+[`.agents/skills/`](../.agents/skills/), not stored in `docs/`. `api/` pages
+are generated from code and never hand-edited.
 
 ## Why the split is intentional
 
 `docs/references/` and the installed skills root (`.agents/skills/`) are loaded
 by the runtime's agent system prompt, so they must stay at stable, runtime-known
-paths. `docs/api/` documents
-the runtime surface and is regenerated from code. Everything that answers a
-*definition* question (why, what, how-organized, proof, operation, evolution)
-belongs in `product-breakdown/`. This split is deliberate — do not "fix" it by
-moving files back into `docs/`.
+paths. `docs/api/` documents the runtime surface and is regenerated from code.
+Everything that answers a *definition* question (why, what, how-organized,
+proof, operation, evolution) belongs in `breakdown/` — and everything that is
+*history* (a committed choice, a retired file) belongs in the `archive/`: a
+state-browsing agent must never see a decision record or tombstone in the tree.
+This split is deliberate — do not "fix" it by moving files back into
+`references/` or `api/`.

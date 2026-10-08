@@ -37,10 +37,11 @@ With coverage: `pytest --cov --cov-report=term-missing` (coverage config in `pyp
 ## Definition-State Check (node sizes)
 
 ```bash
-python3 product-breakdown/tools/check_node_size.py --strict   # AD-009 node budget
+PB=.agents/skills/product-breakdown/scripts/pb
+python3 "$PB" node-size --strict   # AD-009 node budget
 ```
 
-Every markdown file under `product-breakdown/` is a node: index `README.md` ≤75 lines, leaf ≤75 lines (min ~10). Violations are resolved by trim → link → split. There are no exemptions. Run this after editing any `product-breakdown/` node.
+Every markdown file under `docs/breakdown/` is a node: index `README.md` ≤75 lines, leaf ≤75 lines (min ~10). Violations are resolved by trim → link → split; exemptions are listed in `docs/breakdown/pb.toml`. Run this after editing any `docs/breakdown/` node.
 
 ## Lint / Format (pre-commit)
 

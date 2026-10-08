@@ -11,7 +11,7 @@ Each cell is one ``communication.topology`` value; everything else (task, LLM,
 workspace snapshot) is identical. Runs that do not complete cleanly (provider
 stalls, internal errors) are re-attempted ``--retries`` times. Results are
 written as a markdown report + raw metrics JSON under the experiment directory
-(``../../../product-breakdown/06-evolution/investigations/communication-structures/``).
+(``../../../docs/breakdown/06-evolution/investigations/communication-structures/``).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUT_DIR = (
-    REPO_ROOT / "product-breakdown" / "06-evolution" / "investigations"
+    REPO_ROOT / "docs" / "breakdown" / "06-evolution" / "investigations"
     / "communication-structures"
 )
 

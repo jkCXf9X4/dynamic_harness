@@ -13,7 +13,7 @@ summary: >
 related:
   - runtime.md
   - agent.md
-  - ../../product-breakdown/02-architecture/concepts/artifact-system/README.md
+  - ../breakdown/02-architecture/concepts/artifact-system/README.md
 ---
 
 # Artifact System

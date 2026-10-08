@@ -21,7 +21,7 @@ interfaces. Plugin-ready *structure* is the target; a loader is out of scope.
 ## Excludes
 - Runtime-coupled API docs → `../../../../docs/api/`; external porting / MCP transport → `../../../00-intent/platform-evaluation.md`.
 
-Decisions: [AD-007](../../../../decisions/AD-007-plugin-direction-interface-economy-7-seams-no-loader-late-injection.md); DL-8, DL-9.
+Decisions: `AD-007` (archive); DL-8, DL-9.
 
 ## Contents
 

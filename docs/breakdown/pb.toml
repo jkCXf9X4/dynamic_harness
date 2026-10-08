@@ -2,11 +2,20 @@
 # Standard: 3rd_party/agent_methods_and_tools/methods/product-breakdown/
 # The tool is at .agents/skills/product-breakdown/scripts/pb (installed skill).
 
+[layout]
+# Decision records and retired material (tombstones, under the zip's
+# deprecated/ namespace) are cold-stored in the decision archive — a zip beside
+# the breakdown, not in the tree. Path is relative to the breakdown root and
+# may contain "..". The archive is read deliberately via `pb archive list` /
+# `pb archive read <ID>` and never globbed or unzipped into the tree.
+archive = "../archive/archive.zip"
+
 [nodes]
 # The hand-written traceability map stays canonical (claim/need -> decision ->
 # artifact V-model coverage that the generated registers do not replace) and is
-# therefore exempt from node/leaf checks. The retired decision-log.md lives
-# under deprecated/ (skipped by all checks) and is not exempted here.
+# therefore exempt from node/leaf checks. The retired decision-log.md lives in
+# the archive's deprecated/ namespace (skipped by all checks) and is not
+# exempted here.
 exempt = ["traceability-map.md"]
 
 [ids]
@@ -18,20 +27,31 @@ leaf_statuses = ["current", "draft", "superseded", "proposed", "accepted", "open
 # IMP-007…IMP-015 are Proposed in 06-evolution/selected/README.md but not yet
 # filed (6 of them are cited from roadmap/watchdog); reserve the handles so
 # those forward references resolve. They register with no path.
-reserved_ids = ["IMP-007", "IMP-008", "IMP-009", "IMP-010", "IMP-011", "IMP-012", "IMP-013", "IMP-014", "IMP-015"]
+reserved_ids = ["IMP-007", "IMP-008", "IMP-009", "IMP-010", "IMP-011", "IMP-012", "IMP-013", "IMP-014", "IMP-015",
+                "REQ-10", "REQ-11", "REQ-12", "REQ-13", "REQ-14", "REQ-15"]
+# The IMP handles are Proposed in 06-evolution/selected/README.md but not yet
+# filed (6 of them are cited from roadmap/watchdog). The REQ-10..15 handles
+# are collaboration requirements defined in the body text of
+# 06-evolution/investigations/multi-agent-coordination/ (requirements-group
+# and friends) — no leaf front-matter carries their ids, so the two-digit
+# ones (the only ones the citation check can see) are reserved to keep the
+# citations resolvable. Reserved ids register with no path.
 
 [records]
-# The 9 legacy ADRs (migrated 2026-09-29) are fact-dense records that predate
+# The 9 legacy ADRs (archived 2026-09-29) are fact-dense records that predate
 # the standard's tighter targets; budget caps are widened to their actual sizes
-# so history is preserved intact while the section budgets still enforce.
+# so history is preserved intact while the section budgets still enforce —
+# including when `pb archive add` validates a record before archiving it.
 budgets = { Context = [6, 12], Decision = [6, 20], Rationale = [5, 8] }
 
 [registers]
-# The stream index (decisions/README.md) and the Decision Log
-# (design-choice-log.md) are generated. Every DL-1…DL-17 decision now has a
-# record or state home, so the hand-written decision-log.md was retired to
-# deprecated/ (2026-10-02) and replaced by the generated log. The traceability
-# map stays hand-written (traceability-map.md): it covers claims/needs, not
-# just records.
+# Generated from the archive's record front-matter: the index (README.md) and
+# the Decision Log (design-choice-log.md), written beside the archive
+# (targets resolve relative to the archive's parent dir). Every DL-1…DL-17
+# decision has a record or state home; the hand-written decision-log.md was
+# retired into the archive (2026-10-02) and is replaced by the generated log.
+# The traceability map stays hand-written (traceability-map.md): it covers
+# claims/needs, not just records.
+index = "README.md"
 log = "design-choice-log.md"
 traceability = ""

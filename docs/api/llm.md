@@ -17,7 +17,7 @@ summary: >
 related:
   - runtime.md
   - agent.md
-  - ../../product-breakdown/05-operation/guides/custom-agents/README.md
+  - ../breakdown/05-operation/guides/custom-agents/README.md
 ---
 
 # LLM Provider

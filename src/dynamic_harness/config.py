@@ -482,7 +482,7 @@ class SelfHealConfig(BaseModel):
     ``max_resumes`` bounds Layer 1 (resume the same agent with a corrective
     nudge — salvages a healthy context). ``max_fresh_retries`` bounds Layer 3
     (spawn a fresh worker over the same task when the context is poisoned / rot).
-    See ../../product-breakdown/02-architecture/concepts/self-healing/README.md.
+    See ../../docs/breakdown/02-architecture/concepts/self-healing/README.md.
     """
 
     mode: bool = True

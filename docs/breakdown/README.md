@@ -1,6 +1,6 @@
 # Product Breakdown — dynamic_harness
 
-This directory is the repo's **definition state**: the seven-layer product breakdown that makes the development rationale explicit. It is the binding instance of the per-layer convention defined in the generic [`product-breakdown` method](../../3rd_party/agent_methods_and_tools/src/agent_methods/methods/product-breakdown/SKILL.md) (installed as a skill into `.agents/skills/`), migrated to that method's current model (2026-09-29): every leaf carries a stable content-type id (`INFO-`/`EVAL-`/`IMP-`) cited in backticks, decision records live in the flat `decisions/` stream, and layer indexes and `decisions/README.md` are generated. Every document that answers one of the seven layer questions lives in its layer; every durable decision is recorded; every claim/need is traced to the decision(s) and artifact(s) that realize it; every piece of future work is registered in the evolution layer. Created 2026-09-21 as the instantiation of that convention (see `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md`), wrapping — not replacing — the existing INVESTIGATION→PLAN→FINDINGS→RESULTS rationale that already lives in the moved files.
+This directory is the repo's **definition state**: the seven-layer product breakdown that makes the development rationale explicit. It is the binding instance of the per-layer convention defined in the generic [`product-breakdown` method](../../3rd_party/agent_methods_and_tools/src/agent_methods/methods/product-breakdown/SKILL.md) (installed as a skill into `.agents/skills/`), migrated to that method's current model (2026-09-29): every leaf carries a stable content-type id (`INFO-`/`EVAL-`/`IMP-`) cited in backticks, decision records and retired material are cold-stored in the decision archive (`../archive/archive.zip`), and layer indexes and the archive index (`../archive/README.md`) are generated. Every document that answers one of the seven layer questions lives in its layer; every durable decision is recorded; every claim/need is traced to the decision(s) and artifact(s) that realize it; every piece of future work is registered in the evolution layer. Created 2026-09-21 as the instantiation of that convention (see `.dynamic-harness/260921_153611_b5cb/artifacts/breakdown_structure_critical_review.md`), wrapping — not replacing — the existing INVESTIGATION→PLAN→FINDINGS→RESULTS rationale that already lives in the moved files.
 
 ## The Seven Layers
 
@@ -24,7 +24,7 @@ A document's home is the layer whose primary question it answers. Information fl
 
 ## Node Model
 
-Every markdown file here is a **node** with a size budget ([AD-009](decisions/AD-009-node-model-budgeted-navigational-definition-state.md)), enforced by the method's `pb node-size --strict`.
+Every markdown file here is a **node** with a size budget (`AD-009`), enforced by the method's `pb node-size --strict`.
 
 - **Index node** — one per folder, `README.md`. Navigational only: purpose, owns/excludes, a generated `## Contents` list, decisions pointer. No rationale or substantive detail. Target ≤40 lines, hard cap 75.
 - **Leaf node** — one concern; target ≤50 lines, hard cap 75, minimum ~10. Decision records are small and decisive and are never split — tighten or supersede.
@@ -33,13 +33,13 @@ Every markdown file here is a **node** with a size budget ([AD-009](decisions/AD
 
 ## Cross-Cutting Registers
 
-- **[Decision stream](decisions/README.md)** — generated from record front-matter: flat, dated history of every committed choice (`decisions/<PREFIX>-<NNN>-<slug>.md`).
-- **[Decision log](design-choice-log.md)** — generated from record front-matter (newest-first). Replaces the hand-written `decision-log.md` (DL-1…DL-17), retired to `deprecated/` on 2026-10-02 once every row had a record or state home.
+- **[Decision archive](../archive/README.md)** — `archive.zip` cold-stores every committed choice and retired material; the generated index (ID | status | date | title) is the only loose surface. Records are extracted with `pb archive read <ID>` — never globbed or unzipped into the tree.
+- **[Decision log](../archive/design-choice-log.md)** — generated from record front-matter (newest-first). Replaces the hand-written `decision-log.md` (DL-1…DL-17), retired to the archive (under `deprecated/`) on 2026-10-02 once every row had a record or state home.
 - **[Traceability map](traceability-map.md)** — Claim/Need → Decision Record(s) → Artifact(s); closes the V-model loop at repo level ("every output traced to a requirement"). Hand-written; it covers claims and needs, not only records.
 
 ## Decision Records & IMPs
 
-- **Records** live in the flat stream under `decisions/<PREFIX>-<NNN>-<slug>.md`, following `templates/TEMPLATE.md` of the method skill (front-matter: id, title, date, status, layers, state, artifacts, supersedes, superseded_by, related; sections Context → Decision → Rationale → Alternatives Considered → Consequences → Verification → Review Trigger). Prefixes map to layers: ID/PD/AD/IMD/VD/OD; evolution candidates use IMP-. Status ∈ `proposed | accepted | superseded | rejected | deprecated`. The 9 legacy ADRs were migrated here on 2026-09-29.
+- **Records** live in the decision archive (`../archive/archive.zip`, at zip root as `<PREFIX>-<NNN>-<slug>.md`), added via `pb archive add` and read via `pb archive read <ID>`, following `templates/TEMPLATE.md` of the method skill (front-matter: id, title, date, status, layers, state, artifacts, supersedes, superseded_by, related; sections Context → Decision → Rationale → Alternatives Considered → Consequences → Verification → Review Trigger). Prefixes map to layers: ID/PD/AD/IMD/VD/OD; evolution candidates use IMP-. Status ∈ `proposed | accepted | superseded | rejected | deprecated`. The 9 legacy ADRs were archived there on 2026-09-29.
 - **IMPs** live under `06-evolution/selected/IMP-NNN.md` — a scoped candidate needing a task contract, **not** implementation approval. An implemented IMP moves to `06-evolution/implemented/` and is no longer tracked. Cross-listed in `06-evolution/README.md`.
 
 ## What Stays Runtime-Coupled in docs/
@@ -50,19 +50,20 @@ Every markdown file here is a **node** with a size budget ([AD-009](decisions/AD
 
 State, history, candidates, and tracking are separate surfaces; a read must not
 mix them. **For a current-state question: read state only — a layer index, then
-the one leaf owning the concern — and stop when the fact is found.** Enter
-`decisions/` records (via a leaf's `## Decisions` footer), IMPs, or
-`investigations/` only when the question is *why / what's next*, never *what
-is*. Never whole-directory read `decisions/`, `selected/`, or
-`investigations/`; `grep` for a term scoped to the owning layer instead.
+the one leaf owning the concern — and stop when the fact is found.** Enter the
+decision archive (`pb archive list`, then `pb archive read <ID>` — one record,
+stdout), IMPs, or `investigations/` only when the question is *why / what's
+next*, never *what is*. Never whole-directory read `selected/` or
+`investigations/` — `grep` for a term scoped to the owning layer instead — and
+never glob or unzip the archive into the tree.
 Anything `superseded`/`deprecated` (or under a `deprecated/` path) is a
 redirect or tombstone, not evidence — follow its forward pointer or stop.
 Full protocol: the method skill's `guidelines/browsing-protocol.md`.
 
 ## Maintenance
 
-- New decision records go under `decisions/`. Update `traceability-map.md` when a claim, decision, or artifact changes.
-- After editing any node, run the skill's `pb check --strict` and `pb node-size --strict` from this directory and resolve violations (trim → link → split).
+- New decision records are added to the archive via `pb archive add <file>` (retired material via `pb archive add <file> --deprecated`); the loose file is deleted by the command. Update `traceability-map.md` when a claim, decision, or artifact changes.
+- After editing any node, run the skill's `pb check --strict` and `pb node-size --strict` from this directory (or the repo root) and resolve violations (trim → link → split).
 - The registers, leaf `## Decisions` footers, and index `## Contents` lists are generated — release builds regenerate them (`pb registers --sync-footers`); never hand-edit one (the banner marks it). Between releases, `pb registers --clear` removes every generated surface; release builds restore them.
 - Every new/edited IMP is cross-listed in `06-evolution/README.md` with its stage.
 - Follow the skill's layer hygiene and the repo's own information-hygiene rule (canonical state, no duplication). When writing a node, apply the readability rules (one fact per line, scannable structure, plain language, proportional-never-padded) in the generic method's [`guidelines/readability-rules.md`](../../3rd_party/agent_methods_and_tools/src/agent_methods/methods/product-breakdown/guidelines/readability-rules.md). Where the repo's rules conflict with the pattern, the repo's rules win.
