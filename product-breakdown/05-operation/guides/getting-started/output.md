@@ -42,18 +42,19 @@ Every task creates a tree of agents, available on disk as `agents.txt` (updates
 continuously) and on demand via `/tree`:
 
 ```
-└ 3a1f9c02 [completed] analyze codebase @deepseek/deepseek-v4-flash
-  14msgs, 1'200t
-  ├ b2e8d4aa [completed] Security Auditor @fast
-    9msgs, 800t
-  ├ c9f3e771 [completed] Test Coverage Checker @fast
-    12msgs, 1'100t
-  └ d4a5b2ef [failed] Style Checker @deepseek/deepseek-v4-flash
-    6msgs, 300t
-    └ e6f0c113 [completed] Style Checker (retry) @fast
-      10msgs, 900t
+└ 3a1f9c02 [✓ completed]  analyze codebase · @deepseek/deepseek-v4-flash
+    msgs 14 · tokens 1'200
+  ├ b2e8d4aa [✓ completed]  Security Auditor · @fast
+    msgs 9 · tokens 800
+  ├ c9f3e771 [✓ completed]  Test Coverage Checker · @fast
+    msgs 12 · tokens 1'100
+  └ d4a5b2ef [✗ failed]   Style Checker · @deepseek/deepseek-v4-flash
+    msgs 6 · tokens 300
+    └ e6f0c113 [✓ completed]  Style Checker (retry) · @fast
+      msgs 10 · tokens 900
 ```
 
-Status + the profile/model the agent runs on + messages + token usage per
-agent is enough to spot a stuck or looping prompt at a glance — and to see at
-a glance which tier each branch of the tree ran on.
+The status glyph (✓/✗/▶/⚑) is padded so descriptions align across states,
+the profile/model marker the agent runs on, and messages + token usage per
+agent are enough to spot a stuck or looping prompt at a glance — and to see
+at a glance which tier each branch of the tree ran on.

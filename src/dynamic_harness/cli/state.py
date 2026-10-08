@@ -20,7 +20,6 @@ from .present import (
     activity_brief,
     build_agent_tree,
     build_stats,
-    fmt_usd,
     render_text_tree,
 )
 
@@ -115,9 +114,11 @@ class StateWriter:
                 indent=2,
             )
         )
+        # Header cost is glance-level: 2dp is enough (per-agent costs keep
+        # fmt_usd's sub-cent precision on the tree's continuation lines).
         header = (
             f"# generated {generated_at.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-            f" · {stats.agents} agents · ${fmt_usd(stats.cost_usd)}"
+            f" · {stats.agents} agents · ${stats.cost_usd:.2f}"
         )
         self.agents_txt_path.write_text(
             header + "\n" + render_text_tree(nodes)

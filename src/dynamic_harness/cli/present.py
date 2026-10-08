@@ -9,6 +9,16 @@ from ..core.task import ActivityEvent, ActivityEventType, TaskStatus
 ID_CHARS = 8
 TREE_DESC_CHARS = 40
 
+# At-a-glance status glyphs for the tree (see AgentNode.status_tag).
+STATUS_ICONS: dict[str, str] = {
+    "pending": "·",
+    "running": "▶",
+    "completed": "✓",
+    "failed": "✗",
+    "escalated": "⚑",
+}
+STATUS_TAG_WIDTH = max(len(f"[{icon} {status}]") for status, icon in STATUS_ICONS.items())
+
 
 def _clip(text: str, n: int) -> str:
     if len(text) <= n:
@@ -127,6 +137,14 @@ class AgentNode:
         return cache_hit_rate(self.prompt_tokens, self.cached_tokens)
 
     @property
+    def status_tag(self) -> str:
+        """Bracketed status with its at-a-glance glyph, padded to the widest
+        tag so descriptions on every agent line line up vertically across
+        states."""
+        icon = STATUS_ICONS.get(self.status, " ")
+        return f"[{icon} {self.status}]".ljust(STATUS_TAG_WIDTH)
+
+    @property
     def model_marker(self) -> str:
         """What this agent runs on: the profile tier its task was delegated
         with, else the concrete resolved model id (covers the default/root
@@ -143,14 +161,14 @@ class AgentNode:
         if self.context_tokens:
             parts.append(f"ctx {fmt_int(self.context_tokens)}")
         if self.messages:
-            parts.append(f"{fmt_int(self.messages)}msgs")
+            parts.append(f"msgs {fmt_int(self.messages)}")
         if self.prompt_tokens or self.completion_tokens:
             parts.append(f"in {fmt_int(self.prompt_tokens)}")
             parts.append(f"out {fmt_int(self.completion_tokens)}")
             pct = round(self.cache_hit_rate * 100)
             parts.append(f"cache {pct}%")
         elif self.tokens:
-            parts.append(f"{fmt_int(self.tokens)}t")
+            parts.append(f"tokens {fmt_int(self.tokens)}")
         if self.cost_usd:
             parts.append(f"${fmt_usd(self.cost_usd)}")
         if self.cum_cost_usd and self.cum_cost_usd != self.cost_usd:
@@ -160,17 +178,18 @@ class AgentNode:
     @property
     def usage(self) -> str:
         parts = self._usage_parts()
-        return f" ({', '.join(parts)})" if parts else ""
+        return f" ({' · '.join(parts)})" if parts else ""
 
     @property
     def metrics_line(self) -> str:
-        """Usage + most-recent activity for the continuation line (no leading
-        space). Activity keeps its ``(label age)`` form, e.g. the live
-        progress marker a long in-flight call shows."""
-        parts = self._usage_parts()
+        """Most-recent activity + usage for the continuation line (no leading
+        space). Activity leads — it is the live progress marker a long
+        in-flight call shows — and keeps its ``(label age)`` form."""
+        parts: list[str] = []
         if self.activity is not None:
             parts.append(f"({self.activity} {fmt_age(self.activity_age_s or 0.0)})")
-        return ", ".join(parts)
+        parts.extend(self._usage_parts())
+        return " · ".join(parts)
 
 
 @dataclass
@@ -289,15 +308,17 @@ def build_stats(runtime: Runtime) -> Stats:
 def render_text_tree(nodes: list[AgentNode]) -> str:
     """Plain-text agent tree for quick operator evaluation.
 
-    Two lines per agent: an identity line (id, status, description, and the
-    profile/model marker — what the agent runs on) and a continuation line
-    with the usage metrics — live context size, message count, a compact
+    Two lines per agent: an identity line (id, status with an at-a-glance
+    glyph, description, and the profile/model marker — what the agent runs on)
+    and a continuation line with the live progress marker (what the agent did
+    last and how long ago, e.g. ``(tool web_search 12s)``) followed by the
+    dot-separated usage metrics — live context size, message count, a compact
     token breakdown, and USD cost markers (own cost ``$`` and subtree cost
     including all descendants ``Σ$``, when the provider reports cost or prices
-    are configured). The split keeps lines short enough to stay readable. Live
-    agents additionally show what they did last and how long ago
-    (``(tool web_search 12s)``); the age keeps climbing during quiet stretches
-    (e.g. a long in-flight LLM call), which is the progress signal.
+    are configured). The split keeps lines short enough to stay readable, and
+    the glyph + padding keep status and description aligned so a scan picks
+    out state at a glance. The activity age keeps climbing during quiet
+    stretches (e.g. a long in-flight LLM call), which is the progress signal.
     Engine-agnostic (no terminal-library markup) so it can be persisted to disk.
     """
     if not nodes:
@@ -309,10 +330,10 @@ def render_text_tree(nodes: list[AgentNode]) -> str:
         for i, node in enumerate(nodes):
             is_last = i == len(nodes) - 1
             branch = "└" if is_last else "├"
-            marker = f" @{node.model_marker}" if node.model_marker else ""
+            marker = f" · @{node.model_marker}" if node.model_marker else ""
             lines.append(
-                f"{prefix}{branch} {node.short_id} [{node.status}] "
-                f"{node.short_description}{marker}"
+                f"{prefix}{branch} {node.short_id} {node.status_tag}"
+                f" {node.short_description}{marker}"
             )
             metrics = node.metrics_line
             if metrics:

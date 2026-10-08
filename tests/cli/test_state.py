@@ -199,8 +199,8 @@ def test_render_text_tree_flat_and_nested():
     tree = render_text_tree([root])
     lines = tree.splitlines()
     # Two lines for the root (identity + metrics), one for each bare child.
-    assert lines[0] == "└ aaaaaaaa [completed] root"
-    assert lines[1] == "  3msgs, 100t"
+    assert lines[0] == "└ aaaaaaaa [✓ completed] root"
+    assert lines[1] == "  msgs 3 · tokens 100"
     assert "├" in lines[2] and "child1" in lines[2]
     assert "└" in lines[3] and "child2" in lines[3]
     assert len(lines) == 4
@@ -211,7 +211,7 @@ def test_render_text_tree_shows_profile_marker():
         agent_id="a" * 12, description="d", status="running",
         model_profile="fast", model="openai/gpt-5.2",
     )
-    assert "d @fast" in render_text_tree([node])  # profile wins over model id
+    assert "d · @fast" in render_text_tree([node])  # profile wins over model id
 
 
 def test_render_text_tree_falls_back_to_model_id():
@@ -219,7 +219,7 @@ def test_render_text_tree_falls_back_to_model_id():
         agent_id="a" * 12, description="d", status="running",
         model="deepseek/deepseek-v4-flash",
     )
-    assert "d @deepseek/deepseek-v4-flash" in render_text_tree([node])
+    assert "d · @deepseek/deepseek-v4-flash" in render_text_tree([node])
 
 
 def test_render_text_tree_no_marker_without_model():
@@ -232,7 +232,8 @@ def test_metrics_line_combines_usage_and_activity():
         agent_id="a" * 12, description="d", status="running",
         tokens=100, activity="tool echo", activity_age_s=12.0,
     )
-    assert node.metrics_line == "100t, (tool echo 12s)"
+    # Activity leads the continuation line — the live progress signal.
+    assert node.metrics_line == "(tool echo 12s) · tokens 100"
 
 
 def test_metrics_line_empty_without_usage_or_activity():
@@ -306,5 +307,5 @@ def test_activity_age_hidden_for_terminal_agent(runtime, tmp_path):
     runtime.deliver_report(agent.id, ReportPayload(task_id=agent.task.id, summary="s"))
     w.snapshot(runtime, force=True)
     txt = tmp_path.joinpath("agents.txt").read_text()
-    assert "[completed]" in txt
+    assert "[✓ completed]" in txt
     assert "(turn" not in txt

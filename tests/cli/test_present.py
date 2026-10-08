@@ -38,7 +38,18 @@ class TestAgentNode:
 
     def test_usage_shows_tokens_and_messages(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", tokens=100, messages=3)
-        assert node.usage == " (3msgs, 100t)"
+        assert node.usage == " (msgs 3 · tokens 100)"
+
+    def test_status_tag_glyphs_and_alignment(self) -> None:
+        def tag(status: str) -> str:
+            return AgentNode(agent_id="id", description="d", status=status).status_tag
+        assert tag("completed").startswith("[✓ completed]")
+        assert tag("running").startswith("[▶ running]")
+        assert tag("pending").startswith("[· pending]")
+        assert tag("failed").startswith("[✗ failed]")
+        assert tag("escalated").startswith("[⚑ escalated]")
+        # All states pad to the same width so descriptions stay column-aligned.
+        assert len({len(tag(s)) for s in ("pending", "running", "completed", "failed", "escalated")}) == 1
 
     def test_usage_renders_cache_hit_rate(self) -> None:
         node = AgentNode(
@@ -46,7 +57,7 @@ class TestAgentNode:
             tokens=4010, messages=2, context_tokens=3600,
             prompt_tokens=4000, completion_tokens=10, cached_tokens=3600,
         )
-        assert node.usage == " (ctx 3'600, 2msgs, in 4'000, out 10, cache 90%)"
+        assert node.usage == " (ctx 3'600 · msgs 2 · in 4'000 · out 10 · cache 90%)"
 
     def test_usage_renders_zero_cache_when_none_cached(self) -> None:
         node = AgentNode(
@@ -54,14 +65,14 @@ class TestAgentNode:
             tokens=5010, messages=2,
             prompt_tokens=5000, completion_tokens=10, cached_tokens=0,
         )
-        assert node.usage == " (2msgs, in 5'000, out 10, cache 0%)"
+        assert node.usage == " (msgs 2 · in 5'000 · out 10 · cache 0%)"
 
     def test_usage_apostrophe_thousands_separator(self) -> None:
         node = AgentNode(
             agent_id="id", description="d", status="running",
             prompt_tokens=1_000_000, completion_tokens=234_567, cached_tokens=500_000,
         )
-        assert node.usage == " (in 1'000'000, out 234'567, cache 50%)"
+        assert node.usage == " (in 1'000'000 · out 234'567 · cache 50%)"
 
 
 class TestCacheHitRate:
@@ -192,11 +203,11 @@ class TestBuildAgentTree:
             agent_id="id", description="d", status="running",
             tokens=1000, messages=1, cost_usd=0.05,
         )
-        assert node.usage == " (1msgs, 1'000t, $0.0500)"
+        assert node.usage == " (msgs 1 · tokens 1'000 · $0.0500)"
 
     def test_usage_omits_zero_cost(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", tokens=1000)
-        assert node.usage == " (1'000t)"
+        assert node.usage == " (tokens 1'000)"
 
     def test_usage_shows_cumulative_subtree_cost(self) -> None:
         node = AgentNode(agent_id="id", description="d", status="running", cum_cost_usd=0.05)
@@ -207,7 +218,7 @@ class TestBuildAgentTree:
             agent_id="id", description="d", status="running",
             tokens=100, cost_usd=0.05, cum_cost_usd=0.05,
         )
-        assert node.usage == " (100t, $0.0500)"
+        assert node.usage == " (tokens 100 · $0.0500)"
 
     def test_fmt_usd_subcent_six_decimals(self) -> None:
         assert present.fmt_usd(0.00014) == "0.000140"
