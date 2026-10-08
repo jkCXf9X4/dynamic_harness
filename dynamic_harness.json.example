@@ -26,15 +26,15 @@
   "profiles": {
     "fast": {
       "ref": "openrouter/deepseek/deepseek-v4-flash-0731",
-      "description": "Cheapest tier for mechanical subtasks: search, formatting, bulk edits, trivial summaries."
+      "description": "Cheapest and fastest tier for mechanical subtasks: search, formatting, bulk edits, trivial summaries, simple lookups. Not for multi-step reasoning or error-sensitive work."
     },
     "default": {
       "ref": "openrouter/deepseek/deepseek-v4-flash-0731",
-      "description": "Balanced tier for most delegated work."
+      "description": "Balanced tier and the baseline for most delegated work: scoped implementation, analysis, summarization, moderate multi-step tasks. Escalate to 'strong' for hard reasoning or verification of critical results."
     },
     "strong": {
       "ref": "openrouter/deepseek/deepseek-v4-flash-0731",
-      "description": "Strongest tier for hard reasoning, design, and verification of critical work."
+      "description": "Strongest tier for hard reasoning: architecture and design decisions, debugging, code review, verification of critical or hard-to-test work. Use only when genuinely needed."
     }
   },
   "safety": {

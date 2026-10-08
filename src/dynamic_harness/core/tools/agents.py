@@ -50,7 +50,7 @@ def _model_profile_property(profiles: Sequence[tuple[str, str]]) -> dict[str, An
         "enum": [name for name, _ in profiles],
         "description": (
             "Model profile the child runs on (a capability/speed tier). "
-            f"Available profiles: {'; '.join(tiers)}. "
+            f"Available profiles: {'; '.join(tiers).rstrip('.')}. "
             "Pick the weakest tier that can reliably handle the task: "
             "fast/cheap tiers for mechanical work (extraction, formatting, "
             "simple lookups), the strongest tier for hard reasoning "

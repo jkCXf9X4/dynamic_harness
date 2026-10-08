@@ -192,7 +192,7 @@ Each entry is a model ref (bare-string shorthand) or an object:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `ref` | *(required)* | Model ref in `<provider>/<model>` form (same grammar as `root_model`). |
-| `description` | `""` | What the tier is good at — shown to agents choosing a profile. |
+| `description` | `""` | What the tier is good at and when to escalate to a higher tier — shown verbatim to the parent agent when it chooses a profile, so it is the model's only capability signal for the tier. |
 
 ```json
 {
