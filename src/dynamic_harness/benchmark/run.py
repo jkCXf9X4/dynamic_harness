@@ -71,7 +71,7 @@ def main() -> None:
         sys.exit(1)
 
     prompts = _load_prompts(Path(args.prompts), args.seed_only)
-    print(f"LLM: {config.model} | prompts: {list(prompts)}")
+    print(f"LLM: {config.root_model} | prompts: {list(prompts)}")
 
     llm = registry.select()
 

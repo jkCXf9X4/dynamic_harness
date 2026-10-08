@@ -27,12 +27,25 @@ from dynamic_harness.core.task import ActivityEventType, ReportPayload, Task
 from dynamic_harness.llm.registry import ProviderCredentialError, ProviderRegistry
 
 
-def _profiles_config() -> HarnessConfig:
-    """Config with two models on one provider and two profiles."""
+def _profiles_config(with_default: bool = False) -> HarnessConfig:
+    """Config with two models on one provider and two profiles.
 
+    ``with_default`` adds the reserved ``default`` profile (pointing at the
+    strong-tier model) for the unprofiled-child fallback tests.
+    """
+
+    profiles: dict = {
+        "fast": "openrouter/deepseek/deepseek-v4-flash",
+        "strong": {
+            "ref": "openrouter/openai/gpt-5.2",
+            "description": "hard reasoning",
+        },
+    }
+    if with_default:
+        profiles["default"] = "openrouter/openai/gpt-5.2"
     return HarnessConfig.model_validate(
         {
-            "model": "openrouter/deepseek/deepseek-v4-flash",
+            "root_model": "openrouter/deepseek/deepseek-v4-flash",
             "providers": {
                 "openrouter": {
                     "env": ["FAKE_PROFILE_KEY"],
@@ -43,13 +56,7 @@ def _profiles_config() -> HarnessConfig:
                     },
                 }
             },
-            "profiles": {
-                "fast": "openrouter/deepseek/deepseek-v4-flash",
-                "strong": {
-                    "ref": "openrouter/openai/gpt-5.2",
-                    "description": "hard reasoning",
-                },
-            },
+            "profiles": profiles,
         }
     )
 
@@ -245,6 +252,48 @@ class TestDelegateProfilePlumbing:
         fresh = runtime._fresh_restart(child, note="try again")
         assert fresh.task.model_profile == "strong"
         assert fresh.llm.default_model == "openai/gpt-5.2"
+
+    async def test_unprofiled_child_runs_on_default_profile(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """A child delegated WITHOUT a profile runs on the reserved ``default``
+        profile when one is configured — the recorded task carries it."""
+
+        runtime = _make_runtime(
+            tmp_path, _profiles_config(with_default=True), monkeypatch=monkeypatch
+        )
+        parent = runtime.delegate(Task(description="parent"))
+        child = runtime.delegate(Task(description="baseline work"), parent=parent)
+
+        assert child.task.model_profile == "default"
+        assert child.model_info.model_id == "openai/gpt-5.2"
+        assert child.llm.default_model == "openai/gpt-5.2"
+
+    def test_root_delegation_keeps_root_model(self, tmp_path, monkeypatch) -> None:
+        """The root itself never picks up the ``default`` profile — parent is
+        None means root, and the root runs on ``root_model``."""
+
+        runtime = _make_runtime(
+            tmp_path, _profiles_config(with_default=True), monkeypatch=monkeypatch
+        )
+        runtime.set_llm(runtime.provider_registry.select())
+        root = runtime.delegate(Task(description="top task"))
+
+        assert root.task.model_profile is None
+        assert root.llm.default_model == "deepseek/deepseek-v4-flash"
+
+    def test_unprofiled_child_without_default_profile_inherits_runtime_model(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """With no ``default`` profile configured, an unprofiled child keeps
+        inheriting the runtime's active model."""
+
+        runtime = _make_runtime(tmp_path, _profiles_config(), monkeypatch=monkeypatch)
+        runtime.set_llm(runtime.provider_registry.select())
+        child = runtime.delegate(Task(description="plain work"), parent=runtime.delegate(Task(description="parent")))
+
+        assert child.task.model_profile is None
+        assert child.llm.default_model == "deepseek/deepseek-v4-flash"
 
     async def test_delegate_tool_end_to_end(self, tmp_path, monkeypatch) -> None:
         """Parent delegates with model_profile → child runs on the strong tier and

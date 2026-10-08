@@ -84,17 +84,24 @@ positive value or `null`, so only `null` disables those. Per-cap notes call this
 
 ---
 
-## `model` — default model selection
+## `root_model` — root model selection
 
-The default model, in `<provider>/<model>` form. The FIRST slash splits
+The root model — the model the top-level agent runs on — in
+`<provider>/<model>` form (`--model` overrides it). The FIRST slash splits
 provider id from model id, so multi-slash upstream ids resolve: provider
 `openrouter`, model `deepseek/deepseek-v4-flash-0731`.
 
+Delegated children inherit this model only when no `default` profile is
+configured (see `profiles` below).
+
 ```json
 {
-  "model": "openrouter/deepseek/deepseek-v4-flash-0731"
+  "root_model": "openrouter/deepseek/deepseek-v4-flash-0731"
 }
 ```
+
+Legacy configs using the pre-rename top-level `model` key keep loading (it is
+read as an alias for `root_model`).
 
 ---
 
@@ -140,7 +147,7 @@ Example:
 
 ```json
 {
-  "model": "openrouter/deepseek/deepseek-v4-flash-0731",
+  "root_model": "openrouter/deepseek/deepseek-v4-flash-0731",
   "llm": {
     "verify_ssl": true
   },
@@ -171,13 +178,19 @@ Example:
 A map of profile name → model selection. When non-empty, the `delegate` tool
 gains a `model_profile` parameter so a parent agent can pick the
 capability/speed tier for each child: a delegated child then runs on its
-profile's model instead of inheriting the runtime's model.
+profile's model instead of the root model.
+
+**`default` is a reserved name:** a profile named `default`, when configured,
+is the fallback for children delegated WITHOUT a `model_profile` — the
+baseline tier for delegated work. The root agent itself is untouched (it keeps
+running on `root_model` / `--model`); with no `default` profile, unprofiled
+children inherit the root model as before.
 
 Each entry is a model ref (bare-string shorthand) or an object:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `ref` | *(required)* | Model ref in `<provider>/<model>` form (same grammar as `model`). |
+| `ref` | *(required)* | Model ref in `<provider>/<model>` form (same grammar as `root_model`). |
 | `description` | `""` | What the tier is good at — shown to agents choosing a profile. |
 
 ```json
@@ -201,7 +214,10 @@ Semantics:
   unresolvable ref, or a missing credential fails the delegation BEFORE any
   child agent is created.
 - **Scope:** delegation only. The root agent's model stays governed by
-  `model` / `--model`, and agents cannot switch models mid-run.
+  `root_model` / `--model`, and agents cannot switch models mid-run. Children
+  delegated WITHOUT a `model_profile` run on the `default` profile when one is
+  configured — the baseline tier for delegated work — instead of the root
+  model; with no `default` profile they inherit the root model as before.
 - **Registry:** materializing a per-child provider requires the runtime's
   `provider_registry` (the CLI and API hosts build it from config
   automatically); a bare `Runtime()` without one rejects profile delegations.

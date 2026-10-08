@@ -1125,6 +1125,20 @@ class Runtime:
         # contract as a refused spawn.
         child_llm: LLMProvider | None = None
         child_model_info: ResolvedModel | None = None
+        # An unprofiled CHILD runs on the reserved ``default`` profile when one
+        # is configured — the baseline tier for delegated work — instead of the
+        # root model. The root itself (parent None, including self-heal
+        # successors at the top of the tree) and explicit profiles are untouched;
+        # with no ``default`` profile configured, inheritance stays on the
+        # runtime's active model. Recording the effective name on the task keeps
+        # checkpoints, status, and the DELEGATION_START event on the tier the
+        # child actually runs.
+        if (
+            parent is not None
+            and task.model_profile is None
+            and "default" in self.model_profiles
+        ):
+            task.model_profile = "default"
         if task.model_profile is not None:
             child_model_info = self._config.resolve_profile(task.model_profile)
             if self.provider_registry is None:

@@ -93,7 +93,7 @@ class ProviderRegistry:
         return cls(
             dict(config.providers),
             config.llm,
-            model_ref or config.model,
+            model_ref or config.root_model,
             provider=provider,
             api_key=api_key,
             base_url=base_url,

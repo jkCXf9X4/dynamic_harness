@@ -43,6 +43,8 @@ def _node_dict(node: AgentNode) -> dict[str, Any]:
         "trace_path": node.trace_path,
         "activity": node.activity,
         "activity_age_s": node.activity_age_s,
+        "model_profile": node.model_profile,
+        "model": node.model,
         "children": [_node_dict(c) for c in node.children],
     }
 

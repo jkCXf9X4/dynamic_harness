@@ -108,6 +108,10 @@ class AgentNode:
     trace_path: str | None = None
     activity: str | None = None
     activity_age_s: float | None = None
+    # What this agent runs on: the profile tier its task was delegated with,
+    # else the concrete resolved model id (so the default/root agent also shows).
+    model_profile: str | None = None
+    model: str | None = None
     children: list[AgentNode] = field(default_factory=list)
 
     @property
@@ -123,15 +127,18 @@ class AgentNode:
         return cache_hit_rate(self.prompt_tokens, self.cached_tokens)
 
     @property
-    def usage(self) -> str:
-        if not (self.tokens or self.messages or self.prompt_tokens
-                or self.completion_tokens or self.cost_usd or self.cum_cost_usd):
-            return ""
-        # Per-agent metrics in one scan line: `ctx` is the provider-billed input
-        # of the LAST call (exact live context size, not an estimate); `msgs` is
-        # the agent's live context message count. `in`/`out` are the cumulative
-        # billed sums, `cache` the cached share of `in`. `$` is this agent's own
-        # USD cost; `Σ$` adds all descendants so a delegator shows its sub-tree.
+    def model_marker(self) -> str:
+        """What this agent runs on: the profile tier its task was delegated
+        with, else the concrete resolved model id (covers the default/root
+        agent, which carries no profile). Empty when neither is known."""
+        return self.model_profile or self.model or ""
+
+    def _usage_parts(self) -> list[str]:
+        # Per-agent metrics: `ctx` is the provider-billed input of the LAST
+        # call (exact live context size, not an estimate); `msgs` is the agent's
+        # live context message count. `in`/`out` are the cumulative billed sums,
+        # `cache` the cached share of `in`. `$` is this agent's own USD cost;
+        # `Σ$` adds all descendants so a delegator shows its sub-tree.
         parts = []
         if self.context_tokens:
             parts.append(f"ctx {fmt_int(self.context_tokens)}")
@@ -148,7 +155,22 @@ class AgentNode:
             parts.append(f"${fmt_usd(self.cost_usd)}")
         if self.cum_cost_usd and self.cum_cost_usd != self.cost_usd:
             parts.append(f"Σ${fmt_usd(self.cum_cost_usd)}")
-        return f" ({', '.join(parts)})"
+        return parts
+
+    @property
+    def usage(self) -> str:
+        parts = self._usage_parts()
+        return f" ({', '.join(parts)})" if parts else ""
+
+    @property
+    def metrics_line(self) -> str:
+        """Usage + most-recent activity for the continuation line (no leading
+        space). Activity keeps its ``(label age)`` form, e.g. the live
+        progress marker a long in-flight call shows."""
+        parts = self._usage_parts()
+        if self.activity is not None:
+            parts.append(f"({self.activity} {fmt_age(self.activity_age_s or 0.0)})")
+        return ", ".join(parts)
 
 
 @dataclass
@@ -218,6 +240,10 @@ def build_agent_tree(
             agent_id=agent.id,
             description=agent.task.description,
             status=agent.task.status.value,
+            # What the agent runs on: the delegated profile tier, else the
+            # resolved model id (the root/default agent has no profile).
+            model_profile=agent.task.model_profile,
+            model=agent.model_info.model_id if agent.model_info else None,
             tokens=usage.get("total_tokens", 0),
             # Exact provider-billed input of the last call (live context size),
             # retained in the usage tracker so it survives agent GC.
@@ -263,15 +289,16 @@ def build_stats(runtime: Runtime) -> Stats:
 def render_text_tree(nodes: list[AgentNode]) -> str:
     """Plain-text agent tree for quick operator evaluation.
 
-    One line per agent showing id, status, description, live context message
-    count, a compact token breakdown, and USD cost markers — own cost (``$``)
-    and subtree cost including all descendants (``Σ$``), when the provider
-    reports cost or prices are configured — enough to spot a stuck/looping
-    agent without a live dashboard. Live agents additionally show what they
-    did last and how long ago (``(tool web_search 12s)``); the age keeps
-    climbing during quiet stretches (e.g. a long in-flight LLM call), which is
-    the progress signal. Engine-agnostic (no terminal-library markup) so it
-    can be persisted to disk.
+    Two lines per agent: an identity line (id, status, description, and the
+    profile/model marker — what the agent runs on) and a continuation line
+    with the usage metrics — live context size, message count, a compact
+    token breakdown, and USD cost markers (own cost ``$`` and subtree cost
+    including all descendants ``Σ$``, when the provider reports cost or prices
+    are configured). The split keeps lines short enough to stay readable. Live
+    agents additionally show what they did last and how long ago
+    (``(tool web_search 12s)``); the age keeps climbing during quiet stretches
+    (e.g. a long in-flight LLM call), which is the progress signal.
+    Engine-agnostic (no terminal-library markup) so it can be persisted to disk.
     """
     if not nodes:
         return "(no agents)\n"
@@ -282,13 +309,16 @@ def render_text_tree(nodes: list[AgentNode]) -> str:
         for i, node in enumerate(nodes):
             is_last = i == len(nodes) - 1
             branch = "└" if is_last else "├"
-            line = (
+            marker = f" @{node.model_marker}" if node.model_marker else ""
+            lines.append(
                 f"{prefix}{branch} {node.short_id} [{node.status}] "
-                f"{node.short_description}{node.usage}"
+                f"{node.short_description}{marker}"
             )
-            if node.activity is not None:
-                line += f" ({node.activity} {fmt_age(node.activity_age_s or 0.0)})"
-            lines.append(line)
+            metrics = node.metrics_line
+            if metrics:
+                # Two spaces aligns the metrics under the short_id (past the
+                # single-char branch + separator).
+                lines.append(f"{prefix}  {metrics}")
             child_prefix = prefix + ("  " if is_last else "│ ")
             walk(node.children, child_prefix, is_last)
 

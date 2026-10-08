@@ -24,7 +24,7 @@ from dynamic_harness.config import (
 class TestHarnessConfig:
     def test_defaults(self) -> None:
         cfg = HarnessConfig()
-        assert cfg.model == "openrouter/deepseek/deepseek-v4-flash"
+        assert cfg.root_model == "openrouter/deepseek/deepseek-v4-flash"
         assert cfg.safety.max_iterations == 400
         assert cfg.safety.repeated_call_limit == 5
 
@@ -76,7 +76,7 @@ class TestHarnessConfig:
     def test_custom_model_and_provider(self) -> None:
         cfg = HarnessConfig.model_validate(
             {
-                "model": "openai/gpt-5.2",
+                "root_model": "openai/gpt-5.2",
                 "providers": {
                     "openai": {
                         "env": ["OPENAI_API_KEY"],
@@ -92,9 +92,20 @@ class TestHarnessConfig:
                 },
             }
         )
-        assert cfg.model == "openai/gpt-5.2"
+        assert cfg.root_model == "openai/gpt-5.2"
         assert cfg.providers["openai"].base_url == "https://api.openai.com/v1"
         assert cfg.safety.max_iterations == 400
+
+    def test_legacy_model_key_alias(self) -> None:
+        """The pre-rename top-level ``model`` key still loads, as ``root_model``."""
+        cfg = HarnessConfig.model_validate({"model": "openai/gpt-5.2"})
+        assert cfg.root_model == "openai/gpt-5.2"
+
+    def test_explicit_root_model_wins_over_legacy(self) -> None:
+        cfg = HarnessConfig.model_validate(
+            {"model": "openai/legacy", "root_model": "openai/explicit"}
+        )
+        assert cfg.root_model == "openai/explicit"
 
     def test_stale_flat_llm_keys_error(self) -> None:
         """The flat provider keys were removed — stale configs fail loudly."""
@@ -209,7 +220,7 @@ class TestResolveModelRef:
 class TestLoadHarnessConfig:
     def test_load_from_file(self, tmp_path: Path) -> None:
         config_data = {
-            "model": "openrouter/test-model",
+            "root_model": "openrouter/test-model",
             "providers": {"openrouter": {"base_url": "http://localhost"}},
             "safety": {"max_iterations": 100, "repeated_call_limit": 3, "timeout_seconds": 90},
         }
@@ -217,7 +228,7 @@ class TestLoadHarnessConfig:
         cfg_path.write_text(json.dumps(config_data))
 
         cfg = load_harness_config(str(cfg_path))
-        assert cfg.model == "openrouter/test-model"
+        assert cfg.root_model == "openrouter/test-model"
         assert cfg.providers["openrouter"].base_url == "http://localhost"
         assert cfg.safety.max_iterations == 100
         assert cfg.safety.repeated_call_limit == 3
@@ -238,7 +249,7 @@ class TestLoadHarnessConfig:
             "dynamic_harness.config.XDG_CONFIG_DIR", tmp_path / "xdg"
         )
         cfg = load_harness_config()
-        assert cfg.model == "openrouter/deepseek/deepseek-v4-flash"
+        assert cfg.root_model == "openrouter/deepseek/deepseek-v4-flash"
 
 
 class TestDiscoverPath:
@@ -307,7 +318,7 @@ class TestLayeredLoading:
         (xdg_dir / "harness.json").write_text(
             json.dumps(
                 {
-                    "model": "openrouter/base-model",
+                    "root_model": "openrouter/base-model",
                     "providers": {"openrouter": {"base_url": "http://base"}},
                     "safety": {"max_iterations": 300},
                 }
@@ -315,7 +326,7 @@ class TestLayeredLoading:
         )
 
         cfg = load_harness_config()
-        assert cfg.model == "openrouter/base-model"
+        assert cfg.root_model == "openrouter/base-model"
         assert cfg.providers["openrouter"].base_url == "http://base"
         assert cfg.safety.max_iterations == 300
 
@@ -329,7 +340,7 @@ class TestLayeredLoading:
         (xdg_dir / "harness.json").write_text(
             json.dumps(
                 {
-                    "model": "openrouter/base-model",
+                    "root_model": "openrouter/base-model",
                     "providers": {
                         "openrouter": {
                             "base_url": "http://base",
@@ -344,14 +355,14 @@ class TestLayeredLoading:
         (cwd / "harness.json").write_text(
             json.dumps(
                 {
-                    "model": "openrouter/local-model",
+                    "root_model": "openrouter/local-model",
                     "safety": {"repeated_call_limit": 9},
                 }
             )
         )
 
         cfg = load_harness_config()
-        assert cfg.model == "openrouter/local-model"
+        assert cfg.root_model == "openrouter/local-model"
         assert cfg.providers["openrouter"].base_url == "http://base"
         assert cfg.providers["openrouter"].provider_ignore == ["a"]
         assert cfg.llm.verify_ssl is False
@@ -369,10 +380,10 @@ class TestLayeredLoading:
             json.dumps({"providers": {"openrouter": {"base_url": "http://base"}}})
         )
         explicit = tmp_path / "custom.json"
-        explicit.write_text(json.dumps({"model": "openrouter/custom-model"}))
+        explicit.write_text(json.dumps({"root_model": "openrouter/custom-model"}))
 
         cfg = load_harness_config(str(explicit))
-        assert cfg.model == "openrouter/custom-model"
+        assert cfg.root_model == "openrouter/custom-model"
         assert cfg.providers["openrouter"].base_url == "http://base"
 
     def test_invalid_json_in_base_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

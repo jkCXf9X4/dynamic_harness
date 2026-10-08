@@ -75,6 +75,16 @@ def test_node_dict_includes_cost_usd():
     assert d["cum_cost_usd"] == 0.0034
 
 
+def test_node_dict_includes_model_fields():
+    node = AgentNode(
+        agent_id="id", description="desc", status="running",
+        model_profile="fast", model="openai/gpt-5.2",
+    )
+    d = _node_dict(node)
+    assert d["model_profile"] == "fast"
+    assert d["model"] == "openai/gpt-5.2"
+
+
 def test_snapshot_stats_includes_cache_fields(runtime, tmp_path):
     import asyncio
 
@@ -142,6 +152,38 @@ def test_snapshot_writes_agents_txt(runtime, tmp_path):
     assert "running" in txt
 
 
+def test_agents_txt_shows_model(runtime, tmp_path):
+    root = runtime.delegate(Task(description="root task"))
+    w = StateWriter(tmp_path)
+    w.snapshot(runtime)
+    txt = tmp_path.joinpath("agents.txt").read_text()
+    # No profile configured → the resolved default model id is shown instead.
+    assert f"@{root.model_info.model_id}" in txt
+    tree = json.loads(w.tree_path.read_text())
+    assert tree[0]["model_profile"] is None
+    assert tree[0]["model"] == root.model_info.model_id
+
+
+def test_agents_txt_shows_profile_name(tmp_path, monkeypatch):
+    from tests.backend.test_model_profiles import _make_runtime, _profiles_config
+
+    runtime = _make_runtime(tmp_path, _profiles_config(), monkeypatch=monkeypatch)
+    root = runtime.delegate(Task(description="root task"))
+    child = runtime.delegate(
+        Task(description="hard task", model_profile="strong"), parent=root
+    )
+    w = StateWriter(tmp_path)
+    w.snapshot(runtime)
+    txt = tmp_path.joinpath("agents.txt").read_text()
+    # Profiled child shows the tier; the unprofiled root shows its model id.
+    assert "@strong" in txt
+    assert f"@{root.model_info.model_id}" in txt
+    tree = json.loads(w.tree_path.read_text())
+    child_node = tree[0]["children"][0]
+    assert child_node["model_profile"] == "strong"
+    assert child_node["model"] == "openai/gpt-5.2"
+
+
 def test_render_text_tree_empty():
     assert render_text_tree([]) == "(no agents)\n"
 
@@ -156,11 +198,46 @@ def test_render_text_tree_flat_and_nested():
     )
     tree = render_text_tree([root])
     lines = tree.splitlines()
-    assert len(lines) == 3
-    assert "a" * 8 in lines[0]  # short_id clipped to 8
-    assert "[completed]" in lines[0]
-    assert "(3msgs, 100t)" in lines[0]
-    assert "├" in lines[1] and "└" in lines[2]  # branch across two siblings
+    # Two lines for the root (identity + metrics), one for each bare child.
+    assert lines[0] == "└ aaaaaaaa [completed] root"
+    assert lines[1] == "  3msgs, 100t"
+    assert "├" in lines[2] and "child1" in lines[2]
+    assert "└" in lines[3] and "child2" in lines[3]
+    assert len(lines) == 4
+
+
+def test_render_text_tree_shows_profile_marker():
+    node = AgentNode(
+        agent_id="a" * 12, description="d", status="running",
+        model_profile="fast", model="openai/gpt-5.2",
+    )
+    assert "d @fast" in render_text_tree([node])  # profile wins over model id
+
+
+def test_render_text_tree_falls_back_to_model_id():
+    node = AgentNode(
+        agent_id="a" * 12, description="d", status="running",
+        model="deepseek/deepseek-v4-flash",
+    )
+    assert "d @deepseek/deepseek-v4-flash" in render_text_tree([node])
+
+
+def test_render_text_tree_no_marker_without_model():
+    node = AgentNode(agent_id="a" * 12, description="d", status="running")
+    assert "@" not in render_text_tree([node])
+
+
+def test_metrics_line_combines_usage_and_activity():
+    node = AgentNode(
+        agent_id="a" * 12, description="d", status="running",
+        tokens=100, activity="tool echo", activity_age_s=12.0,
+    )
+    assert node.metrics_line == "100t, (tool echo 12s)"
+
+
+def test_metrics_line_empty_without_usage_or_activity():
+    node = AgentNode(agent_id="a" * 12, description="d", status="running")
+    assert node.metrics_line == ""
 
 
 def test_fmt_age():

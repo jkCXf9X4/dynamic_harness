@@ -102,7 +102,7 @@ def main() -> None:
     png = ws / "resources" / "_vision" / "code.png"
     png.parent.mkdir(parents=True, exist_ok=True)
     render_code_image(png, code)
-    print(f"LLM: {config.model} | code: {code} | replicates: {replicates}", flush=True)
+    print(f"LLM: {config.root_model} | code: {code} | replicates: {replicates}", flush=True)
     print(f"workspace: {ws}", flush=True)
 
     task = VisionCodeTask()
@@ -130,7 +130,7 @@ def main() -> None:
 
     meta = {
         "when": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "model": config.model,
+        "model": config.root_model,
         "base_url": config.providers[registry.active_provider_id].base_url,
         "replicates": replicates,
         "runs": len(results),

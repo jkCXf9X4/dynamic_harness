@@ -264,8 +264,9 @@ This is the core orchestration tool. It:
 selects the model tier the child runs on. The parameter's description lists
 the configured profiles with their descriptions, and the steer is to pick the
 weakest tier that can reliably handle the task. An unknown profile returns an
-error listing the valid ones and creates no child; omitted, the child
-inherits the runtime's model.
+error listing the valid ones and creates no child; omitted, the child runs on
+the `default` profile when one is configured — the baseline tier for delegated
+work — and on the runtime's model otherwise.
 
 **Returns (JSON):**
 ```json

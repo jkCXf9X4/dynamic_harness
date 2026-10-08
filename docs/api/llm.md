@@ -174,7 +174,7 @@ export OPENAI_API_KEY=sk-...                   # Fallback key
 }
 ```
 
-The top-level `model` selects the default model in `<provider>/<model>` form;
+The top-level `root_model` selects the default model in `<provider>/<model>` form;
 `llm` carries only the general call behavior; `providers` carries each
 provider's credential source (`env`), endpoint, OpenRouter routing, and model
 catalog.

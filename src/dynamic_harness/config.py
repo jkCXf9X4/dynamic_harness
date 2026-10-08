@@ -598,13 +598,26 @@ class AgentConfig(BaseModel):
 
 
 class HarnessConfig(BaseModel):
-    model: str = Field(
+    root_model: str = Field(
         default="openrouter/deepseek/deepseek-v4-flash",
-        description="Default model selection in '<provider>/<model>' form. The "
-                    "first slash splits provider id from model id, so multi-slash "
-                    "upstream ids (openrouter/deepseek/deepseek-v4-flash) resolve "
-                    "to provider 'openrouter', model 'deepseek/deepseek-v4-flash'.",
+        description="Root model selection in '<provider>/<model>' form — the model "
+                    "the top-level agent runs on (--model overrides it). Delegated "
+                    "children run on the 'default' profile when one is configured, "
+                    "else this model. The first slash splits provider id from model "
+                    "id, so multi-slash upstream ids (openrouter/deepseek/deepseek-v4-flash) "
+                    "resolve to provider 'openrouter', model 'deepseek/deepseek-v4-flash'.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_model_key(cls, data: Any) -> Any:
+        """Accept the pre-rename top-level ``model`` key as an alias for
+        ``root_model`` so existing harness.json files keep loading. An explicit
+        ``root_model`` wins when both are present."""
+        if isinstance(data, dict) and "model" in data and "root_model" not in data:
+            data = dict(data)
+            data["root_model"] = data.pop("model")
+        return data
     llm: LLMSettings = Field(default_factory=LLMSettings)
     providers: dict[str, ProviderConfig] = Field(
         default_factory=_default_providers,
@@ -638,7 +651,7 @@ class HarnessConfig(BaseModel):
         ``--provider`` selection rule.
         """
 
-        return resolve_model_ref(self.providers, self.model, model_ref, provider)
+        return resolve_model_ref(self.providers, self.root_model, model_ref, provider)
 
     def resolve_profile(self, profile: str) -> ResolvedModel:
         """Resolve a profile name to the provider + model it points at.
@@ -652,7 +665,7 @@ class HarnessConfig(BaseModel):
             raise ValueError(
                 f"unknown model profile '{profile}' — configured profiles: {known}"
             )
-        return resolve_model_ref(self.providers, self.model, self.profiles[profile].ref)
+        return resolve_model_ref(self.providers, self.root_model, self.profiles[profile].ref)
 
 
 def _discover_path(explicit: str | None = None) -> Path | None:

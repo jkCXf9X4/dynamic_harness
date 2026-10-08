@@ -216,7 +216,7 @@ def main() -> None:
         sys.exit(1)
 
     llm = registry.select()
-    print(f"LLM: {config.model} | cells: {', '.join(cells)} | tasks: {task_modes} | reps: {args.replicates}", flush=True)
+    print(f"LLM: {config.root_model} | cells: {', '.join(cells)} | tasks: {task_modes} | reps: {args.replicates}", flush=True)
     ws = _stage_workspace()
     print(f"workspace: {ws}", flush=True)
 
@@ -249,7 +249,7 @@ def main() -> None:
     summary = _summarize(results, cells)
     meta = {
         "when": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "model": config.model,
+        "model": config.root_model,
         "base_url": config.providers[registry.active_provider_id].base_url,
         "task_ids": args.tasks,
         "replicates": args.replicates,

@@ -54,7 +54,8 @@ def _model_profile_property(profiles: Sequence[tuple[str, str]]) -> dict[str, An
             "Pick the weakest tier that can reliably handle the task: "
             "fast/cheap tiers for mechanical work (extraction, formatting, "
             "simple lookups), the strongest tier for hard reasoning "
-            "(architecture, debugging, review). Omit to inherit your model."
+            "(architecture, debugging, review). Omit for the 'default' tier when one "
+            "is configured, else the root model."
         ),
     }
 
