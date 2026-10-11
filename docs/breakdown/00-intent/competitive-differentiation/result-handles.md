@@ -2,17 +2,15 @@
 id: INFO-005
 type: info
 title: "Result Handles — Caching Behind Opaque Read-Only Handles"
-category: meta
 summary: >
   Every cacheable tool call stores its full output behind an opaque handle;
   result_read pages it and result_bash pipes it to a shell's stdin, never
   re-executing the producing tool.
-parent: "README.md"
 date: 2026-09-23
 status: current
 ---
 
-# Result Handles
+# Result Handles — Caching Behind Opaque Read-Only Handles
 
 Every cacheable tool call (`read`, `glob`, `grep`, `bash`, `webfetch`,
 `read_artifact`, `status`, `usage`, …) stores its **full** output in a per-agent,

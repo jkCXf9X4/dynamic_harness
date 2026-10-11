@@ -1,19 +1,15 @@
 ---
 id: INFO-019
 type: info
-title: "NFR-1..NFR-4 — Non-functional requirements"
-category: requirement
+title: "NFR-1..NFR-4. Non-functional requirements"
 summary: >
   Composability, rendering isolation, cheap live helpers, and an atomic
   append-only event log.
-related:
-  - direction.md
-  - fr-persisted-overview.md
 date: 2026-09-23
 status: current
 ---
 
-# Non-functional requirements
+# NFR-1..NFR-4. Non-functional requirements
 
 - **NFR-1. Composability** — the terminal must be usable inside a pipeline:
   batch mode produces a deterministic exit report (outcome line + state files)
@@ -29,3 +25,8 @@ status: current
   the interactive surface.
 - **NFR-4. Atomic, append-only event log** — `events.jsonl` is append-only to
   allow tailing; tree/stats snapshots are atomic rewrites (write-then-replace).
+
+## Related
+
+- `INFO-014` — why the CLI is minimal and prompt-only
+- `INFO-017` — the persisted overview files these NFRs govern

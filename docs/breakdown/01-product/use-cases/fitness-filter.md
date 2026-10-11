@@ -1,7 +1,7 @@
 ---
 id: INFO-024
 type: info
-title: Use-Case Fitness Filter
+title: "Use-Case Fitness Filter"
 summary: Not everything is a good Dynamic Harness use-case. The framework is not a chatbot, not a shared-memory assistant, and not a code-generation platform.…
 date: 2026-09-23
 status: current
@@ -30,5 +30,4 @@ loop needed), *"run one shell command"* (a leaf, not an orchestration).
 The CLI direction amplifies the last two rows: the terminal stays prompt-only
 and everything else is persisted to the run directory (`agents.txt`,
 `agent_tree.json`, `stats.json`, `events.jsonl`) — so a run can be driven
-headlessly and its progress inspected by external tooling (see
-`../requirements/README.md`).
+headlessly and its progress inspected by external tooling (see `INFO-014`).

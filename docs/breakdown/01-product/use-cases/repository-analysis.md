@@ -1,16 +1,11 @@
 ---
 id: INFO-027
 type: info
-title: "Use-Case — Repository Analysis"
-category: use-case
+title: "Repository Analysis"
 summary: >
   Inventory, audit, and understand an existing codebase: security review, code
   quality, TODO/debt inventory, structure mapping. The canonical read-heavy
   family — discovery, parallel delegation, progressive disclosure, read-only.
-related:
-  - ../../02-architecture/concepts/delegation-model/README.md
-  - ../../02-architecture/concepts/artifact-system/README.md
-  - ../../00-intent/VISION.md
 date: 2026-09-22
 status: current
 ---
@@ -29,10 +24,8 @@ already-verified findings.
 
 ## Why it fits
 
-- **Discovery** work: `glob` to enumerate, `grep` to find by symbol/behavior,
-  `read` to confirm.
-- Splits cleanly into **parallel units by concern** (security, performance,
-  style, TODO debt) — a textbook delegation tree.
+- **Discovery** work: `glob` to enumerate, `grep` to find by symbol/behavior, `read` to confirm.
+- Splits cleanly into **parallel units by concern** (security, performance, style, TODO debt) — a textbook delegation tree.
 - Output is a **durable, versioned artifact**; commits give an audit trail, and
   **read-only by design** fits sandbox confinement and "flag issues, don't fix".
 
@@ -64,10 +57,14 @@ child's summary, confirm its file exists and covers the accept criteria (`HIGH`
 findings with file:line), and `converse`/re-delegate a missing or empty one —
 never report the slot complete. Then `report()` with every verified `artifact_ids`.
 
-Self-healing: a prose-only answer → Layer 1 (resume once with a "write the file
-now" nudge); churning `grep`s → Layer 3 (fresh worker, pointed at what the dead
-one wrote); a non-converging crawl → split smaller roles and escalate (Layer 4)
-(`../../02-architecture/concepts/self-healing/README.md`).
+Self-healing: a prose-only answer goes to Layer 1 (resume once with a "write the
+file now" nudge); churning `grep`s go to Layer 3 (fresh worker, pointed at what
+the dead one wrote); a non-converging crawl: split smaller roles and escalate
+(Layer 4).
+
+## Related
+
+- `INFO-001` — product intent and the "What This Is NOT" scope
 
 ## Fit checklist & caveats
 

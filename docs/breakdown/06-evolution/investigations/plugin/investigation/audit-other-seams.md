@@ -2,8 +2,6 @@
 id: INFO-179
 type: info
 title: "Plugin Direction — Remaining Seams Breadth Audit + Trim"
-category: investigation
-parent: "README.md"
 summary: >
   Event bus, LLM provider, agent-class registry, data types, and the trimmed
   target.
@@ -11,7 +9,7 @@ date: 2026-09-28
 status: current
 ---
 
-# 3. Event bus, LLM, agent registry, data types
+# Plugin Direction — Remaining Seams Breadth Audit + Trim
 
 ## Event bus (`EventBus` + payload types)
 

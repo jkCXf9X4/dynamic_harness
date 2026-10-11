@@ -2,7 +2,7 @@
 id: INFO-037
 type: info
 title: Immutability, Storage & Access
-summary: Artifacts are write-once, never modified. Once an agent calls , the Runtime creates the artifact and it becomes immutable. This ensures
+summary: Artifacts are write-once and immutable: once an agent calls `report()`, the Runtime creates the artifact, ensuring reproducibility, traceability, and safety
 date: 2026-09-23
 status: current
 ---

@@ -1,15 +1,10 @@
 ---
 id: INFO-013
 type: info
-title: "Acceptance criteria — CLI"
-category: requirement
+title: "Acceptance criteria"
 summary: >
   Observable checks that the terminal stays prompt-only and the persisted
   overview/tree behave as specified.
-related:
-  - fr-terminal.md
-  - fr-persisted-overview.md
-  - fr-live-surface.md
 date: 2026-09-23
 status: current
 ---
@@ -29,3 +24,9 @@ status: current
 - A non-TTY batch run prints no token counter/input artifacts.
 - The CLI imports with no Rich rendering dependency if Rich is removed from the
   `cli/present.py` render path.
+
+## Related
+
+- `INFO-015` — live interactive surface
+- `INFO-017` — persisted overview
+- `INFO-018` — prompt-only terminal

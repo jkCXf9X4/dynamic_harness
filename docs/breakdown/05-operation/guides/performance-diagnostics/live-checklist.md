@@ -2,7 +2,7 @@
 id: INFO-116
 type: info
 title: Live Diagnosis & Deployment Axes
-summary: "children) and watch total wall time go superlinear. Keep LLM the same. field (agent.py:702) should be constant if context is truly bounded; if it clim…"
+summary: Checklist for diagnosing a live run — reproduce, confirm H1/H2, profile hotspots, pick the deployment axis
 date: 2026-09-23
 status: current
 ---
@@ -27,15 +27,15 @@ status: current
    Frequent offenders: `persist_checkpoint`/`model_dump_json`, `Repository._flush`,
    `SequenceMatcher` (near-identical detection, agent.py:889), `provenance`/`log`.
 5. **Check the trace** (JSONL per agent) for long in-flight gaps that point at the
-   provider vs the app: `record_llm_request` → `record_llm_response` latency is
+   provider vs the app: `record_llm_request` to `record_llm_response` latency is
    provider+prefill; everything else is local.
 
 ## Which Axes Matter for Your Deployment
 
-- **Programmatic `Runtime` API, few agents, long conversations** → H1 first
+- **Programmatic `Runtime` API, few agents, long conversations** — H1 first
   (auto-bound the sent prompt, or nudge/force prune; verify `prompt_tokens`
   flattens).
-- **CLI / REPL, many short-lived agents** → H2 first (build the tree once per
+- **CLI / REPL, many short-lived agents** — H2 first (build the tree once per
   event, stop re-sorting all commits per node — sort once, or index by agent id).
   **Done** — see `INFO-119`; re-run the scaler to confirm
   it stays flat.
@@ -49,3 +49,13 @@ status: current
   tiny constants; they matter at scale or on slow disks, not on the first run.
 - A2 and C are the ones that "move the needle" in honest productions: A2 because
   it hits the *model* latency every turn, C because it hits every terminal event.
+
+## Owns
+- Live-run diagnosis checklist: reproduce, confirm H1/H2, profile hotspots, attribute provider vs app
+- Deployment-axis selection: which root cause to attack first for a given runtime shape
+
+## Excludes
+- Root-cause definitions and fix status: `INFO-119`
+- Scaler usage and section interpretation: `INFO-120`
+- Live profiler usage and artifacts: `INFO-117`
+- Before/after measurement protocol: `INFO-118`

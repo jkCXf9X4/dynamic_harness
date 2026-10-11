@@ -1,20 +1,19 @@
 ---
 id: INFO-074
 type: info
-title: "Plan — Implementation Phases"
-category: investigation / plan
-parent: "README.md"
-summary: , + / / , , the four backends , and the config→backend factory . Watermarks are in-memory per-(agent, topic) on the backend (no separate tracker class…
+title: Plan — Implementation Phases
+summary: "Implementation phases P0 to P4 (backend, tool surface, push-digest, bed, the run), each independently testable; P0 to P3 implemented, P4 started."
 date: 2026-09-23
 status: current
 ---
 
-# Implementation phases (each independently testable)
+
+# Plan — Implementation Phases
 
 - **P0 — backend only.** IMPLEMENTED. `core/comms/`: `CommsMessage`/`AgentRef`/
   `TopicInfo` (`message.py`), `CommsBackend` + `SendVerdict`/`ReadOutcome`/
   `TopologyView` (`backend.py`), `ChannelPolicy` (`channel.py`), the four backends
-  (`backends/`), and the config→backend factory (`factory.py`). Watermarks are
+  (`backends/`), and the config to backend factory (`factory.py`). Watermarks are
   in-memory per-(agent, topic) on the backend (no separate tracker class).
 - **P1 — tool surface + wiring.** IMPLEMENTED. `core/tools/comms.py` registers
   `post`/`channel_read`/`channels`/`channel_info`/`subscribe`/`unsubscribe`/

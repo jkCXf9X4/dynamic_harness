@@ -2,10 +2,11 @@
 id: INFO-065
 type: info
 title: Communication comparison — real-LLM run
-summary: When
+summary: "Real-LLM run results (2026-09-18), 3 cells, 1 replicate each; `off` timed out (converse deadlock), `shared` and `topics_parent` completed correctly; per-cell and per-run metric tables."
 date: 2026-09-22
 status: current
 ---
+
 
 # Communication comparison — real-LLM run
 

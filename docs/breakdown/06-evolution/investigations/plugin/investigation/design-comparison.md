@@ -2,8 +2,6 @@
 id: INFO-184
 type: info
 title: "Plugin Direction — Compared Designs: OpenCode V2 and DeepSeek Harness"
-category: investigation
-parent: "README.md"
 summary: >
   The two reference plugin-centric architectures, mapped onto the ~7-interface
   target; what validates seam-first/no-loader, and the two lessons worth
@@ -13,7 +11,7 @@ status: current
 pb_exempt: true
 ---
 
-# Compared designs: OpenCode V2 and DeepSeek Harness
+# Plugin Direction — Compared Designs: OpenCode V2 and DeepSeek Harness
 
 Every real plugin-centric platform ships a loader and a lifecycle. This leaf
 asks whether the harness's "plugin-ready structure, no loader" direction still
@@ -57,8 +55,8 @@ both fetched 2026-09-28.
   (durable facts appended to an append-only log — survive reload), *agent
   events* (`agent/*`, live in-flight interception), *capability events*
   (attach policy/adapters to seams). Waterfall events (`agent/pre-step`,
-  `agent/request`, `llm/stream`, `tools/pre-execute`→`execute`→`post-execute`)
-  must call `next()` — this is the loop-safety insertion point.
+  `agent/request`, `llm/stream`, `tools/pre-execute` to `execute` to
+  `post-execute`) must call `next()` — this is the loop-safety insertion point.
 - **Seams** are Service Definition / Provider / Consumer triples; one provider
   swap moves a whole capability (a remote `fs` provider moves bash/PTY/LSP).
   Also ships a goals domain, spill store, token meter, per-agent scoped
@@ -101,18 +99,18 @@ over the same seven seams.
 ## Lessons worth adopting (new work items)
 
 1. **One registration contract.** Both references converged on a single
-   disposition semantic — ordered add → a handle you can `dispose()`, with
+   disposition semantic — ordered add, then a handle you can `dispose()`, with
    replay/rebuild semantics. The harness today has four heterogeneous register
    call sites (`register_default_tools`, `register_agent_class`,
    `register_reactive_policy`, `on_*`) unified only by introspection
-   (`installed_components()`). Adopt one `Registration` contract (ordered add
-   → `dispose()` handle + idempotent re-add) across the tool/policy/handler/
+   (`installed_components()`). Adopt one `Registration` contract (ordered add,
+   then a `dispose()` handle + idempotent re-add) across the tool/policy/handler/
    agent-class registries. This *narrows* the existing seams — it does not add
    an interface, so the ≈7 count holds. No loader implied.
 2. **Per-request tool snapshot.** OpenCode captures a stable executable tool
    snapshot per model request so later transforms can't desync an in-flight
    call. The harness re-renders `openai_schemas()` per turn; make the
-   schema↔executor map immutable for the duration of a request (or forbid
+   schema-to-executor map immutable for the duration of a request (or forbid
    registry mutation mid-loop) so a mid-loop `unregister` cannot leave the
    model holding a tool the executor no longer has. Fits the existing
    mutator-set treatment of the tool contract.

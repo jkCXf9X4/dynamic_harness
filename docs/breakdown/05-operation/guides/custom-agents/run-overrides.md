@@ -51,3 +51,11 @@ class AuditingAgent(Agent):
         print(f"[AUDIT] {self.id[:8]} completed in {elapsed:.1f}s")
         print(f"[AUDIT] Tokens: {usage['total_tokens']}")
 ```
+
+## Owns
+- Replacing the entire execution loop and adding pre/post hooks around the standard loop.
+
+## Excludes
+- Basic subclassing and registration: INFO-096
+- Per-agent state and _run_loop overrides: INFO-097
+- Choosing which override to use: INFO-101

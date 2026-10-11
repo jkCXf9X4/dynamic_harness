@@ -18,15 +18,15 @@ The load-bearing model concepts. Each is a folder of single-concern leaves.
 - The definitions of the runtime's core model concepts
 
 ## Excludes
-- Methodology that governs agents → `../methodology/`
-- Multi-agent coordination design → `../multi-agent-coordination/`
+- Methodology that governs agents to `../methodology/`
+- Multi-agent coordination design to `06-evolution/investigations/multi-agent-coordination/` (INFO-148)
 
 ## Contents
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
-- [Agent Lifecycle](agent-lifecycle/README.md) — The complete lifecycle of an agent — from creation through execution to termination: task states, the tool-calling loop, safety invariants, terminatio…
-- [Artifact System](artifact-system/README.md) — Artifacts are the primary communication mechanism between agents: instead of passing raw context between parent and child, agents write findings to di…
-- [Delegation Model](delegation-model/README.md) — Recursive task decomposition: parent agents break work into independent sub-tasks, delegate to child agents, verify results, and synthesize a combined…
-- [Self-Healing Agents](self-healing/README.md) — How the runtime recovers an agent run that did not produce its intended deliverable without restarting the whole task — salvaging healthy work while n…
+- [Agent Lifecycle](agent-lifecycle/README.md) — The complete lifecycle of an agent: task states, the tool-calling loop, safety invariants, termination paths, and the Agent/Runtime split
+- [Artifact System](artifact-system/README.md) — Artifacts are the primary communication mechanism between agents: findings written to disk as immutable artifacts, read progressively by parents
+- [Delegation Model](delegation-model/README.md) — Recursive task decomposition: parents break work into independent sub-tasks, delegate to children, verify results, and synthesize a combined output
+- [Self-Healing Agents](self-healing/README.md) — How the runtime recovers an agent run that did not produce its deliverable without restarting the task — salvaging healthy work, never grinding a poisoned context
 <!-- pb:index:end -->

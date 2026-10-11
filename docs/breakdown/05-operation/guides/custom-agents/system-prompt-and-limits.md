@@ -2,7 +2,7 @@
 id: INFO-100
 type: info
 title: System Prompt & Safety Limits
-summary: Pass a custom system prompt when constructing
+summary: Pass a custom system prompt and safety limits when constructing an agent
 date: 2026-09-23
 status: current
 ---
@@ -47,3 +47,11 @@ class HighRiskAgent(Agent):
             repeated_call_limit=3,       # Faster stuck detection
         )
 ```
+
+## Owns
+- Passing a custom system prompt and custom safety limits at construction.
+
+## Excludes
+- Basic subclassing and registration: INFO-096
+- Replacing the execution loop and pre/post hooks: INFO-099
+- Choosing which override to use: INFO-101

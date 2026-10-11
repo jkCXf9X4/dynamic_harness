@@ -2,7 +2,7 @@
 id: INFO-125
 type: info
 title: Events & Usage
-summary: Register callbacks for agent lifecycle events
+summary: Register callbacks for agent lifecycle events and track token usage per agent and across all agents
 date: 2026-09-23
 status: current
 ---
@@ -44,3 +44,15 @@ print(f"Prompt: {usage['prompt_tokens']}, Completion: {usage['completion_tokens'
 total = runtime.total_usage()
 print(f"Total tokens: {total['total_tokens']}")
 ```
+
+## Owns
+- Event handler registration: on_report, on_escalation, on_failure, on_budget_request
+- Token usage tracking: per-agent get_usage and total_usage across all agents
+
+## Excludes
+- Runtime construction and configuration: INFO-127
+- Delegation patterns: INFO-123
+- No-LLM mode and error handling: INFO-124
+- Custom agent classes: INFO-122
+- Artifacts and repository: INFO-121
+- Complete integration example: INFO-126

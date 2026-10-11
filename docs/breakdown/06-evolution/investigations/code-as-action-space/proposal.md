@@ -2,7 +2,7 @@
 id: INFO-146
 type: info
 title: Proposal — hybrid code-as-action surface
-summary: RPC stub below) must route through so every code-driven action passes the same policies the tools enforce today — sandbox roots, spawn caps, plan/chec…
+summary: "Hybrid code-as-action surface: keep the runtime rich, collapse only the model contract. An `invoke` tool plus a `harness_tools` RPC stub (policy parity) plus procedural-skill persistence, with guard changes and a measurement plan."
 date: 2026-09-28
 status: current
 pb_exempt: true
@@ -31,14 +31,14 @@ pb_exempt: true
 - Execution: `python3` fed the source over stdin in a subprocess — same
   process-group kill, read-only heuristic + `repo_lock`, cwd default = generated
   root, and `CancelledError` handling as `process.py:bash`.
-- Output: stdout+stderr captured; **over a cap →** replace with a lean summary
+- Output: stdout+stderr captured; **over a cap, then** replace with a lean summary
   `[output truncated — result_read <id>]` and store the FULL stdout in the
   ResultStore under the handle (same footer advertising `result_bash`).
 - Cacheability: like `bash` — cacheable-by-handle, and the produced `result_id`
   never feeds back into the producer (fresh result = call `invoke` again).
 - Loop guards: source-normalized near-identical family detection (strip comments
   and whitespace for the signature), counted per family with the
-  warning→escalation ladder (`safety.near_identical_*`, `repeated_recovery_*`);
+  warning to escalation ladder (`safety.near_identical_*`, `repeated_recovery_*`);
   repeated-call detection inherited as-is.
 
 ## 2. `harness_tools` RPC stub
@@ -49,7 +49,7 @@ pb_exempt: true
   converse, post, channel_read, read_artifact, plan, checkpoint, usage, status,
   resume`.
 - Transport: JSON-lines over a private temp file (or stdin/stdout handshake); the
-  parent executes each request through `ToolRegistry.execute()` → **policy parity
+  parent executes each request through `ToolRegistry.execute()`, giving **policy parity
   by construction** (delegation caps, sandbox roots, comms routing, budget
   lines).
 - Contract to the model: only the printed summary and a `# result: <id|none>`
@@ -75,7 +75,7 @@ pb_exempt: true
 
 ## 4. Guard changes (config, `safety.*`)
 
-- `invoke.stdout_cap` / `invoke.stderr_cap` (bytes; default e.g. 32 KiB) → cap +
+- `invoke.stdout_cap` / `invoke.stderr_cap` (bytes; default e.g. 32 KiB), then cap +
   ResultStore handle on overflow.
 - `invoke.timeout` default (shorter than bash, e.g. 60 s) + explicit param.
 - `invoke.import_allowlist` — optional, default off (parity with bash); when on, a
@@ -93,7 +93,7 @@ pb_exempt: true
   OpenHands' minimalist agent) vs. the default 34-tool agent on
   `benchmark/tasks.py` ALL_TASKS; compare success, turns, tokens, per-turn
   context size, and cost.
-- Micro-ablation for B3: a batch task (N files → same transform) measuring turns
+- Micro-ablation for B3: a batch task (N files to same transform) measuring turns
   and tokens vs the structured-tool path.
 - Gate: promote to an IMP (with a task contract, per roadmap rules) only if the
   measured delta is a **token reduction at ≥ parity success**, or a **success

@@ -2,7 +2,7 @@
 id: INFO-176
 type: info
 title: "Sibling Collaboration (B-curated): Common-Parent Scoping"
-summary: "How to enable real collaboration (B) while containing its cons, by constraining peer-to-peer communication to siblings that share a common parent (\"ch…"
+summary: "How to enable real collaboration (B) while containing its cons: constrain peer-to-peer communication to siblings that share a common parent (children of one parent form a team)."
 date: 2026-09-28
 status: current
 ---
@@ -11,7 +11,7 @@ status: current
 
 How to enable real collaboration (B) while containing its cons, by **constraining
 peer-to-peer communication to siblings that share a common parent** ("children of
-one parent form a team"). Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`).
+one parent form a team"). Decisions: `AD-002`.
 
 ## The key idea
 "Team membership" is defined by **shared parentage** — a concept the runtime
@@ -22,7 +22,7 @@ authority (authorize, observe, revoke channels).
 
 ## Enabling mechanism — mostly plumbing that already exists
 The delivery machinery is already present and used by `converse`:
-- `converse` tool → `continue_with_input(agent_id, message)` (`tools/agents.py:306`,
+- `converse` tool to `continue_with_input(agent_id, message)` (`tools/agents.py:306`,
   `agent.py:683`) — a child pushes a message to a live sibling; wakes it.
 - `submit_input` / `_inject_queue` / `_inject_event` (`agent.py:1246-1267`) —
   queued while busy; interrupts a child waiting on its own children.

@@ -2,14 +2,10 @@
 id: INFO-006
 type: info
 title: "Self-Healing and Resume"
-category: meta
 summary: >
   Blunt-vs-rot diagnosis-driven recovery with a shared heal budget and a
   deliverable gate, plus checkpoint persistence that makes an interrupted run
   reconstructable across restarts.
-parent: "README.md"
-related:
-  - ../../02-architecture/concepts/self-healing.md
 date: 2026-09-23
 status: current
 ---
@@ -21,11 +17,11 @@ status: current
 Recovery is diagnosis-driven, not a blanket "always retry":
 
 - **Blunt** (healthy context, single clearable error, prose answer, forgot the
-  artifact) → **resume the same agent** with a focused nudge (Layer 1).
+  artifact) then **resume the same agent** with a focused nudge (Layer 1).
 - **Rot** (repeated calls, max iterations, wall-clock timeout, repeated Layer-1
-  misses) → **spawn a fresh worker** over the same task, injecting the failure
+  misses) then **spawn a fresh worker** over the same task, injecting the failure
   reason and pointing at the dead worker's on-disk artifacts (Layer 3).
-- **Structural** (impossible task, bad spec, willing non-compliance) →
+- **Structural** (impossible task, bad spec, willing non-compliance) then
   **escalate** (Layer 4). Never grind.
 
 Two enforcement details separate this from prompt-level retry guidance:

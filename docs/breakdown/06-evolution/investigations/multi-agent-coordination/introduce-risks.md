@@ -10,11 +10,11 @@ status: current
 # Introduce: Risks, Cons, and the B-vs-C Picture
 
 Honest risks of the introduce model and how it changes the B-vs-C decision.
-Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`), AD-003 (`product-breakdown/06-evolution/investigations/decisions/AD-003.md`).
+Decisions: `AD-002`, `AD-003`.
 
 ## Risks and the honest cons
 - **Mis-connection.** The parent's judgment runs on summaries; it can introduce
-  children whose overlap is actually a conflict. Guardrail: an introduction is an
+  children whose overlap is a conflict. Guardrail: an introduction is an
   *invitation, not a mandate* — a child may decline, and the parent can
   disconnect. Cost of a bad hookup is tiny.
 - **Group-think / echo chamber.** Siblings may reinforce a shared wrong

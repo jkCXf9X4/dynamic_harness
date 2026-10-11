@@ -19,7 +19,7 @@ Every use-case family is built from the same load-bearing concepts:
 3. **Verify before synthesize** — never report a child's output as if you had
    read it; confirm the artifact on disk first (delegation-model §VERIFY).
 4. **Self-healing** — a blunt failure resumes; a poisoned context spawns a fresh
-   worker; a structural failure escalates (`../../02-architecture/concepts/self-healing/README.md`).
+   worker; a structural failure escalates.
 5. **Provenance** — each completed task writes an immutable artifact + a Commit;
    every run is reproducible and auditable from the trace (`index.jsonl`).
 

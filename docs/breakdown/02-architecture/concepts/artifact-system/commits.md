@@ -32,5 +32,5 @@ The commit's `artifact_ids` hold the report artifact UUID. Files the agent wrote
 are copied **into the artifact directory** under their basename and the
 progressive-disclosure `raw_data` view is filled from them; the report's
 `files_written` list is persisted as a `files_written.json` sidecar (a map of
-declared → stored names) on the artifact. This makes the artifact self-contained
+declared to stored names) on the artifact. This makes the artifact self-contained
 and provides end-to-end provenance from task to result.

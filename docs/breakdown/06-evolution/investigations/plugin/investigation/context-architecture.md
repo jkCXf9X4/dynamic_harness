@@ -2,8 +2,6 @@
 id: INFO-182
 type: info
 title: "Plugin Direction — Context: How the References Build and Use It"
-category: investigation
-parent: "README.md"
 summary: >
   Context is the real test of plugin-centricity: who contributes to the model's
   context, in what order, with what scope, and how it is observed. OpenCode V2
@@ -15,7 +13,7 @@ status: current
 pb_exempt: true
 ---
 
-# Context: how OpenCode V2 and DeepSeek Harness build and work with it
+# Plugin Direction — Context: How the References Build and Use It
 
 Companion to `INFO-184`, focused on one axis:
 **how each reference builds context and lets plugins work with it** — because
@@ -26,10 +24,11 @@ order, with what scope, and how contributions are observed or vetoed.
 ## OpenCode V2 — per-request assembly, edited at boundary hooks
 
 - **Build.** The system prompt is assembled from combined, non-overriding
-  sources in a fixed order: agent/provider system prompt → built-in environment
-  and date → Code Mode tool guidance → `AGENTS.md` files (discovered nearest-
-  first from the workspace up, deduplicated, combined without conflict
-  resolution) → skill/reference/MCP guidance → session instruction entries.
+  sources in a fixed order: agent/provider system prompt, then built-in
+  environment and date, then Code Mode tool guidance, then `AGENTS.md` files
+  (discovered nearest-first from the workspace up, deduplicated, combined
+  without conflict resolution), then skill/reference/MCP guidance, then
+  session instruction entries.
   Nested instruction files discovered during exploration are injected into
   session history in discovery order; edits to a loaded `AGENTS.md` are
   delivered as an "instruction update" before the next request.
@@ -59,10 +58,10 @@ order, with what scope, and how contributions are observed or vetoed.
   `PromptContext` (dynamic, cache-safe contributions rendered as durable
   user-role snapshots), tool-schema providers (`ToolProviderResult` with a
   pre-restriction `knownNames` universe), and prompt variables. Assembly
-  gathers providers → detaches tool parameters → canonical order (ascending,
-  then name) → runs the scope-filtered `system-prompt/assemble` waterfall
-  (authoritative) → renders and commits the prompt as a `system/message`
-  surface node in the session log.
+  gathers providers, then detaches tool parameters, then canonical order
+  (ascending, then name), then runs the scope-filtered
+  `system-prompt/assemble` waterfall (authoritative), then renders and commits
+  the prompt as a `system/message` surface node in the session log.
 - **Work with it.** The **session log is the source of context**:
   `deriveMessages()` projects model history from durable events; failed/
   retried attempts stay `assistant/attempt` and never enter model history
@@ -111,7 +110,7 @@ order, with what scope, and how contributions are observed or vetoed.
 | Axis | OpenCode V2 | DeepSeek Harness | Harness |
 |---|---|---|---|
 | Who owns the context object | host (server) | host (session log + assembly) | host (`AgentContext`) |
-| Plugins contribute via | ordered boundary hooks | ordered, scoped registrations + waterfall | ordered policies → injections |
+| Plugins contribute via | ordered boundary hooks | ordered, scoped registrations + waterfall | ordered policies, then injections |
 | Contribution order semantic | hook registration order | ascending order + name tiebreak; shadow by name | registration order; replace by name |
 | Per-agent scoping | per-session (inherited) | `agent.ctx` — full scoped registrations | **runtime-level only** (no per-agent registration scope) |
 | Read/observe | `session.context` API | projections + events | narrow `ToolContext`; EventBus (notify-only) |

@@ -1,17 +1,11 @@
 ---
 id: INFO-026
 type: info
-title: "Use-Case — Pipelines & Long Jobs"
-category: use-case
+title: "Pipelines & Long Jobs"
 summary: >
   Batch extraction/transformation over many files, and long multi-step jobs:
   the manyfiles pattern (one item at a time, write each result), prune/restore,
   and checkpoint/resume that makes an interrupted overnight job recoverable.
-related:
-  - ../../02-architecture/concepts/agent-lifecycle/README.md
-  - ../../02-architecture/concepts/artifact-system/README.md
-  - ../../02-architecture/concepts/self-healing/README.md
-  - ../../02-architecture/examples/execution_patterns.md
 date: 2026-09-22
 status: current
 ---
@@ -50,18 +44,14 @@ per item with escalation/retry prevents one bad file grinding the tree.
 > and surface a link or file the ops team can tail."
 
 The prompt-only CLI lets the job run batch-style without dashboard noise, its
-progress streamed to the run directory. Ops tooling tails `agents.txt` (tree,
-`events.jsonl` (tool calls), `stats.json`, and `checkpoints/`, then
-`--resume <agent_id>` after a restart, instead of a status TUI.
+progress streamed to the run directory. Ops tooling tails the persisted
+overview files (`INFO-017`) and `checkpoints/`, then `--resume <agent_id>` after a restart, instead of a status TUI.
 
 ## Resumability (self-healing for jobs)
 
-1. **Checkpoint**: the run loop auto-persists an `AgentCheckpoint` each committed
-   turn; `/checkpoints` lists resumable agents.
-2. **Resume**: `--resume <agent_id>` (CLI) or `Runtime.resume(agent_id)` (async)
-   rebuilds it from the checkpoint and continues to completion.
-3. **Rot recovery**: on repeated calls / max-iterations, Layer-3 re-delegates a
-   fresh worker **reusing the partial on-disk result**.
+1. **Checkpoint**: the run loop auto-persists an `AgentCheckpoint` each committed turn; `/checkpoints` lists resumable agents.
+2. **Resume**: `--resume <agent_id>` (CLI) or `Runtime.resume(agent_id)` (async) rebuilds it from the checkpoint and continues to completion.
+3. **Rot recovery**: on repeated calls / max-iterations, Layer-3 re-delegates a fresh worker **reusing the partial on-disk result**.
 
 ## Verification & acceptance
 
@@ -71,9 +61,12 @@ runs, compare the on-disk resume **evidence** rather than re-computing the tree.
 
 ## Fit checklist & caveats
 
-- **Fits well**: bounded item counts, verifiable per-item ground truth, any
-  workload that *writes as it goes*.
+- **Fits well**: bounded item counts, verifiable per-item ground truth, any workload that *writes as it goes*.
 - **Strain / watch**: define the terminal condition exactly (an open-ended crawl
   is a spec problem), and remember `bash` has no pipes/redirects.
 - **Not a fit**: interactive "watching" loops; work is one run (resumable), then
   terminate — monitor a live run by tailing the overview files, not a TUI.
+
+## Related
+
+- `INFO-054` — execution patterns (good vs bad)

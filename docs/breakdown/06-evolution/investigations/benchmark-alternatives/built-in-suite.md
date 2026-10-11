@@ -2,7 +2,7 @@
 id: INFO-090
 type: info
 title: The Built-in Benchmark — What It Already Probes
-summary: The default suite ( — deterministic, failable, in-config, no Docker)
+summary: The default ALL_TASKS suite (deterministic, failable, in-config, no Docker) and the extension lanes that keep the no-infra property.
 date: 2026-09-23
 status: current
 ---
@@ -39,3 +39,10 @@ that would justify GAIA/BigCodeBench, at near-zero infra cost.
    images, and GAIA as `scripts/`-adapter wrappers around a shared
    `apply_patch_then_pytest`/`dump_trajectory_to_file` primitive, running only in
    periodic batch, never in the per-prompt loop.
+
+## Owns
+- The default `ALL_TASKS` suite (what each task probes) and the no-infra extension lanes.
+
+## Excludes
+- External benchmark surveys — `INFO-089`, `INFO-091`, `INFO-094`, `INFO-095`.
+- Selection criteria and the decision summary — `INFO-093`.

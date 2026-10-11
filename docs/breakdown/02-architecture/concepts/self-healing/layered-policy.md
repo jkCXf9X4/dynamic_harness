@@ -2,7 +2,7 @@
 id: INFO-051
 type: info
 title: The Layered Policy
-summary: Wall-clock timeouts never self-heal. A timed-out agent ( is false > for it — the context is fine, the run simply exhausted its wall-clock budget) > is…
+summary: Five recovery layers (in-loop, resume-once, parent heal, fresh worker, escalate) chosen by a rot discriminator; wall-clock timeouts never self-heal
 date: 2026-09-23
 status: current
 ---
@@ -34,18 +34,18 @@ and observation messaging.
 
 ## Layer 4 — Escalate
 
-Structural or repeated failure → escalate to the parent / caller. Never grind.
+Structural or repeated failure: escalate to the parent / caller. Never grind.
 
 ## The Rot Discriminator
 
 The Runtime already tracks both signals for free:
 
-- **Blunt** → `task failed/completed` with a *specific recoverable error*, low
+- **Blunt**: `task failed/completed` with a *specific recoverable error*, low
   iteration count, no repeated-call hit. Includes **wall-clock timeouts**: the
   context is healthy, the budget ran out — the parent decides whether to resume
   (same context, `strategy="resume"`) or go fresh.
-- **Rot** → `repeated_call_limit` fired, or `max_iterations` reached (beyond the
+- **Rot**: `repeated_call_limit` fired, or `max_iterations` reached (beyond the
   wall-clock timeout), or high iteration count with unchanged output.
 
-The discriminator maps observed state → layer, monotonically:
-`Layer 1 → (miss) → Layer 3 → (miss) → Layer 4`, bounded per task.
+The discriminator maps observed state to a layer, monotonically:
+`Layer 1, (miss), Layer 3, (miss), Layer 4`, bounded per task.

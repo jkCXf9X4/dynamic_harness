@@ -2,7 +2,7 @@
 id: INFO-050
 type: info
 title: Layer 1 — Resume-once (the escape hatch)
-summary: "Primitive: / (runtime.py:115-137, agent.py:163-171). Appends a user message and re-runs on the same agent — has no guard against a prior terminal stat…"
+summary: Layer 1 resume-once: re-run the same agent via continue_with_input after a blunt stop with no deliverable, exactly once
 date: 2026-09-23
 status: current
 ---

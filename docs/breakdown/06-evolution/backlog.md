@@ -2,7 +2,7 @@
 id: INFO-140
 type: info
 title: Backlog — raw suggestion log
-summary: "Raw idea/suggestion log for the evolution layer (moved from ). Disposition markers: DONE / RESOLVED / PICKED UP (with target); unmarked items are open…"
+summary: "Raw idea/suggestion log for the evolution layer. Disposition markers: DONE / RESOLVED / PICKED UP (with target); unmarked items are open."
 date: 2026-09-22
 status: current
 ---
@@ -35,7 +35,7 @@ Raw idea/suggestion log for the evolution layer (moved from `breakdown/developme
 - Try delegating 4 small tasks to subagents — how are they doing?
 - Enable Ctrl+C to exit the application.
 - Child layer-by-layer collaboration: relate it to the orchestrators or make it a general capability all agents possess; core attributes relate to Hackman's five conditions, especially (1) a real team — clear membership, bounded, interdependent, shared responsibility; (2) a compelling direction — challenging, clear, consequential.
-- Open a new investigation under `04-verification/` comparing how communication structures influence agent success: (1) all communication through the parent; (2) all children of a parent can communicate; (3) all nodes in one dedicated channel; (4) all nodes can register/create topic channels. **DONE** → `04-verification/communication-structures/`.
+- Open a new investigation under `04-verification/` comparing how communication structures influence agent success: (1) all communication through the parent; (2) all children of a parent can communicate; (3) all nodes in one dedicated channel; (4) all nodes can register/create topic channels. **DONE** → `06-evolution/investigations/communication-structures/`.
 - Make communication visible and auditable; file-based traces enable post-exit and live audits/reviews.
 - Critical review of the breakdown structure, filling in missing aspects so the development rationale is clear. **DONE** → this restructuring.
 
@@ -50,7 +50,7 @@ Raw idea/suggestion log for the evolution layer (moved from `breakdown/developme
 ## Resolved / Done
 
 - Set up use-cases under `01-product/use-cases/` — **DONE** (index + 7 families: repository-analysis, change-and-validation, documentation-and-knowledge, research-and-synthesis, pipelines-and-jobs, evaluation-and-qa, embedding-and-integration).
-- Evaluate functionality and use from the use-cases — what is missing — **DONE** → `04-verification/gap-analysis/README.md` (P0: verify-not-enforced, delegate-boundary heal, non-progressive disclosure/dead `raw_data`, `artifact_ids` vs files; P1: sandbox doc drift, no LLM-spawnable custom agents, Layer-2 heal, dead budget plumbing; P2: cost, counters, docs drift). Needs fixes: implement G2, G3, G4, G5, G6, G10.
-- Add a common config that acts as a base and is overridden by local configs, and confirm the defaults — **DONE** (layered XDG-base + local overlay; llm `provider_allow_fallbacks`/`verify_ssl`/`call_timeout_seconds`; safety `max_iterations` 400, `repeated_call_limit` 5, `repeated_recovery_attempts` 2, `repeated_call_exempt_tools`, `timeout_seconds` 7200, `disable_root_timeout`, `max_agents` 300, `max_depth` 15, `max_same_target_delegations` 0, `spawn_limit_warning_attempts` 2; agent `environment_notes`, `stream_children`).
+- Evaluate functionality and use from the use-cases — what is missing — **DONE** → `04-verification/gap-analysis/README.md` (gap list G1–G13 with P0/P1/P2 priorities and open/resolved status).
+- Add a common config that acts as a base and is overridden by local configs, and confirm the defaults — **DONE** → `03-implementation/runtime-config-schema.md` (INFO-198).
 - Move the status terminal/agent tree to separate files; keep the CLI to prompts only and persist all other data for traceability — **RESOLVED** (`agents.txt`, `agent_tree.json`, `stats.json`, `events.jsonl` in the run root; prompt-only CLI with a lightweight counter and final outcome; see `01-product/requirements/README.md`). A directional change to make the app usable in larger automated workflows.
 - Always-available text insertion during a run (queue while busy, apply while the top agent waits) plus slash commands (`/tree`, `/agents`, `/provenance`, …) for live status — **RESOLVED** (`Agent.submit_input()`; see `01-product/requirements/README.md` FR-3.5).

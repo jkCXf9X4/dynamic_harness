@@ -1,17 +1,16 @@
 ---
 id: INFO-071
 type: info
-title: "Plan — Injection Modes and Renderer"
-category: investigation / plan
-parent: "README.md"
-summary: Both modes use the same → text renderer; only who initiates differs. This is the experiment's second variable (push cost), so it is a switch
+title: Plan — Injection Modes and Renderer
+summary: "Two swappable injection modes (pull default, push-digest) share one `CommsMessage` to text renderer; the mode is the experiment's second variable (push cost)."
 date: 2026-09-23
 status: current
 ---
 
-# Injection — two swappable modes, one envelope
 
-Both modes use the same `CommsMessage` → text renderer; only *who initiates*
+# Plan — Injection Modes and Renderer
+
+Both modes use the same `CommsMessage` to text renderer; only *who initiates*
 differs. This is the experiment's second variable (push cost), so it is a switch.
 
 ## Pull mode (default) — implemented
@@ -25,7 +24,7 @@ differs. This is the experiment's second variable (push cost), so it is a switch
 ## Push-digest mode — P2, implemented
 
 - `CommsDigestPolicy` (`core/comms/digest.py`) — a `ReactivePolicy` wired through
-  the per-agent factory seam (`runtime._reactive_policy_factories` →
+  the per-agent factory seam (`runtime._reactive_policy_factories` to
   `agent.add_reactive_policy`). No run-loop changes.
 - Each turn it reads the agent's per-topic watermarks over its **subscribed
   topics only** (`backend.subscriptions`, which the shared backend overrides to

@@ -2,7 +2,7 @@
 id: INFO-097
 type: info
 title: Agent with Custom State
-summary: `python from collections import Counter
+summary: Add per-agent state in __init__ and override _run_loop for custom behavior
 date: 2026-09-23
 status: current
 ---
@@ -23,3 +23,11 @@ class TrackingAgent(Agent):
         # Note: _run_loop is complex. For most cases, override run() instead.
         await super()._run_loop()
 ```
+
+## Owns
+- Adding per-agent state in __init__ and overriding _run_loop for custom behavior.
+
+## Excludes
+- Basic subclassing and registration: INFO-096
+- Replacing the execution loop and pre/post hooks: INFO-099
+- Choosing which override to use: INFO-101

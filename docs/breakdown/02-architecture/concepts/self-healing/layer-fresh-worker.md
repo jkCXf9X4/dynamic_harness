@@ -2,7 +2,7 @@
 id: INFO-048
 type: info
 title: Layer 3 — Fresh Worker
-summary: "Trigger: context rot — fired, reached, wall-clock timeout, or repeated Layer-1 misses. Resuming here would replay the poisoned context. Instead, re-de…"
+summary: Layer 3 fresh worker: on context rot, re-delegate a fresh agent over the same task, injecting the failure reason and pointing at on-disk artifacts
 date: 2026-09-23
 status: current
 ---

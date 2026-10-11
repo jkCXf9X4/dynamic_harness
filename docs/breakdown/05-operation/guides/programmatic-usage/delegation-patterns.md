@@ -2,7 +2,7 @@
 id: INFO-123
 type: info
 title: Delegation Patterns
-summary: `python
+summary: Patterns for delegating tasks programmatically: sequential chaining, parallel execution, and task graph inspection.
 date: 2026-09-23
 status: current
 ---
@@ -48,3 +48,14 @@ for parent_id, child_ids in graph.items():
     children = ", ".join(child_ids)
     print(f"  {parent_id[:8]} ({agent.task.status.value}) → [{children}]")
 ```
+
+## Owns
+- Delegation patterns: sequential task chaining, parallel agent execution, and task graph inspection.
+
+## Excludes
+- Runtime construction and configuration: INFO-127
+- Custom agent classes: INFO-122
+- Artifact and repository access: INFO-121
+- No-LLM mode and error handling: INFO-124
+- Events and usage tracking: INFO-125
+- Complete integration example: INFO-126

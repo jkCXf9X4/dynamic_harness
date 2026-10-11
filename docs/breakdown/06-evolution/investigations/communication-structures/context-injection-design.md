@@ -1,18 +1,14 @@
 ---
 id: INFO-067
 type: info
-title: "Analysis — Injecting Communication into Agent Context"
-category: investigation / analysis
+title: Analysis — Injecting Communication into Agent Context
+summary: "How communication enters an agent's context: inject typed envelopes, not raw content; tail-appended user messages keep the prompt prefix cache-safe; a typed envelope frames channel traffic as related work, not instructions."
 date: 2026-09-22
-status: open
-summary: >
-  How communication enters an agent's context: inject typed envelopes, not raw
-  content; tail-appended user messages keep the prompt prefix cache-safe; a typed
-  envelope frames channel traffic as related work, not instructions.
-parent: "INVESTIGATION.md"
+status: current
 ---
 
-# Injecting communication into agent context
+
+# Analysis — Injecting Communication into Agent Context
 
 Injection mechanics only. Channel pollution containment, directory, and creation
 rules are in `INFO-066`; the concrete
@@ -55,7 +51,7 @@ with a **typed envelope** (concrete renderer: `INFO-071`):
   authority, so the model never guesses.
 - **Metadata for self-scoring relevance:** `topic`, `sender`, `stage`
   (draft/revised/final), recency — cheap to score, zero reading.
-- **Progressively disclose** headline → summary_200 → technical → full via a
+- **Progressively disclose** headline to summary_200 to technical to full via a
   pointer (the `ArtifactView` ladder).
 - **Cap the digest per turn** (N newest / M tokens, newest-first): triage over a
   bounded surface. Add **push-multiplier** (avg tokens × turns remaining) to the

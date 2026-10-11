@@ -1,15 +1,6 @@
 ---
 title: "Programmatic Usage"
-category: guide
-difficulty: intermediate
-summary: >
-  How to embed Dynamic Harness as a library. Covers constructing a Runtime,
-  delegating tasks, handling events, token tracking, and integration patterns.
-related:
-  - ../../../../docs/api/runtime.md
-  - ../../../../docs/api/agent.md
-  - ../../../../docs/api/task.md
-  - ../../../../docs/api/llm.md
+summary: How to embed Dynamic Harness as a library. Covers constructing a Runtime, delegating tasks, handling events, token tracking, and integration patterns.
 ---
 
 # Programmatic Usage (Index)
@@ -22,11 +13,11 @@ automated pipelines.
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
-- **INFO-121** [Artifacts & Repository](artifacts-and-repository.md) — `python
-- **INFO-122** [Custom Agent Classes](custom-agent-classes.md) — `python from dynamic_harness.core.agent import Agent
-- **INFO-123** [Delegation Patterns](delegation-patterns.md) — `python
-- **INFO-124** [No-LLM Mode & Error Handling](error-handling.md) — If you skip , agents enter no-LLM mode
-- **INFO-125** [Events & Usage](events-and-usage.md) — Register callbacks for agent lifecycle events
-- **INFO-126** [Complete Integration Example](integration-example.md) — `python import asyncio from pathlib import Path from dynamic_harness.core.runtime import Runtime from dynamic_harness.core.task import Task from dynam…
-- **INFO-127** [Runtime Setup](runtime-setup.md) — `python import asyncio from pathlib import Path from dynamic_harness.core.runtime import Runtime from dynamic_harness.core.task import Task from dynam…
+- **INFO-121** [Artifacts & Repository](artifacts-and-repository.md) — Programmatic access to artifacts and the repository, covering artifact views, agent-written files, commit history, and the commit tree.
+- **INFO-122** [Custom Agent Classes](custom-agent-classes.md) — How to subclass Agent, register a named agent class with the runtime, and delegate tasks to it by name.
+- **INFO-123** [Delegation Patterns](delegation-patterns.md) — Patterns for delegating tasks programmatically: sequential chaining, parallel execution, and task graph inspection.
+- **INFO-124** [No-LLM Mode & Error Handling](error-handling.md) — No-LLM mode behavior and how to inspect failed or escalated task results
+- **INFO-125** [Events & Usage](events-and-usage.md) — Register callbacks for agent lifecycle events and track token usage per agent and across all agents
+- **INFO-126** [Complete Integration Example](integration-example.md) — End-to-end Python example wiring an OpenAI provider, a Runtime, and a delegated Task into one async analysis run with report collection and usage reporting.
+- **INFO-127** [Runtime Setup](runtime-setup.md) — Programmatic Runtime setup: minimal example, constructor arguments, and session reset
 <!-- pb:index:end -->

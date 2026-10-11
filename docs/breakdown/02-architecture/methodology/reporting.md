@@ -2,7 +2,7 @@
 id: INFO-060
 type: info
 title: Report Format
-summary: Report Format
+summary: report() carries a concrete, self-verifying summary, artifact_ids, and optional confidence — no fabrication
 date: 2026-09-23
 status: current
 ---

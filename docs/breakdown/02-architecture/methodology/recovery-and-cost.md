@@ -2,7 +2,7 @@
 id: INFO-059
 type: info
 title: Failure Recovery & Cost
-summary: "See delegation-guidelines skill → \"The Kill → Inspect → Retry loop\" for the full salvage-and-retry protocol. Short version"
+summary: "See delegation-guidelines skill, \"The Kill, Inspect, Retry loop\" for the full salvage-and-retry protocol. Short version"
 date: 2026-09-23
 status: current
 ---
@@ -11,15 +11,15 @@ status: current
 
 ## Failure Recovery
 
-See delegation-guidelines skill (`3rd_party/agent_methods_and_tools/src/agent_methods/methods/delegation-guidelines/SKILL.md`) →
-"The Kill → Inspect → Retry loop" for the full salvage-and-retry protocol.
+See delegation-guidelines skill (`3rd_party/agent_methods_and_tools/src/agent_methods/methods/delegation-guidelines/SKILL.md`):
+"The Kill, Inspect, Retry loop" for the full salvage-and-retry protocol.
 Short version:
 
 | Failure | Recovery |
 |---|---|
-| Child returns failed | `status()` → inspect salvage → if clearable, re-delegate *with the salvage folded in*; else escalate |
-| Child stuck / looping / rogue | `kill()` (recursive for a subtree) → read the `salvage` on the kill result → re-delegate carrying done/pending + key findings |
-| Artifact empty/missing | converse("Did you write findings?") → read correct path or re-delegate |
+| Child returns failed | `status()`, inspect salvage, then if clearable re-delegate *with the salvage folded in*; else escalate |
+| Child stuck / looping / rogue | `kill()` (recursive for a subtree), read the `salvage` on the kill result, then re-delegate carrying done/pending + key findings |
+| Artifact empty/missing | converse("Did you write findings?"), then read the correct path or re-delegate |
 | Safety limits hit | Task too broad. Re-delegate with narrower description. |
 | Child escalated | Read escalation context. Resolve or pass up via your own escalate(). |
 | Multiple children fail | Decomposition likely wrong. Escalate with failure summary. |

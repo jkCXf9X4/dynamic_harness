@@ -1,6 +1,6 @@
 ---
 title: Agent Methodology
-summary: The guidelines governing how every agent decomposes, delegates, verifies, synthesizes, and terminates. Derived from VISION.md and the agent system pro…
+summary: The guidelines governing how every agent decomposes, delegates, verifies, synthesizes, and terminates, derived from VISION.md and the agent system prompt
 ---
 
 # Agent Methodology
@@ -17,9 +17,9 @@ engineering.
 - Failure recovery, cost heuristics, and guardrails
 
 ## Excludes
-- Concept detail → [../concepts/](../concepts/)
-- Worked examples → [../examples/](../examples/)
-- Decision records → [../decisions/](../decisions/)
+- Concept detail to [../concepts/](../concepts/)
+- Worked examples to [../examples/](../examples/)
+- Decision records to the decision archive (`docs/archive/archive.zip`, `AD-*`), read via `pb archive`
 
 See [../examples/anti_patterns.md](../examples/anti_patterns.md) for the nine
 
@@ -32,10 +32,10 @@ task-framing examples in [../examples/](../examples/).
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
 - **INFO-056** [Delegation Quality (P6, P8)](delegation-quality.md) — A sub-agent's description + role is its entire world (its allocated requirements)
-- **INFO-057** [Core Philosophy](philosophy.md) — Maximize output quality while minimizing cost through disciplined task decomposition, strict context encapsulation, and a mandatory analyze → implemen…
+- **INFO-057** [Core Philosophy](philosophy.md) — Maximize output quality while minimizing cost through disciplined task decomposition, strict context encapsulation, and a mandatory analyze, implement, verify loop
 - **INFO-058** [Priority Hierarchy](priorities.md) — Output decomposition plan before any tool call. Skipping this and jumping to glob/grep is the 1 cause of context bloat
-- **INFO-059** [Failure Recovery & Cost](recovery-and-cost.md) — See delegation-guidelines skill → "The Kill → Inspect → Retry loop" for the full salvage-and-retry protocol. Short version
-- **INFO-060** [Report Format](reporting.md) — Report Format
-- **INFO-061** [Verification Protocol](verification.md) — For each child after returns
+- **INFO-059** [Failure Recovery & Cost](recovery-and-cost.md) — See delegation-guidelines skill, "The Kill, Inspect, Retry loop" for the full salvage-and-retry protocol. Short version
+- **INFO-060** [Report Format](reporting.md) — report() carries a concrete, self-verifying summary, artifact_ids, and optional confidence — no fabrication
+- **INFO-061** [Verification Protocol](verification.md) — For each child after delegate() returns, read and confirm its artifact exists and is non-empty before synthesizing
 - **INFO-062** [Mandatory Workflow](workflow.md) — Mandatory Workflow
 <!-- pb:index:end -->

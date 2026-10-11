@@ -2,7 +2,7 @@
 id: INFO-159
 type: info
 title: Collaboration Setting = Hackman's Conditions per Layer
-summary: "A concrete \"collaboration setting\" object (a team workspace opened by the founding parent) maps 1:1 onto Hackman's five conditions — the first two bei…"
+summary: "A concrete collaboration-setting object (a team workspace opened by the founding parent) maps 1:1 onto Hackman's five conditions; the first two are the non-negotiable core."
 date: 2026-09-28
 status: current
 ---
@@ -11,9 +11,9 @@ status: current
 
 A concrete "collaboration setting" object (a team workspace opened by the
 founding parent) maps 1:1 onto Hackman's five conditions — the first two being
-the *non-negotiable* core. Decisions: AD-005 (`product-breakdown/06-evolution/investigations/decisions/AD-005.md`).
+the *non-negotiable* core. Decisions: `AD-005`.
 
-## Hackman condition → realization
+## Hackman condition to realization
 1. **A real team** — membership is bounded and explicit: `collaborate_with=[...]`
    is the boundary. Nobody is unclear about who is on the team. (REQ-1)
 2. **A compelling direction** — a **team charter** posted as the workspace's
@@ -38,13 +38,16 @@ team; the *bounded, scaffolded setting* is what Hackman #1/#2 formalize.
 Collaboration is an **orchestration modality at decomposition time**, not a
 separate system. The orchestrator's loop gains a team-forming variant:
 
-```
-ANALYZE → DECOMPOSE → [form team IF interdependent] → DELEGATE
-        → VERIFY (on the workspace) → SYNTHESIZE → TERMINATE
-```
+1. ANALYZE
+2. DECOMPOSE
+3. [form team IF interdependent]
+4. DELEGATE
+5. VERIFY (on the workspace)
+6. SYNTHESIZE
+7. TERMINATE
 
-- **Independent units** → plain parallel delegation, unchanged.
-- **Interdependent units** → the parent *founds a team* among them (context, not
+- **Independent units**: plain parallel delegation, unchanged.
+- **Interdependent units**: the parent *founds a team* among them (context, not
   control): declare membership, post the charter, open the workspace, introduce.
   Then it *stays out* of the steady state — the children coordinate in the
   workspace; the parent's VERIFY checks workspace output against the charter's

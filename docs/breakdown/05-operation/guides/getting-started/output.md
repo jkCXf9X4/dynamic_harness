@@ -2,7 +2,7 @@
 id: INFO-112
 type: info
 title: Understanding the Output
-summary: When an agent completes, the CLI shows a compact outcome
+summary: The CLI shows a compact outcome per agent and persists the full run overview to the run directory.
 date: 2026-09-23
 status: current
 ---
@@ -26,11 +26,11 @@ The terminal stays prompt-only, but a full, continuously-refreshed overview is
 written to the **run directory** (`.dynamic-harness/<timestamp>_<id>/`, the
 parent of `artifacts/`, `repo/`, and `traces/`):
 
-- `agents.txt` — plain-text agent tree, two lines per agent: an identity line (id, `[status]`, description, and the profile/model it runs on — the delegated profile tier (`@fast`) or the resolved model id when no profile is set (`@deepseek/deepseek-v4-flash`)) and a metrics line (cumulative messages, token usage, USD cost markers — own cost (`$`) and subtree cost including all descendants (`Σ$`), from the provider's per-request cost when reported (e.g. OpenRouter) or configured prices as a fallback). Live agents also show what they did last and how long ago (`(tool web_search 12s)`) — a climbing age means the agent is mid-call, likely a long LLM request. Rewritten continuously while a run is live (≈1/s heartbeat, plus on every event), so you can tail it and always know how fresh it is.
+- `agents.txt` — plain-text agent tree, two lines per agent: an identity line (id, `[status]`, description, and the profile/model it runs on — the delegated profile tier (`@fast`) or the resolved model id when no profile is set (`@deepseek/deepseek-v4-flash`)) and a metrics line (cumulative messages, token usage, USD cost markers — own cost (`$`) and subtree cost including all descendants (`Σ$`), from the provider's per-request cost when reported (e.g. OpenRouter) or configured prices as a fallback). Live agents also show what they did last and how long ago (`(tool web_search 12s)`) — a climbing age means the agent is mid-call, likely a long LLM request. Rewritten continuously while a run is live (about 1/s heartbeat, plus on every event), so you can tail it and always know how fresh it is.
 - `agent_tree.json` — same tree as structured JSON (for machine parsing).
 - `stats.json` — aggregate counts (agents, commits, tokens).
 - `events.jsonl` — append-only structured event stream (report/failure/escalation/activity).
-- `index.jsonl` — flat artifact→agent/task/path map (written after the run when artifacts exist).
+- `index.jsonl` — flat artifact-to-agent/task/path map (written after the run when artifacts exist).
 
 This keeps the CLI clean and persists all other data to files, so a
 long-running or batch run is fully traceable and inspectable by external tooling
@@ -60,5 +60,11 @@ continuously) and on demand via `/tree`:
 
 Each agent is a numbered, depth-indented block: an identity line (id, the
 profile/model marker it runs on, description) and a detail line (status with
-its glyph ✓/✗/▶/⚑, live activity, token usage). Blocks are blank-line
+its glyph (check, cross, play, flag), live activity, token usage). Blocks are blank-line
 separated, so state, tier, and cost per agent are readable at a glance.
+
+## Owns
+- CLI outcome display and persisted run overview files.
+
+## Excludes
+- Slash commands (`INFO-114`).

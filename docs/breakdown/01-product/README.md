@@ -5,13 +5,9 @@ summary: What is delivered, out of scope?
 
 # Layer 01 — Product
 
-**What is delivered, out of scope?**
+The product is a recursive agent runtime with artifact-based communication, strict context encapsulation, and Git-like provenance. The CLI requirements doc below is the CLI sub-spec and belongs here because it defines the delivered terminal surface.
 
-The product is a recursive agent runtime with artifact-based communication, strict context encapsulation, and Git-like provenance. What is delivered: the runtime (agents, task graph, artifact store, repository/commit layer, 25 tools), a minimal prompt-only CLI, a benchmark suite with deterministic failable verifiers, configurable safety/self-healing machinery, and the embedding surface (`Harness` API). What is out of scope: chatbot/conversation features, predefined workflow engines, code generation, and shared-memory designs (see VISION "What This Is NOT").
-
-This layer answers "what" — scope, capabilities, use cases, requirements, acceptance expectations. Architecture ("how") lives in `02-architecture/`; the CLI requirements doc below is the CLI sub-spec and belongs here because it defines the delivered terminal surface.
-
-## Product Definition (GAP-6 fill)
+## Product Definition
 
 ### Capabilities (from README.md / AGENTS.md)
 - **Recursive decomposition** — parent agents decompose work and delegate to focused sub-agents with fresh, isolated contexts; parent orchestrates, children implement.
@@ -35,7 +31,7 @@ This layer answers "what" — scope, capabilities, use cases, requirements, acce
 4. Total context across all agents remains shallow
 5. Cost proportional to task complexity, not context duration
 
-Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analysis/README.md`) — verification is currently prompt-discipline plus a file-existence gate, not mechanical acceptance checking; tracked in `06-evolution/roadmap.md`.
+Criterion 1 (verification) is open gap `INFO-081`.
 
 ## Owns
 - Scope, capabilities, out-of-scope, acceptance expectations
@@ -43,16 +39,16 @@ Note: criterion 1 is the subject of open gap **G1** (`04-verification/gap-analys
 - Product-level glossary
 
 ## Excludes
-- Organization, architecture, components, data flow → `02-architecture/`
-- Implementation details, scripts, configs → `03-implementation/`
-- Test mechanics, proof, gap analysis → `04-verification/`
-- Runbooks, release steps → `05-operation/`
-- Roadmap, backlog → `06-evolution/`
+- Organization, architecture, components, data flow to `02-architecture/`
+- Implementation details, scripts, configs to `03-implementation/`
+- Test mechanics, proof, gap analysis to `04-verification/`
+- Runbooks, release steps to `05-operation/`
+- Roadmap, backlog to `06-evolution/`
 
 ## Contents
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
-- [Requirements — CLI Sub-Spec (Index)](requirements/README.md) — Requirements governing the delivered terminal surface and the persisted overview (DL-12). The runtime's product definition lives in ; this folder pins…
+- [Requirements — CLI Sub-Spec (Index)](requirements/README.md) — Requirements governing the delivered terminal surface and the persisted overview (retired DL-12; read via `pb archive read deprecated/decision-log.md`); the runtime's product definition lives in the layer index.
 - [Use-Cases — Index](use-cases/README.md) — Deduced taxonomy of plausible use-cases for Dynamic Harness, grounded in the concepts and the actual tools/runtime. Each family links to the capabilities it relies on; the fitness filter decides whether a task belongs here at all.
 <!-- pb:index:end -->

@@ -26,11 +26,11 @@ Sections 6–7 of the management-theory survey. Index: `management-theory`.
    treat the sibling map as a maintained asset, not an accident.
 
 ## Anti-patterns to defend against (each maps to a rejected design)
-- Parent reads/forwards message content → relaying → option A (rejected).
-- Parent "checks in" at every exchange → micromanagement tax.
-- Letting the mail system address the whole runtime → unconstrained B (no real
+- Parent reads/forwards message content: relaying, option A (rejected).
+- Parent "checks in" at every exchange: micromanagement tax.
+- Letting the mail system address the whole runtime: unconstrained B (no real
   team, no norms, no psychological safety).
-- Constantly re-delegating to fresh strangers → destroying the transactive
+- Constantly re-delegating to fresh strangers: destroying the transactive
   memory system.
 
 ## Design implications to take into the spec

@@ -18,7 +18,7 @@ status: current
 | Context observation | Every turn | Enables LLM to self-monitor context health |
 | `compress()` tool | Available at any time | LLM can compress its context to avoid rot |
 
-## Timeout Layering (don't confuse these)
+## Timeout Layering — Distinctions
 
 Three independent timeouts apply to different resource types:
 

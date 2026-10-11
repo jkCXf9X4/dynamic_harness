@@ -1,15 +1,14 @@
 ---
 id: INFO-069
 type: info
-title: "Plan — CommsBackend and ChannelPolicy"
-category: investigation / plan
-parent: "README.md"
-summary: `python class CommsBackend: base class; subclasses vary only the routing decision name: str channels_enabled: bool
+title: Plan — CommsBackend and ChannelPolicy
+summary: "The `CommsBackend` base class (routing decision in `route_message`) and `ChannelPolicy` (creation/join authority) that make the four topology cells a swappable backend."
 date: 2026-09-23
 status: current
 ---
 
-# CommsBackend — the swappable router
+
+# Plan — CommsBackend and ChannelPolicy
 
 ```python
 class CommsBackend:  # base class; subclasses vary only the routing decision
@@ -41,7 +40,7 @@ class CommsBackend:  # base class; subclasses vary only the routing decision
 ## ChannelPolicy — creation/join authority
 
 Cell 4's real variable is not "topics exist" but **who may create them**
-(`../channel-context-design.md`):
+(`INFO-066`):
 
 ```python
 class ChannelPolicy:

@@ -2,8 +2,6 @@
 id: INFO-191
 type: info
 title: "Plugin Direction — Resolved Rulings 1–4"
-category: investigation
-parent: "README.md"
 summary: >
   ToolContext single+narrowed, policy-application split, no stdlib descriptor
   conversion, no discovery in tests.
@@ -11,14 +9,14 @@ date: 2026-09-28
 status: current
 ---
 
-# Resolved rulings (Q1–Q5 filled per direction)
+# Plugin Direction — Resolved Rulings 1–4
 
 1. **ToolContext: single contract, narrowed — NOT faceted.** Faceting would
    *multiply* the common-interface count, contradicting the primary goal
    ("minimize common interfaces"). Keep ONE `ToolContext` contract (count
    stays 1) and *narrow it*: move policy-ish logic out (the inline `compress`
-   prompt → `ContextMetricPolicy`), replace direct private-state reaches
-   (`record_archived_artifact` appending to `agent._archived_artifact_ids` →
+   prompt to `ContextMetricPolicy`), replace direct private-state reaches
+   (`record_archived_artifact` appending to `agent._archived_artifact_ids` to a
    public `Agent` method), and document exactly what tools may touch. Tools
    state their needs in terms of the single public contract, never in terms of
    agent internals.

@@ -1,14 +1,11 @@
 ---
 id: INFO-015
 type: info
-title: "FR-3 — Live interactive surface"
-category: requirement
+title: "FR-3. Live interactive surface"
 summary: >
   The prompt line doubles as a live progress counter; input is always available
   during a run (queued when busy, immediate during a child-wait); the root
   agent's text replies stream above the prompt.
-related:
-  - direction.md
 date: 2026-09-23
 status: current
 ---
@@ -52,3 +49,7 @@ terminal output; the agent `ask` interaction swaps that prompt to
   mid-run question instead of talking to a silent terminal.
 - **FR-3.6.3** Replies from delegated children are never printed; the operator
   only hears from the agent they talk to.
+
+## Related
+
+- `INFO-014` — why the CLI is minimal and prompt-only

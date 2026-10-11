@@ -2,7 +2,7 @@
 id: INFO-149
 type: info
 title: "Capability Scope: Founding Boundary-Scoped, Participation Universal"
-summary: Is child layer-by-layer collaboration an orchestration feature, or a general capability every agent possesses? Hackman's five conditions — especially…
+summary: "Is child collaboration an orchestration feature or a general capability? Answer: founding is parent-scoped (any node with children), participation is universal (every agent, leaves included)."
 date: 2026-09-28
 status: current
 ---
@@ -12,7 +12,7 @@ status: current
 Is child layer-by-layer collaboration an *orchestration* feature, or a *general
 capability every agent possesses*? Hackman's five conditions — especially #1
 (real team) and #2 (compelling direction) — are the ground. Decisions:
-AD-005 (`product-breakdown/06-evolution/investigations/decisions/AD-005.md`).
+`AD-005`.
 
 ## The answer
 Split the capability along the two halves the theory already separates —

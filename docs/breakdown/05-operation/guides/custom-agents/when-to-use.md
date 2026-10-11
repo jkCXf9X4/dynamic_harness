@@ -2,7 +2,7 @@
 id: INFO-101
 type: info
 title: When to Use Custom Agents
-summary: Logging/metrics — override with pre/post hooks
+summary: Match the need to the right override: hooks, preprocessing, prompt, limits, or retry
 date: 2026-09-23
 status: current
 ---
@@ -17,3 +17,9 @@ status: current
 
 Custom agent classes let you encode reusable behavior patterns without modifying
 the core `Agent` implementation.
+
+## Owns
+- The decision guide: which override to use for which customization need.
+
+## Excludes
+- The concrete patterns: INFO-096, INFO-097, INFO-098, INFO-099, INFO-100

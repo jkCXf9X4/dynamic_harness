@@ -2,7 +2,7 @@
 id: INFO-145
 type: info
 title: Self-improving context management
-summary: Should the agent be enabled to improve upon its own tools and context management — memory, summaries, compression, or similar — and how does that stay…
+summary: "Should the agent improve its own context management (memory, summaries, compression)? Yes, in tiers: procedural skills yes, own context management bounded and measured, runtime machinery no."
 date: 2026-09-28
 status: current
 ---
@@ -50,8 +50,8 @@ These contracts stay runtime-owned no matter what the agent writes:
 
 ## How "keep each level small" stays encouraged — structural, not aspirational
 
-1. **Enforce level budgets at the runtime.** The disclosure levels (headline →
-   200-char → 1000-char → technical → full) get size budgets enforced where
+1. **Enforce level budgets at the runtime.** The disclosure levels (headline,
+   200-char, 1000-char, technical, full) get size budgets enforced where
    artifacts are written — an "improved summarizer" whose outputs breach the
    level budget is rejected/truncated by the runtime, not by the agent's taste.
    Improvement cannot mean "bigger layers".

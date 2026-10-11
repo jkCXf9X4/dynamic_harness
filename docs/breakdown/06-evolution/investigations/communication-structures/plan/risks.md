@@ -1,15 +1,14 @@
 ---
 id: INFO-075
 type: info
-title: "Plan — Risks and Decisions to Confirm"
-category: investigation / plan
-parent: "README.md"
-summary: cells 3/4 are pull-first. The field + environment note must prevent a model from waiting on a notification. If cells 3/4 want blocking too, add a para…
+title: Plan — Risks and Decisions to Confirm
+summary: "Risks and decisions to confirm for the comms layer. Blocking vs fire-and-forget, back-compat default, watermark placement, the anarchic cell 4 variant, relay visibility, and subscription as signal not gate."
 date: 2026-09-23
 status: current
 ---
 
-# Risks and decisions to confirm
+
+# Plan — Risks and Decisions to Confirm
 
 1. **Blocking vs fire-and-forget.** Cells 1/2 keep `converse`'s request/response;
    cells 3/4 are pull-first. The `kind` field + environment note must prevent a

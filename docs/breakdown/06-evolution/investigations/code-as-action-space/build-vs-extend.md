@@ -2,7 +2,7 @@
 id: INFO-143
 type: info
 title: Build vs extend — is this a development of the product, or a new project?
-summary: The code-as-action paradigm (single tool; the agent sets up and manages tools, worker groups, memory, and communication from Python) presents complex—…
+summary: "Is code-as-action a development of this product or a new project? Verdict: the hybrid capability is a development; the single-tool end-state is a new project on the shared skeleton."
 date: 2026-09-28
 status: current
 pb_exempt: true
@@ -20,7 +20,7 @@ start under its own identity?
 
 ## The intent layer settles the framing
 
-`00-intent/VISION.md` draws explicit boundaries, and one line is decisive:
+`INFO-001` draws explicit boundaries, and one line is decisive:
 
 > **Not a code generation platform** — agents use tool calls, not generated code.
 > (VISION.md:59)
@@ -51,9 +51,9 @@ category. Nothing forces VISION to change.
 
 **2. The single-tool, paradigm-first end-state is a new project.** A
 code-as-action runtime is a different product (OpenHands/Manus/Codex-shaped):
-different action discipline (structured tool surface → one executable action
-space), different economics (fresh-context decomposition → long-horizon sessions
-with full compute in a VM sandbox), different trust model (host + policies →
+different action discipline (structured tool surface to one executable action
+space), different economics (fresh-context decomposition to long-horizon sessions
+with full compute in a VM sandbox), different trust model (host + policies to
 per-task sandbox VM), and it fails VISION's own "not a code generation platform"
 boundary. Retrofit is a lose-lose — the product stops being itself, or the
 paradigm is throttled into not being itself.
@@ -83,9 +83,9 @@ and bash-shaped guards into a paradigm they oppose.
    verified output, no fabrication, shallow total context, cost ∝ complexity,
    no abandoned children. The identity question becomes numeric: does
    single-tool code-first beat *this* product on *its own* criteria?
-3. **Route the answer by rule, not retrofit.** No-but → the hybrid stays a
+3. **Route the answer by rule, not retrofit.** No-but, then the hybrid stays a
    feature; the paradigm is recorded as explored-and-rejected in the decision
-   log. Yes-but-with-structure → found it as **its own product on the shared
+   log. Yes-but-with-structure, then found it as **its own product on the shared
    skeleton** (new `00-intent`); do not graft.
 4. **Keep the intent explicit.** Either VISION:59 stays and governs
    (recommended until evidence flips it), or — only if the intent genuinely

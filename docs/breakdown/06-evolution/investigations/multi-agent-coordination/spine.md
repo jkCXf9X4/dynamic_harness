@@ -2,7 +2,7 @@
 id: INFO-178
 type: info
 title: "Simplicity Review: The Spine — Links + Delivery + Pointers"
-summary: The collaboration-setting spec over-modeled. The advanced features (team object, charter, norms, sanctions, workspace, arbitration ladder) are policy…
+summary: The collaboration-setting spec over-modeled. The advanced features (team object, charter, norms, sanctions, workspace, arbitration ladder) are policy layers on a much smaller spine of three primitives, mostly existing machinery.
 date: 2026-09-28
 status: current
 ---
@@ -12,7 +12,7 @@ status: current
 The collaboration-setting spec over-modeled. The advanced features (team object,
 charter, norms, sanctions, workspace, arbitration ladder) are **policy layers
 that can sit on a much smaller spine** — and the spine is mostly *existing
-machinery*. Decisions: AD-006 (`product-breakdown/06-evolution/investigations/decisions/AD-006.md`).
+machinery*. Decisions: `AD-006`.
 
 ## The spine (three primitives, all present today)
 1. **Links** — ONE new structure: a runtime registry of authorized peer pairs.
@@ -21,11 +21,11 @@ machinery*. Decisions: AD-006 (`product-breakdown/06-evolution/investigations/de
    is the common parent of both** — `a.parent is caller and b.parent is caller`.
    No team object, no membership dict, no lifecycle FSM: membership *is* the link
    set, authorization *is* the parent-of-both check (O(1) via `target.parent`).
-2. **Delivery** — reuse the existing message path: `converse` →
-   `continue_with_input` → `_inject_queue`/`_inject_event`
-   (`agent.py:327/683/1246`). A sibling message is just a `converse` whose
+2. **Delivery** — reuse the existing message path: `converse` to
+   `continue_with_input` to `_inject_queue`/`_inject_event`
+   (`agent.py:327/683/1246`). A sibling message is a `converse` whose
    eligibility gate becomes `(agent_a, agent_b) in self._links` (in addition to
-   parent↔child). `[sibling {id}] {summary}\nPointer: {artifact_id|result_id}` —
+   parent and child). `[sibling {id}] {summary}\nPointer: {artifact_id|result_id}` —
    summary-only, pointer-carrying, exactly like initiatives already write.
 3. **Content** — reuse existing pointer machinery: the recipient pulls the full
    body via `read_artifact` / `result_read`. **No workspace needed for MVP**:

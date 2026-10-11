@@ -2,7 +2,7 @@
 id: INFO-127
 type: info
 title: Runtime Setup
-summary: `python import asyncio from pathlib import Path from dynamic_harness.core.runtime import Runtime from dynamic_harness.core.task import Task from dynam…
+summary: Programmatic Runtime setup: minimal example, constructor arguments, and session reset
 date: 2026-09-23
 status: current
 ---
@@ -68,3 +68,15 @@ runtime.reset()
 # Cleared: agents, task graph, usage, artifacts, commits, traces
 # (event handlers are only cleared with runtime.reset(clear_handlers=True))
 ```
+
+## Owns
+- Runtime construction: required and optional constructor arguments, including temporary non-persistent roots.
+- Session lifecycle: what `runtime.reset()` clears and how to keep event handlers.
+
+## Excludes
+- Artifact and repository access after setup: INFO-121
+- Custom agent classes: INFO-122
+- Delegation patterns: INFO-123
+- No-LLM mode and error handling: INFO-124
+- Events and usage tracking: INFO-125
+- End-to-end integration: INFO-126

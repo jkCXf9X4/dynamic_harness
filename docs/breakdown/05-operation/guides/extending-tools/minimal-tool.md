@@ -2,7 +2,7 @@
 id: INFO-106
 type: info
 title: Minimal Custom Tool
-summary: `python from dynamic_harness.core.tools import ToolDef, ToolRegistry
+summary: A minimal working tool, the required async function signature, and the key rules for tool functions.
 date: 2026-09-23
 status: current
 ---
@@ -48,3 +48,11 @@ async def tool_name(*, ctx, param1: type, param2: type = default) -> str:
 2. **Return type is always `str`** — the string becomes the tool result fed back to the LLM.
 3. **Async required** — all tool functions must be `async def`.
 4. **Parameters match the schema** — parameter names and types must correspond to `input_schema.properties`.
+
+## Owns
+- A minimal working tool and the required async function signature.
+- Key rules for tool functions.
+
+## Excludes
+- ToolContext access and terminal tools: `INFO-103`.
+- Registration and visibility: `INFO-107`.

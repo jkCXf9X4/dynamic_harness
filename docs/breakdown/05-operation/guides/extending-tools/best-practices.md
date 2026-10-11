@@ -20,3 +20,11 @@ Keep the schema and description as tight as the implementation.
 
 Prefer returning a short error string over raising: the model can read a failure
 message and retry, but an exception aborts the turn.
+
+## Owns
+- Tool shape guidance: naming, descriptions, input validation, simplicity, structured output.
+
+## Excludes
+- ToolDef field schema: `INFO-108`.
+- Registration and visibility: `INFO-107`.
+- ToolContext access: `INFO-103`.

@@ -1,39 +1,25 @@
 ---
 id: INFO-081
 type: info
-title: "G1 — VERIFY is prompt discipline, not a mechanism"
-category: meta
-summary: >
-  P0: the mandatory VERIFY step and plan acceptance criteria are never
-  mechanically checked; blind synthesis is undetectable.
-parent: "README.md"
+title: G1 — VERIFY is prompt discipline, not a mechanism
+summary: P0 (open, IMP-005): the mandatory VERIFY step and plan acceptance criteria are never mechanically checked.
 date: 2026-09-23
 status: current
 ---
 
-# G1. VERIFY is prompt discipline, not a mechanism; acceptance criteria are never checked
+# G1 — VERIFY is prompt discipline, not a mechanism
 
-**Severity:** P0 — breaks a core promise. **Status:** open.
+**Severity:** P0. **Status:** open — tracked by `IMP-005`.
 
-**Concept promise:** the mandatory `ANALYZE → DECOMPOSE → DELEGATE → VERIFY →
-SYNTHESIZE` loop (VISION), success criterion #1 "every sub-agent's output
-verified (artifact read, content confirmed)", and `plan`'s *acceptance criteria*
-are meant to gate termination.
-
-**Implementation:** the only mechanical check is `_has_deliverable`
-(`runtime.py:261-273`) — file *existence*, not content or correctness. The `plan`
+**Current state:** the only mechanical check is `_has_deliverable`
+(`runtime.py:261-273`) — file existence, not content or correctness. The `plan`
 tool records `acceptance` into the `FocusLedger` (`tools/planning.py:25-35`,
-`agent.py:220-242`), but **nothing ever evaluates them**. Blind synthesis
-(anti-patterns AP-3/AP-7) is undetectable by the runtime; "done" is whatever the
-agent's `report()` declares.
+`agent.py:220-242`), but nothing evaluates them. Blind synthesis is undetectable
+by the runtime; "done" is whatever the agent's `report()` declares.
 
-**Breaks:** every use-case that relies on "verify before synthesize" as a
-guarantee — most directly `../../01-product/use-cases/repository-analysis.md`
-§Verification, and the whole evaluation-and-qa family (which currently works only
-because the *benchmark* adds its own verifier).
+## Owns
+- G1 gap state: no mechanical verification of acceptance criteria.
 
-**Fix direction:** a report-time acceptance check — e.g. the parent's
-`read_artifact` + a mechanical "does the artifact mention the acceptance terms /
-does it exist and is non-empty" gate on children that declared
-`plan(acceptance=...)`, plus a runtime flag `verify_children=true` that
-re-delegates or escalates a child whose acceptance criteria are unmet.
+## Excludes
+- The fix (report-time acceptance gate): `IMP-005`.
+- Use-cases that rely on verify-before-synthesize: `INFO-027`, `INFO-023`.

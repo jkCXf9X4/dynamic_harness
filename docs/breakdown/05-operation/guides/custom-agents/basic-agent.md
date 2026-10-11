@@ -2,7 +2,7 @@
 id: INFO-096
 type: info
 title: Basic Custom Agent
-summary: `python from dynamic_harness.core.agent import Agent
+summary: Subclass Agent, override run(), register the class, and delegate by name
 date: 2026-09-23
 status: current
 ---
@@ -37,3 +37,11 @@ runtime.register_agent_class("my_agent", MyAgent)
 agent = runtime.delegate(task, agent_type="my_agent")
 await agent.run()
 ```
+
+## Owns
+- The minimal custom agent pattern: subclass Agent, override run(), register the class, delegate by name.
+
+## Excludes
+- Per-agent state and _run_loop overrides: INFO-097
+- Replacing the execution loop and pre/post hooks: INFO-099
+- Choosing which override to use: INFO-101

@@ -1,13 +1,10 @@
 ---
 id: INFO-018
 type: info
-title: "FR-1 — Prompt-only terminal"
-category: requirement
+title: "FR-1. Prompt-only terminal"
 summary: >
   The terminal accepts a task prompt, prints the final outcome and an aggregate,
   and renders no live dashboard.
-related:
-  - direction.md
 date: 2026-09-23
 status: current
 ---
@@ -20,3 +17,7 @@ status: current
   state file paths.
 - **FR-1.3** No live dashboard (no Rich `Live`, no tree/status rendered to the
   terminal during the run).
+
+## Related
+
+- `INFO-014` — why the CLI is minimal and prompt-only

@@ -19,8 +19,8 @@ ACTIVE                        members work in workspace; founder absent
    │
    ├── unresolved dispute escalated with resolve_as=dispute
    │      ▼
-   │   ARBITRATING             founder arbitrates once (exception): converse →
-   │   │   ok?  ──> ACTIVE     disconnect → revise membership
+   │   ARBITRATING             founder arbitrates once (exception): converse to
+   │   │   ok?  ──> ACTIVE     disconnect to revise membership
    │   │            └──> DISBANDED (structural conflict)
    │   └── founder may also: assign fresh worker, dissolve + re-delegate
    │

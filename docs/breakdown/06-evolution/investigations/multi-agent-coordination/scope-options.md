@@ -2,7 +2,7 @@
 id: INFO-175
 type: info
 title: Collaboration Scope Options (A/B/C)
-summary: Three candidate scopes for moving from complicated decomposition to complex coordination. A is REJECTED; work continues on B and C. Either a parent re…
+summary: Three candidate scopes for moving from complicated decomposition to complex coordination. A (parent relays) is REJECTED; work continues on B (siblings message) and C (bounded shared workspace with a chair).
 date: 2026-09-28
 status: current
 ---
@@ -12,10 +12,10 @@ status: current
 Three candidate scopes for moving from complicated decomposition to complex
 coordination. **A is REJECTED**; work continues on **B** and **C**. Either a
 parent relays (A), siblings message each other (B), or a bounded shared workspace
-with a chair (C). Full decision: AD-001 (`product-breakdown/06-evolution/investigations/decisions/AD-001.md`).
+with a chair (C). Full decision: `AD-001`.
 
 ## A. Stay parent-mediated (enhance `stream_children` + `converse`) — REJECTED
-All child↔child interaction is relayed through the parent. The parent holds
+All child to child interaction is relayed through the parent. The parent holds
 summaries, decides who needs what, and pushes each child via `converse`;
 optionally adds parent-side diagnosis + a mechanical deliverable check (G1/G7).
 
@@ -26,7 +26,7 @@ contexts); smallest implementation/test surface; partial capability already
 shipped (`config.py:265`, `agent.py:1374/1410/1461`).
 
 **Cons:** parent is the bottleneck and single point of failure; every round-trip
-burns a parent LLM turn → context rot (needs a max-coordination-turns guardrail
+burns a parent LLM turn, causing context rot (needs a max-coordination-turns guardrail
 or it becomes monolithic); latency coupling (one child settling wakes the parent
 before the next proceeds — inverse of parallelism); "solve together" stays
 shallow (intermediate results round-trip through the parent, which sees only
@@ -51,9 +51,10 @@ pairs).
 
 **Cons:** violates the core invariant (context encapsulation is a deliberate
 quality mechanism; cross-branch contamination becomes possible); needs a
-permission model (who may message whom, revocable) → scope creep; new A↔B↔A
-churn not caught by the per-agent repeated-call detector → needs cycle detection;
-provenance/graph complexity (track inter-agent messages + parent→child edges);
+permission model (who may message whom, revocable), inviting scope creep; new
+A to B to A churn not caught by the per-agent repeated-call detector, so needs
+cycle detection; provenance/graph complexity (track inter-agent messages +
+parent to child edges);
 recipient context budget (flooding needs inbox limits, reintroducing a broker);
 large test-surface growth, mock determinism harder.
 

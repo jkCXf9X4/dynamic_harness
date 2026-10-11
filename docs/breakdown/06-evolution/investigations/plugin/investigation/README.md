@@ -1,7 +1,5 @@
 ---
 title: "Investigation — Interface Economy: Decoupling Toward a Plugin-Ready Structure"
-category: investigation
-status: open
 summary: >
   Direction work for making Dynamic Harness' internals decoupled and isolated:
   a minimal set of narrow, stable common interfaces between components, so the
@@ -9,7 +7,7 @@ summary: >
   late code injection.
 ---
 
-# Interface Economy: Decoupling Toward a Plugin-Ready Structure
+# Investigation — Interface Economy: Decoupling Toward a Plugin-Ready Structure
 
 Investigation of a **structural goal**: establish and **minimize** the common
 interfaces between internal components, and decouple/isolate them behind those
@@ -19,9 +17,10 @@ interfaces. Plugin-ready *structure* is the target; a loader is out of scope.
 - The interface-economy direction, its motivating context, the seam inventory, the ~7-interface target set, rulings, options, next steps, and success criteria.
 
 ## Excludes
-- Runtime-coupled API docs → `../../../../docs/api/`; external porting / MCP transport → `../../../00-intent/platform-evaluation.md`.
+- Runtime-coupled API docs: repo `docs/api/` (outside the breakdown).
+- External porting / MCP transport: platform-evaluation investigation (`INFO-011`, `INFO-012`).
 
-Decisions: `AD-007` (archive); DL-8, DL-9.
+Decisions: `AD-007` (archive; legacy DL-8). Policy extraction (legacy DL-9) is this investigation's own state.
 
 ## Contents
 
@@ -37,7 +36,7 @@ Decisions: `AD-007` (archive); DL-8, DL-9.
 - **INFO-186** [Plugin Direction — Current Interface Inventory](interface-inventory.md) — The seams that exist today and the observed couplings that make them incidental rather than minimal.
 - **INFO-187** [Plugin Direction — Target Common-Interface Set (~7)](interface-set.md) — The seven interfaces that constitute the target; success means the count holds while couplings are removed.
 - **INFO-188** [Plugin Direction — Motivating Context](motivation.md) — The seed suggestion, the reactive-policy reference model, and the purpose ruling: internal-structure enablement; external porting out of scope.
-- **INFO-189** [Plugin Direction — Investigation Next Steps](next-steps.md) — The completed checklist that carried the direction from question to implemented pilot seam.
+- **INFO-189** [Plugin Direction — Investigation Next Steps](next-steps.md) — Open items for the plugin direction: one registration contract (with per-agent scope key) and a per-request tool snapshot.
 - **INFO-190** [Plugin Direction — Design Space / Options](options.md) — Three options weighed: loader (out of scope), seam-first refactor (recommended), two-worlds (out of scope here).
 - **INFO-191** [Plugin Direction — Resolved Rulings 1–4](rulings.md) — ToolContext single+narrowed, policy-application split, no stdlib descriptor conversion, no discovery in tests.
 - **INFO-192** [Plugin Direction — Success Criteria](success-criteria.md) — Six measurable criteria for the interface-economy direction.

@@ -2,7 +2,7 @@
 id: INFO-109
 type: info
 title: Configuration
-summary: Settings (model, base URL, provider blacklist, safety limits) live in a dynamic_harness.json. Config is layered so one common base can be shared across projects and overr…
+summary: Settings (model, base URL, provider blacklist, safety limits) live in dynamic_harness.json, layered so a common base is shared across projects and overridden per-project.
 date: 2026-09-23
 status: current
 ---
@@ -45,3 +45,9 @@ EOF
 
 See `INFO-113` for per-project overrides and
 `max_agent_tokens`.
+
+## Owns
+- Config file locations and layering: common base, local overlay, deep-merge rules.
+
+## Excludes
+- Per-project override workflow (`INFO-113`).

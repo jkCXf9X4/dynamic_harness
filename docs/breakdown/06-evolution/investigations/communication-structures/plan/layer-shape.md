@@ -2,19 +2,18 @@
 id: INFO-072
 type: info
 title: "Plan — Why a Layer, the Package, and Topology Mapping"
-category: investigation / plan
-parent: "README.md"
-summary: The verified baseline ("What already exists") is one implicit router — reaches any agent by ID , gated only by target status. There is no parent-media…
+summary: "Why a routing layer is needed (the verified baseline is one implicit router), the `core/comms/` package layout, and the topology to backend mapping."
 date: 2026-09-23
 status: current
 ---
 
-# Why a layer, the package, and topology mapping
+
+# Plan — Why a Layer, the Package, and Topology Mapping
 
 ## Why a layer at all
 
-The verified baseline (`../INVESTIGATION.md`, "What already exists") is **one
-implicit router** — `converse` reaches any agent by ID (`get_other_agent` →
+The verified baseline (`INFO-064`, "What already exists") is **one
+implicit router** — `converse` reaches any agent by ID (`get_other_agent` to
 `runtime.get_agent`), gated only by target status. There is no parent-mediation
 gate, no sibling-scope gate, no mailbox, no topic registry, so the four
 topologies cannot be toggled today; they must be *constructed*. The cheapest
@@ -48,14 +47,14 @@ comms/
 Tool defs live with the other tools in `core/tools/comms.py` — host wiring, not
 part of the host-agnostic `comms/` package.
 
-## Topology → backend mapping
+## Topology to backend mapping
 
 | Cell | Backend | Routing decision | Subscription meaning | Registration authority |
 |------|---------|------------------|----------------------|------------------------|
-| 1 Parent-mediated | `relay.py` | Named peer not the parent → rewrite to common parent; parent may forward | n/a — tools refuse ("no topic channels") | n/a |
+| 1 Parent-mediated | `relay.py` | Named peer not the parent, rewrite to common parent; parent may forward | n/a — tools refuse ("no topic channels") | n/a |
 | 2 Same-parent siblings | `siblings.py` | `message` target must be a same-parent peer; parent stays authority at the boundary | n/a — tools refuse | n/a |
-| 3 One shared channel | `shared.py` | Post → the one topic's subscribers; per-agent delta reads | Universal by construction; `subscribe` is a no-op success | n/a |
-| 4 Topic channels | `topics.py` | Post → topic subscribers; `join`/`subscribe` gated by `ChannelPolicy` | The load-bearing routing choice — digest membership = subscription | parent-authorized (default) vs anarchic — run both |
+| 3 One shared channel | `shared.py` | Post to the one topic's subscribers; per-agent delta reads | Universal by construction; `subscribe` is a no-op success | n/a |
+| 4 Topic channels | `topics.py` | Post to topic subscribers; `join`/`subscribe` gated by `ChannelPolicy` | The load-bearing routing choice — digest membership = subscription | parent-authorized (default) vs anarchic — run both |
 | today (baseline) | *(none — implicit)* | Any agent by ID, blocking RPC | n/a | n/a |
 
 Cell 3 is **cell 4 with a single topic + universal subscription + per-agent

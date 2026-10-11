@@ -1,6 +1,6 @@
 ---
 title: Management Theory — Communication & Facilitation
-summary: The theory survey behind the multi-agent coordination design (parent introduces siblings, children collaborate directly). Every theory is followed by…
+summary: The theory survey behind the multi-agent coordination design (parent introduces siblings, children collaborate directly). Every theory is followed by a design translation onto the agent runtime.
 ---
 
 # Management Theory — Communication & Facilitation
@@ -8,7 +8,7 @@ summary: The theory survey behind the multi-agent coordination design (parent in
 The theory survey behind the multi-agent coordination design (parent introduces
 siblings, children collaborate directly). Every theory is followed by a "design
 translation" onto the agent runtime. Parent record:
-[../INVESTIGATION.md](../INVESTIGATION.md).
+`INFO-148`.
 
 **Central claim.** The management literature converges on one idea: the leader's
 communication job is to **design the conditions for direct collaboration** —
@@ -28,5 +28,5 @@ rejected option A and validates the "introduce, don't mediate" model.
 - **INFO-167** [Mechanisms and Rituals for Facilitating Communication](mechanisms-and-rituals.md) — Section 4 of the management-theory survey. Index: README.md
 - **INFO-168** [Playbook: The "Introduce, Don't Mediate" Parent](playbook.md) — Sections 6–7 of the management-theory survey. Index: README.md
 - **INFO-169** [References and Term Mapping](references.md) — Section 8 + appendix of the management-theory survey. Index: README.md
-- **INFO-170** [Synthesis: What the Theory Says](synthesis.md) — Section 5 of the management-theory survey. Index: README.md. One line per theory: key idea → leadership act → agent design principle
+- **INFO-170** [Synthesis: What the Theory Says](synthesis.md) — Section 5 of the management-theory survey. Index: README.md. One line per theory: key idea to leadership act to agent design principle
 <!-- pb:index:end -->

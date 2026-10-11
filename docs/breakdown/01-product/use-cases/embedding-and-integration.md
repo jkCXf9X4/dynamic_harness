@@ -1,16 +1,10 @@
 ---
 id: INFO-022
 type: info
-title: "Use-Case — Embedding & Integration"
-category: use-case
+title: "Embedding & Integration"
 summary: >
   Dynamic Harness as a library inside a product or pipeline: the Harness /
   Runtime API, custom agent classes, custom tools, and event-handler wiring.
-related:
-  - ../../../docs/api/runtime.md
-  - ../../05-operation/guides/programmatic-usage/README.md
-  - ../../05-operation/guides/custom-agents/README.md
-  - ../../05-operation/guides/extending-tools/README.md
 date: 2026-09-22
 status: current
 ---

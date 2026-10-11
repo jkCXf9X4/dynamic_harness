@@ -2,14 +2,10 @@
 id: INFO-003
 type: info
 title: "Gaps and Positioning"
-category: meta
 summary: >
   The two pillars where enforcement is not yet mechanized (verification G1,
   budgeting G8), the enforced/distinctive scoreboard, and the defensible
   "only-us" positioning.
-parent: "README.md"
-related:
-  - ../../04-verification/gap-analysis/README.md
 date: 2026-09-23
 status: current
 ---
@@ -18,7 +14,7 @@ status: current
 
 ## Honest open gaps
 
-Gap analysis (`gap-analysis`) flags two pillars
+Gap analysis flags two pillars
 where enforcement is *not yet* mechanized — the weakest differentiation claims
 today:
 

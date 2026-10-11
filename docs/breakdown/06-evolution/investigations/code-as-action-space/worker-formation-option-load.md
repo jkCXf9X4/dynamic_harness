@@ -2,7 +2,7 @@
 id: INFO-147
 type: info
 title: Worker formation and option load
-summary: lets any agent set up groups of collaborating workers — or standalone subagents — cheaply and structurally, addressing both complicated (breakdown/dec…
+summary: "Does cheap worker formation via `invoke(code)` confound the agent? The option-overload risk is inverted by model class: frontier agents rarely choke on options, weaker agents do and need a narrower surface."
 date: 2026-09-28
 status: current
 ---
@@ -93,6 +93,5 @@ design opinion.
 - `INFO-146` — the hybrid design; §5 decision gate
 - `INFO-144` — the communication
   variant probe surface this composes with
-- capability-scope (`product-breakdown/06-evolution/multi-agent-coordination/capability-scope.md`) —
-  founding boundary-scoped, participation universal (who may form groups)
+- `INFO-149` (capability-scope) — founding boundary-scoped, participation universal (who may form groups)
 - AgentSpawn arXiv:2602.07072 — adaptive spawning economics

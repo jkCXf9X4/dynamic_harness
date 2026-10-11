@@ -2,15 +2,13 @@
 id: INFO-183
 type: info
 title: "Plugin Direction — Decisions Q1–Q7"
-category: investigation
-parent: "README.md"
 summary: >
   The seven decisions from review of the initial draft.
 date: 2026-09-28
 status: current
 ---
 
-# Decisions (from review of the initial draft)
+# Plugin Direction — Decisions Q1–Q7
 
 - **Q1 — Purpose:** porting/adaptation of the current project structure into a
   more decoupled and manageable codebase; external porting is out of scope.

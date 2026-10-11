@@ -2,7 +2,7 @@
 id: INFO-124
 type: info
 title: No-LLM Mode & Error Handling
-summary: If you skip , agents enter no-LLM mode
+summary: No-LLM mode behavior and how to inspect failed or escalated task results
 date: 2026-09-23
 status: current
 ---
@@ -23,9 +23,9 @@ await agent.run()
 # agent._last_failure.error == "No LLM provider configured"
 ```
 
-No-LLM mode does **not** produce a report — the agent fails immediately with
-`"No LLM provider configured"`. It is only useful for verifying tool/runtime
-infrastructure, not for producing output.
+- No-LLM mode produces no report.
+- The agent fails immediately with `"No LLM provider configured"`.
+- Use it to verify tool and runtime infrastructure, not to produce output.
 
 ## Error Handling
 
@@ -40,3 +40,15 @@ if agent.task.status == TaskStatus.failed:
 elif agent.task.status == TaskStatus.escalated:
     print(f"Escalated — needs parent intervention")
 ```
+
+## Owns
+
+- No-LLM mode behavior when no LLM provider is configured
+- Inspecting failed or escalated task results via `agent.task.status` and `agent._last_failure`
+
+## Excludes
+
+- Runtime construction and LLM provider setup: INFO-127
+- Delegation patterns and task decomposition: INFO-123
+- Event handling and usage tracking: INFO-125
+- End-to-end integration: INFO-126

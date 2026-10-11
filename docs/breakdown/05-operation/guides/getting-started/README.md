@@ -1,14 +1,6 @@
 ---
 title: "Getting Started"
-category: guide
-difficulty: beginner
-summary: >
-  Quick start guide for Dynamic Harness. Covers installation, environment
-  setup, running your first task, and understanding the output.
-related:
-  - ../../../../docs/api/runtime.md
-  - ../../../../docs/api/agent.md
-  - ../../../02-architecture/concepts/delegation-model.md
+summary: Quick start for Dynamic Harness: install, environment setup, first task, and output.
 ---
 
 # Getting Started (Index)
@@ -28,11 +20,11 @@ Next: [agent methodology](../../../02-architecture/methodology/README.md),
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
-- **INFO-109** [Configuration](configuration.md) — Settings (model, base URL, provider blacklist, safety limits) live in a dynamic_harness.json. Config is layered so one common base can be shared across projects and overr…
-- **INFO-110** [Your First Task](first-run.md) — Your First Task
-- **INFO-111** [Install & Environment](install-and-setup.md) — Python 3.10 or later
-- **INFO-112** [Understanding the Output](output.md) — When an agent completes, the CLI shows a compact outcome
+- **INFO-109** [Configuration](configuration.md) — Settings (model, base URL, provider blacklist, safety limits) live in dynamic_harness.json, layered so a common base is shared across projects and overridden per-project.
+- **INFO-110** [Your First Task](first-run.md) — Run a first task in the interactive terminal, single-shot mode, or no-LLM mode.
+- **INFO-111** [Install & Environment](install-and-setup.md) — Install Dynamic Harness with uv or pip and set the API key in the environment.
+- **INFO-112** [Understanding the Output](output.md) — The CLI shows a compact outcome per agent and persists the full run overview to the run directory.
 - **INFO-113** [Project-Local Overrides](project-overrides.md) — Copy the template into the project and edit only the keys you need — they override the common base
 - **INFO-114** [Terminal Commands](terminal-commands.md) — Slash commands available in the interactive terminal
-- **INFO-115** [Common Issues](troubleshooting.md) — Ensure or is set in your shell config (e.g. ), or pass on the command line
+- **INFO-115** [Common Issues](troubleshooting.md) — Fix common issues: missing API key, missing config file, runaway agents, high token costs.
 <!-- pb:index:end -->

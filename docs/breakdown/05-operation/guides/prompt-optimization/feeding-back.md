@@ -2,7 +2,7 @@
 id: INFO-129
 type: info
 title: Feeding the Optimized Prompt Back
-summary: The application loads its default system prompt at import time
+summary: Three ways to apply the winning prompt: replace the seed file, per-agent override, or task-level override
 date: 2026-09-23
 status: current
 ---
@@ -57,3 +57,11 @@ that first label line so only the prompt body is used:
 ```bash
 tail -n +2 .optimize_benchmarks/best_prompt.txt > src/dynamic_harness/core/agent_system_prompt.txt
 ```
+
+## Owns
+- How to apply the winning prompt: seed-file replace, per-agent override, task-level override
+- The `### VARIANT` header caveat when writing `best_prompt.txt` into the seed file
+
+## Excludes
+- Where the winning prompt is produced: `INFO-131`
+- How the optimization run works: `INFO-135`

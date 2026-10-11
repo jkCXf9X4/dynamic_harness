@@ -1,21 +1,28 @@
 ---
 title: Plugin Investigation
-summary: "Interface-economy investigation feeding DL-8/DL-9 and AD-007: the runtime's plugin direction is a small set of host-agnostic seams with no loader / no…"
+summary: "Interface-economy investigation feeding DL-8/DL-9 and AD-007: the runtime's plugin direction is a small set of host-agnostic seams with no loader / no late injection."
 ---
 
 # Plugin Investigation
 
-Interface-economy investigation feeding [DL-8/DL-9](../../decision-log.md) and
-`AD-007` (archive): the runtime's plugin direction is a small set
-of host-agnostic seams with **no loader / no late injection**.
+Interface-economy investigation feeding DL-8/DL-9 (legacy decision log,
+retired to archive) and `AD-007` (archive): the runtime's plugin direction is
+a small set of host-agnostic seams with **no loader / no late injection**.
+
+## Chain status
+
+- **Question** — present, in `INFO-185` and `INFO-188`.
+- **Plan** — present, in `INFO-190` and `INFO-183`.
+- **Findings** — present, in `INFO-186`, `INFO-187`, `INFO-181`, `INFO-180`, `INFO-179`, `INFO-184`, `INFO-182`.
+- **Results** — present, in `INFO-192`; pilot seam implemented, two adopt items open in `INFO-189`.
 
 | Part | Leaves |
 |---|---|
-| Goal, motive, target | [goal](investigation/goal.md), [motivation](investigation/motivation.md), [target](investigation/target.md) |
-| Options & rulings | [options](investigation/options.md), [decisions](investigation/decisions.md), [rulings](investigation/rulings.md) |
-| Interface economy | [interface-inventory](investigation/interface-inventory.md), [interface-set](investigation/interface-set.md), [design-comparison](investigation/design-comparison.md), [context-architecture](investigation/context-architecture.md) |
-| Seam audits | [tool-context](investigation/audit-tool-context.md), [policies](investigation/audit-policies.md), [other seams](investigation/audit-other-seams.md) |
-| Next steps & success | [next-steps](investigation/next-steps.md), [success-criteria](investigation/success-criteria.md) |
+| Goal, motive, target | `INFO-185`, `INFO-188`, `INFO-193` |
+| Options & rulings | `INFO-190`, `INFO-183`, `INFO-191` |
+| Interface economy | `INFO-186`, `INFO-187`, `INFO-184`, `INFO-182` |
+| Seam audits | `INFO-181`, `INFO-180`, `INFO-179` |
+| Next steps & success | `INFO-189`, `INFO-192` |
 
 ## Contents
 

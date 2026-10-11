@@ -2,7 +2,7 @@
 id: INFO-105
 type: info
 title: "Example: Notification Tool"
-summary: `python import json
+summary: A complete notification tool that writes to a JSONL log: ToolDef, async handler, and registration.
 date: 2026-09-23
 status: current
 ---
@@ -46,3 +46,10 @@ async def _tool_notify(*, ctx, channel: str, message: str, severity: str = "info
 
 runtime.tool_registry.register(TOOL_NOTIFY, _tool_notify)
 ```
+
+## Owns
+- A complete notification tool example that writes to a JSONL log.
+
+## Excludes
+- ToolDef field schema: `INFO-108`.
+- Tool shape guidance: `INFO-102`.

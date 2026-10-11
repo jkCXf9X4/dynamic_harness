@@ -2,7 +2,7 @@
 id: INFO-046
 type: info
 title: Design Rationale
-summary: Self-healing recovers an agent run that did not produce its intended deliverable without restarting the whole task. The goal is to salvage healthy wor…
+summary: Self-healing recovers an agent run that did not produce its deliverable without restarting the task, salvaging healthy work while never grinding a poisoned context
 date: 2026-09-23
 status: current
 ---
@@ -24,14 +24,14 @@ So self-healing must **not** be a blanket "always resume the same agent." It is 
 **diagnosis-driven policy**:
 
 - If the agent stopped because of a *blunt, recoverable* mistake on an otherwise
-  healthy context → **resume the same agent** (cheap, salvages its context).
+  healthy context, **resume the same agent** (cheap, salvages its context).
 - If the agent stopped because its *context itself is the problem* (repeated
-  identical calls, max iterations) → **start a fresh worker** over the same task
+  identical calls, max iterations), **start a fresh worker** over the same task
   (freshness fixes rot; on-disk artifacts preserve progress).
-- If the agent hit its **wall-clock budget** (`safety.timeout_seconds`) → it is
+- If the agent hit its **wall-clock budget** (`safety.timeout_seconds`), it is
   **never self-healed** (see `INFO-051`); the parent
   decides.
-- If the failure is structural (task impossible, bad spec) → **escalate**.
+- If the failure is structural (task impossible, bad spec), **escalate**.
 
 ## Why Deterministic Runtime Logic, Not Prompt Text
 

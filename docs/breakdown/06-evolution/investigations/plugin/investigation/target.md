@@ -2,15 +2,13 @@
 id: INFO-193
 type: info
 title: "Plugin Direction — Target Definition"
-category: investigation
-parent: "README.md"
 summary: >
   Interface economy: a small, stable set of narrow contracts. Six properties.
 date: 2026-09-28
 status: current
 ---
 
-# The target (working definition)
+# Plugin Direction — Target Definition
 
 Not a plugin manifest/activation lifecycle. The target is **interface
 economy** — a small, stable set of narrow contracts, with these properties:

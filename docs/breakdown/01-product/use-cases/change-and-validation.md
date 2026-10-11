@@ -1,16 +1,11 @@
 ---
 id: INFO-020
 type: info
-title: "Use-Case — Change & Validation"
-category: use-case
+title: "Change & Validation"
 summary: >
   Work that modifies a codebase and must be proven correct: bug fixes with
   verification, test-authoring for coverage, cross-cutting refactors, and small
   self-contained code generation.
-related:
-  - ../../02-architecture/concepts/delegation-model/README.md
-  - ../../02-architecture/concepts/agent-lifecycle/README.md
-  - ../../02-architecture/concepts/self-healing/README.md
 date: 2026-09-22
 status: current
 ---
@@ -30,10 +25,10 @@ then the relevant tests — often **leaf-to-small-orchestration**, not deep tree
 **Why it fits:** bounded and *verify-first*; the acceptance criterion ("tests
 pass") is built into the task, so `report()` claims a real, checked result.
 
-**Flow:** `read` the module(s) + tests → `edit` (surgical) or `write` (whole-file)
-the fix → `bash pytest tests/test_auth.py` → `report` with the fix, `pytest`
-result, and `files_written`. Red → re-read, adjust, re-run (Layer 0); repeated
-identical write → detection (Layer 3).
+**Flow:** `read` the module(s) + tests, then `edit` (surgical) or `write`
+(whole-file) the fix, then `bash pytest tests/test_auth.py`, then `report` with
+the fix, `pytest` result, and `files_written`. Red: re-read, adjust, re-run
+(Layer 0); repeated identical write: detection (Layer 3).
 
 ## Scenario B — Test-coverage authoring (benchmark `codegen` shape)
 
@@ -45,8 +40,8 @@ identical write → detection (Layer 3).
 
 **Why it fits:** verifiable output (passing tests), a hard scope boundary on
 implementation code, and a repeatable pattern — the benchmark's `codegen` ground
-truth is *the tests actually passing*. **Flow:** `read` the functions → `read` an
-existing test file for conventions → `write`/`edit` new tests → `bash pytest` →
+truth is *the tests actually passing*. **Flow:** `read` the functions, `read` an
+existing test file for conventions, `write`/`edit` new tests, `bash pytest`,
 `report` with the coverage number.
 
 ## Scenario C — Cross-cutting refactor (orchestrator)

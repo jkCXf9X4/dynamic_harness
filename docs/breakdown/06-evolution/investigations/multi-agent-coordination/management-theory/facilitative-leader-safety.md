@@ -28,7 +28,7 @@ strangers). The meta-skill is **routing knowledge to where it's needed** — a
 the **knowledge broker**: it holds the directory (children + their scopes), and
 `introduce` is a **directory lookup + route** ("child A needs what child B
 knows"). TMS warns that *disrupting* the group edge (constant reshuffling,
-re-delegating the same knowledge to fresh strangers) is costly → keep the
+re-delegating the same knowledge to fresh strangers) is costly, so keep the
 `max_same_target_delegations`-style protection but extend the spirit: **prefer
 introducing to a live child over spawning a fresh one.**
 
@@ -47,7 +47,7 @@ Children must be able to admit a gap (`ask`), challenge a sibling's data
 (escalate), decline an introduction, and correct their own report without
 punishment. The existing `fail`/`escalate` paths are the safety valve; make
 *surfacing* cheaper than *hiding* — children that ask for help are routed to an
-introduction, not punished. Structure & clarity → every introduction carries a
+introduction, not punished. Structure & clarity: every introduction carries a
 *why*; every delegation carries role + acceptance criteria. Ambiguous membership
 is fatal — hence explicit group boundaries.
 

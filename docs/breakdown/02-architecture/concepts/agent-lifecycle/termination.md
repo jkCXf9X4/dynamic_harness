@@ -2,7 +2,7 @@
 id: INFO-032
 type: info
 title: Termination & Resumption
-summary: Three terminal paths, all triggered by tool calls, plus automatic safety force-fails. After termination the agent's history and last report stay acces…
+summary: Three terminal paths, all triggered by tool calls, plus automatic safety force-fails; after termination the agent's history and last report stay accessible
 date: 2026-09-23
 status: current
 ---

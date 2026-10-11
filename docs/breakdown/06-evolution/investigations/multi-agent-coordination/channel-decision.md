@@ -2,7 +2,7 @@
 id: INFO-150
 type: info
 title: "Channel Decision: Workspace-Primary, Messages-as-Exception"
-summary: The collaboration channel is a shared, scoped workspace as the primary substrate; peer messages are the scarce, bounded exception used only for equivo…
+summary: The collaboration channel is a shared, scoped workspace as the primary substrate; peer messages are the scarce, bounded exception, used only for equivocal coordination.
 date: 2026-09-28
 status: current
 ---
@@ -11,16 +11,16 @@ status: current
 
 The collaboration channel is a shared, scoped workspace as the primary
 substrate; peer messages are the scarce, bounded exception used only for
-*equivocal* coordination. Decisions: AD-003 (`product-breakdown/06-evolution/investigations/decisions/AD-003.md`). Theory
+*equivocal* coordination. Decisions: `AD-003`. Theory
 anchors: `INFO-151`.
 
 ## Decision rules
-1. **To share a result, a finding, or a constraint → write/read the workspace.**
+1. **To share a result, a finding, or a constraint: write/read the workspace.**
    No message needed. The artifact is the boundary object; "coordination without
    consensus" applies.
-2. **To route or ask "who knows this?" → a message that points to the
+2. **To route or ask "who knows this?": a message that points to the
    workspace** (ID + why), not a payload (mirrors REQ-4). TMS retrieval.
-3. **To reconcile conflicting interpretations / demand a revision → messages**,
+3. **To reconcile conflicting interpretations / demand a revision: messages**,
    the rich channel, but bounded per-pair and hard-stopped on over-budget
    (REQ-6, REQ-9) when the exchange should escalate to the parent or a fresh
    worker.

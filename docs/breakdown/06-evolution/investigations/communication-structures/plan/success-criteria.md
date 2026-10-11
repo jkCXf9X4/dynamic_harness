@@ -1,15 +1,14 @@
 ---
 id: INFO-076
 type: info
-title: "Plan — Implementation Success Criteria"
-category: investigation / plan
-parent: "README.md"
-summary: comms tools' schemas never change across cells. guards as every other cell; its measured cost is the verdict. under the default topology. shows two re…
+title: Plan — Implementation Success Criteria
+summary: "Implementation success criteria. One-config switching, no safety exemptions, back-compat proven, mock-first determinism, and a report that answers the cost question with five-axis numbers."
 date: 2026-09-23
 status: current
 ---
 
-# Success criteria
+
+# Plan — Implementation Success Criteria
 
 1. **One-config switching:** each cell = one `communication.topology` value; the
    comms tools' schemas never change across cells.
@@ -22,4 +21,4 @@ status: current
    as variance, not asserted away.
 5. **The report answers** "does richer communication change completion/quality or
    only cost/context-health?" with the five-axis numbers per cell — feeding the
-   decision in `../../../06-evolution/investigations/multi-agent-coordination/`.
+   decision in the multi-agent-coordination investigation (`INFO-148`).

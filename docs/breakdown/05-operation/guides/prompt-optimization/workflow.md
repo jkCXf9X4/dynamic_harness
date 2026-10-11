@@ -2,7 +2,7 @@
 id: INFO-135
 type: info
 title: What This Does
-summary: Given the baseline prompt , an orchestrator agent runs a two-round A/B test
+summary: Given the baseline prompt (`src/dynamic_harness/core/agent_system_prompt.txt`), an orchestrator agent runs a two-round A/B test
 date: 2026-09-23
 status: current
 ---
@@ -28,3 +28,12 @@ general optimization (`scripts/run_optimize.py`), the dedicated prune/restore
 A/B (`scripts/run_prune_ab.py`), and the standalone CLI
 (`python -m dynamic_harness.benchmark.run`). There is no second,
 prose-embedded task list to keep in sync.
+
+## Owns
+- The two-round A/B-test workflow: variant generation, measurement, ranking, best-prompt output
+- The deterministic in-process measurement model (fresh `Runtime`, staged snapshot, failable verifier)
+
+## Excludes
+- What each task checks: `INFO-134`
+- How to run the optimization: `INFO-133`
+- What the run produces: `INFO-131`

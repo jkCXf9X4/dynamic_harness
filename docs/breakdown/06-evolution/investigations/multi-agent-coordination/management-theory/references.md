@@ -44,15 +44,15 @@ Section 8 + appendix of the management-theory survey. Index:
   Science Quarterly*.
 
 ## Appendix: mapping theory terms to agent-runtime vocabulary
-- Leader / manager → parent agent (enabler role)
-- Team membership → sibling set under a common parent, formalized by `introduce`
-- Context (the "why") → `intro_note` in `introduce`; roles; delegation description
-- Norms (Hackman) → guardrail policy objects (delivery caps, advisory semantics, yield rules)
-- Boundary-spanning signals → `[child settled]` events, artifact summaries, statuses
-- Shared consciousness → sibling-ID injection + scoped summary visibility
-- Knowledge broker / directory → parent's children map; `introduce` = lookup + route
-- Ritual / standup → settlement cadence; "persist before you speak" rule
-- Psychological safety → cheap, non-punitive `ask` / `escalate` / decline paths
-- Farming for dissent → deliberate contrarian/verifier introductions
-- Micromanagement (anti-pattern) → option A relaying — rejected
-- Unbounded peer-messaging (anti-pattern) → unconstrained option B — no real team boundary
+- Leader / manager to parent agent (enabler role)
+- Team membership to sibling set under a common parent, formalized by `introduce`
+- Context (the "why") to `intro_note` in `introduce`; roles; delegation description
+- Norms (Hackman) to guardrail policy objects (delivery caps, advisory semantics, yield rules)
+- Boundary-spanning signals to `[child settled]` events, artifact summaries, statuses
+- Shared consciousness to sibling-ID injection + scoped summary visibility
+- Knowledge broker / directory to parent's children map; `introduce` = lookup + route
+- Ritual / standup to settlement cadence; "persist before you speak" rule
+- Psychological safety to cheap, non-punitive `ask` / `escalate` / decline paths
+- Farming for dissent to deliberate contrarian/verifier introductions
+- Micromanagement (anti-pattern) to option A relaying — rejected
+- Unbounded peer-messaging (anti-pattern) to unconstrained option B — no real team boundary

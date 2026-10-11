@@ -1,14 +1,10 @@
 ---
 id: INFO-016
 type: info
-title: "FR-4..FR-6 — Operator evaluation, session continuity, traceability"
-category: requirement
+title: "FR-4..FR-6. Operator evaluation, session continuity, traceability"
 summary: >
   A quick plain-text tree for spotting stuck/runaway agents; the REPL keeps one
   root agent across turns; provenance and overview files survive the process.
-related:
-  - fr-persisted-overview.md
-  - direction.md
 date: 2026-09-23
 status: current
 ---
@@ -32,3 +28,8 @@ status: current
 
 - Provenance and overview files (traces, artifacts, commits, plus the overview
   files above) survive the process, so a run is fully auditable afterwards.
+
+## Related
+
+- `INFO-014` — why the CLI is minimal and prompt-only
+- `INFO-017` — the persisted overview files this FR reads

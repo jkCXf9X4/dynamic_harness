@@ -2,7 +2,7 @@
 id: INFO-039
 type: info
 title: When to Delegate
-summary: Before every tool call, an agent decides
+summary: Before every tool call, an agent decides: 0-1 calls on known targets it does itself, 2+ calls it delegates
 date: 2026-09-23
 status: current
 ---
@@ -22,8 +22,8 @@ Is this work a standalone unit?
 ```
 
 **Delegation anti-signals** — stop and delegate immediately if:
-- About to chain `grep` → multiple `read`s
-- About to chain `glob` → multiple `read`s
+- About to chain `grep` into multiple `read`s
+- About to chain `glob` into multiple `read`s
 - Made the same tool call 2+ times in this task
 
 ## Leaf vs Orchestrator

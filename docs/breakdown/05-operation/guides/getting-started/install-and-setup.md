@@ -2,7 +2,7 @@
 id: INFO-111
 type: info
 title: Install & Environment
-summary: Python 3.10 or later
+summary: Install Dynamic Harness with uv or pip and set the API key in the environment.
 date: 2026-09-23
 status: current
 ---
@@ -48,4 +48,11 @@ export OPENAI_API_KEY=sk-your-key-here
 
 # dynamic_harness.json
 {"root_model": "openai/gpt-4o", "providers": {"openai": {"env": ["OPENAI_API_KEY"], "base_url": "https://api.openai.com/v1"}}}
+
+## Owns
+- Prerequisites, installation with uv or pip, API key setup.
+
+## Excludes
+- Config file setup (`INFO-109`).
+- Common issues and fixes (`INFO-115`).
 ```

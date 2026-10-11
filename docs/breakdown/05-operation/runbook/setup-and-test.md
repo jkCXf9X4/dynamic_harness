@@ -2,7 +2,7 @@
 id: INFO-138
 type: info
 title: Setup & Test
-summary: "API key: (or OpenAI key) — read from the environment"
+summary: Install, configure, and test the runtime — API key, layered config, pytest, node-size check, pre-commit.
 date: 2026-09-23
 status: current
 ---
@@ -11,9 +11,17 @@ status: current
 
 ## Environment & Config
 
-- API key: `export OPENROUTER_API_KEY=sk-...` (or OpenAI key) — read from the environment.
-- Config is **layered**: common base `~/.config/dynamic_harness/dynamic_harness.json` merged field-by-field with local overlay `./dynamic_harness.json` (or `--config <path>`); deep-merged per section, scalars/lists replaced wholesale. Neither file present → built-in defaults. `dynamic_harness.json.example` is the template.
-- Key safety knobs: `safety.max_iterations`, `max_agent_tokens` (force-fail an agent past a token cap), `timeout_seconds`, `disable_root_timeout`, `max_agents`, `max_depth`, `max_same_target_delegations`. `agent.stream_children` enables streaming fan-out (opt-in, not default).
+- API key: `export OPENROUTER_API_KEY=sk-...` (or `OPENAI_API_KEY`) — read from the environment.
+- Config is **layered**:
+  - Common base `~/.config/dynamic_harness/dynamic_harness.json`.
+  - Local overlay `./dynamic_harness.json` (or `--config <path>`).
+  - Deep-merged per section; scalars and lists replaced wholesale.
+  - If neither file is present, built-in defaults apply.
+  - `dynamic_harness.json.example` is the template.
+- Key safety knobs:
+  - `safety.max_iterations`, `max_agent_tokens` (force-fail an agent past a token cap).
+  - `timeout_seconds`, `disable_root_timeout`, `max_agents`, `max_depth`, `max_same_target_delegations`.
+  - `agent.stream_children` enables streaming fan-out (opt-in, not default).
 
 ## Install
 
@@ -24,7 +32,7 @@ pip install -e .
 uv sync
 ```
 
-Entry point: `dynamic-harness` → `dynamic_harness.cli.terminal:main`. Programmatic: `python -m dynamic_harness` or the `Harness` API (see `programmatic-usage`).
+Entry point `dynamic-harness` resolves to `dynamic_harness.cli.terminal:main`. Programmatic: `python -m dynamic_harness` or the `Harness` API (see `programmatic-usage`).
 
 ## Tests
 
@@ -32,7 +40,10 @@ Entry point: `dynamic-harness` → `dynamic_harness.cli.terminal:main`. Programm
 pytest            # from repo root; testpaths=["tests"]; asyncio_mode=auto
 ```
 
-With coverage: `pytest --cov --cov-report=term-missing` (coverage config in `pyproject.toml`, source = `src/dynamic_harness`). The suite currently passes ~466 tests (plugin pilot seam check). AGENTS.md: "Run tests: pytest from repo root."
+- With coverage: `pytest --cov --cov-report=term-missing`.
+  - Coverage config in `pyproject.toml`, source = `src/dynamic_harness`.
+  - The suite currently passes ~466 tests (plugin pilot seam check).
+  - AGENTS.md: "Run tests: pytest from repo root."
 
 ## Definition-State Check (node sizes)
 
@@ -41,7 +52,11 @@ PB=.agents/skills/product-breakdown/scripts/pb
 python3 "$PB" node-size --strict   # AD-009 node budget
 ```
 
-Every markdown file under `docs/breakdown/` is a node: index `README.md` ≤75 lines, leaf ≤75 lines (min ~10). Violations are resolved by trim → link → split; exemptions are listed in `docs/breakdown/pb.toml`. Run this after editing any `docs/breakdown/` node.
+- Every markdown file under `docs/breakdown/` is a node.
+  - Index `README.md` ≤75 lines, leaf ≤75 lines (min ~10).
+  - Violations are resolved by trim, then link, then split.
+  - Exemptions are listed in `docs/breakdown/pb.toml`.
+- Run this after editing any `docs/breakdown/` node.
 
 ## Lint / Format (pre-commit)
 
@@ -53,3 +68,10 @@ Every markdown file under `docs/breakdown/` is a node: index `README.md` ≤75 l
 pip install pre-commit && pre-commit install   # one-time
 pre-commit run --all-files                      # or: pre-commit run --files <path>
 ```
+
+## Owns
+- Install, config, and test procedure for the runtime.
+
+## Excludes
+- Release and build steps: `INFO-137`.
+- Benchmark run procedure: `INFO-136`.

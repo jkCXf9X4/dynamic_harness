@@ -1,17 +1,11 @@
 ---
 id: INFO-021
 type: info
-title: "Use-Case — Documentation & Knowledge"
-category: use-case
+title: "Documentation & Knowledge"
 summary: >
   Generate or refresh documentation from a codebase, map an API surface, and
-  curate a durable reference library — read→summarize→write flows and
+  curate a durable reference library — read, summarize, write flows and
   progressive disclosure, with the reference library as content not scaffolding.
-related:
-  - ../../02-architecture/concepts/artifact-system/README.md
-  - ../../02-architecture/concepts/self-healing/README.md
-  - ../../../docs/api/artifacts.md
-  - ../../02-architecture/methodology/README.md
 date: 2026-09-22
 status: current
 ---
@@ -64,8 +58,9 @@ summary, then `write` it — a **synthesis-only** workload over prior artifacts.
   follows the stated conventions; a hallucinated reference is a hard fail.
 - Reference-library edits: the new entry's heading matches the doc, and
   `discover_references()` still lists it (the index is derived).
-- Cross-cut claims ("these are the 19 tools") must equal the real registry count
-  — verify with `read` of `registration.py` or `list_tools`.
+- Cross-cutting tool-count claims must equal the live registry count — cite
+  `INFO-199` (tool registry inventory) and verify with `read` of
+  `registration.py` or `list_tools`.
 
 ## Fit checklist & caveats
 

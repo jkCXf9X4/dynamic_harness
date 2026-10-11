@@ -2,7 +2,7 @@
 id: INFO-054
 type: info
 title: "Execution Patterns: Good vs Bad"
-summary: The difference between grinding through work yourself and orchestrating sub-agents. One approach burns tokens and degrades focus; the other stays lean…
+summary: Grinding through work yourself burns tokens and degrades focus; orchestrating sub-agents stays lean and verified
 date: 2026-09-22
 status: current
 ---

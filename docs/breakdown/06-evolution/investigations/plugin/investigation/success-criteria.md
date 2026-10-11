@@ -2,22 +2,20 @@
 id: INFO-192
 type: info
 title: "Plugin Direction — Success Criteria"
-category: investigation
-parent: "README.md"
 summary: >
   Six measurable criteria for the interface-economy direction.
 date: 2026-09-28
 status: current
 ---
 
-# Success criteria (measurement)
+# Plugin Direction — Success Criteria
 
 1. **The count holds ≈7.** The common-interface set in
    `INFO-187` does not grow while couplings are
    removed — refactors narrow or trade shapes, never add contracts.
 2. **No outside private-state reach.** No module outside `Agent` touches
    `agent._*` (audit `rg "\._agent\b"` in `core/tools/` + `core/tool_context.py`
-   → only public methods/properties). `Runtime._*` reach is confined to Runtime
+   shows only public methods/properties). `Runtime._*` reach is confined to Runtime
    itself and its registered policies.
 3. **One canonical map.** `Runtime.installed_components()` answers "what the
    host accepts" for tools, policies, agent classes, handlers, and the LLM —

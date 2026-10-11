@@ -2,7 +2,7 @@
 id: INFO-174
 type: info
 title: Requirements — Steering, Safety, Commons (REQ-8..15)
-summary: Continued from requirements-group.md. Theory behind each requirement in brackets
+summary: Continued from `INFO-173`. Theory behind each requirement in brackets
 date: 2026-09-28
 status: current
 ---
@@ -18,7 +18,7 @@ requirement in brackets.
   Netflix "step in" list). It does not check in between.
   [Hackman: periodic coaching; Netflix: step in at risk points]
 - **REQ-9 Loop detection.** Per-pair exchange counter + settle-then-yield;
-  breach → close channel + notify parent. Scoped to the group edge set (small,
+  breach: close channel + notify parent. Scoped to the group edge set (small,
   known to the runtime). [repeated-call detection generalization]
 - **REQ-10 Lifecycle.** Channels close when the parent settles or is killed;
   settled siblings are read-only targets (no messaging). Cost of a bad hookup
@@ -35,10 +35,10 @@ requirement in brackets.
 
 ## Commons governance (from the facilitation-layer analysis, Ostrom)
 - **REQ-13 Graduated sanctions, not instant failure.** Violations of
-  channel/workspace rules follow a ladder: warn → tighten (reduce cap) → hard
-  stop → notify parent. Proportional, observable, reversible. [Ostrom principle 5]
+  channel/workspace rules follow a ladder: warn, then tighten (reduce cap), then
+  hard stop, then notify parent. Proportional, observable, reversible. [Ostrom principle 5]
 - **REQ-14 Conflict-resolution arena.** Disputes resolve at the lowest cost:
-  child↔child negotiation on the rich channel first; if unresolved, a single
+  child to child negotiation on the rich channel first; if unresolved, a single
   escalation to the parent arbitrates once (arbitrate / converse / disconnect /
   dissolve group). Resolution is recorded to provenance.
   [Ostrom principle 6 — "rapid access to low-cost local arenas"]

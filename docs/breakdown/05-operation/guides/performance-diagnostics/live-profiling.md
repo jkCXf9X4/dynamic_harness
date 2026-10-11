@@ -2,7 +2,7 @@
 id: INFO-117
 type: info
 title: Live-Run Profiling
-summary: The scaler is a synthetic micro-benchmark. To capture what a real, live run actually did — real LLM latency, event handling, CLI overheads — re-run th…
+summary: Re-run the exact failing scenario under the live profiler to capture real LLM latency, event handling, and CLI overheads
 date: 2026-09-23
 status: current
 ---
@@ -41,3 +41,12 @@ Notes:
   millisecond timings.
 - It captures the real session exactly as run, so prefer reproducing the actual
   (slow) task over a toy prompt.
+
+## Owns
+- Live profiler usage: `--profile` flags, output location, artifact contents
+- Sampling-timer behavior and overhead model
+
+## Excludes
+- Scaler (synthetic micro-benchmark) usage: `INFO-120`
+- Live-run diagnosis checklist: `INFO-116`
+- Before/after measurement protocol: `INFO-118`

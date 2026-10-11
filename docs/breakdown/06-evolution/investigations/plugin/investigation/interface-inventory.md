@@ -2,8 +2,6 @@
 id: INFO-186
 type: info
 title: "Plugin Direction — Current Interface Inventory"
-category: investigation
-parent: "README.md"
 summary: >
   The seams that exist today and the observed couplings that make them
   incidental rather than minimal.
@@ -11,7 +9,7 @@ date: 2026-09-28
 status: current
 ---
 
-# What already exists (interface inventory)
+# Plugin Direction — Current Interface Inventory
 
 ## The seams today
 

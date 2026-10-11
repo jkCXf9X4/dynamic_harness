@@ -1,19 +1,13 @@
 ---
 id: INFO-028
 type: info
-title: "Use-Case — Research & Synthesis"
-category: use-case
+title: "Research & Synthesis"
 summary: >
   Gather external information and synthesize it into a durable, source-cited
   artifact: competitive research, feature/API documentation, and comparison
   write-ups. Exercises `webfetch` and parallel sub-agents, with careful
   discipline around the fetcher's restrictions and the "summary is a preview,
   the artifact is the truth" rule.
-related:
-  - ../../02-architecture/concepts/delegation-model/README.md
-  - ../../02-architecture/concepts/artifact-system/README.md
-  - ../../../docs/api/artifacts.md
-  - ../../../3rd_party/agent_methods_and_tools/src/agent_methods/methods/tool-motivations/SKILL.md
 date: 2026-09-22
 status: current
 ---
@@ -43,13 +37,11 @@ a summary is only a preview and the artifact is the truth.
 
 ## Root decomposition
 
-```
-Open engine A    → role "Researcher" → fetch doc page, extract eviction/write facts → src_a.md
-Open engine B    → role "Researcher" → fetch doc page, extract eviction/write facts → src_b.md
-Managed option  → role "Researcher" → fetch pricing + feature pages          → src_mgd.md
-       ↓ VERIFY each artifact cites URLs the agent actually fetched (re-fetch a sample)
-Root: build `reports/cache_compare.md`, every row backed by a URL, report with all ids
-```
+- **Open engine A** — role "Researcher": fetch the doc page, extract eviction/write facts, write `src_a.md`
+- **Open engine B** — role "Researcher": fetch the doc page, extract eviction/write facts, write `src_b.md`
+- **Managed option** — role "Researcher": fetch the pricing + feature pages, write `src_mgd.md`
+- **VERIFY** — each artifact cites URLs the agent actually fetched (re-fetch a sample)
+- **Root** — build `reports/cache_compare.md`, every row backed by a URL, report with all ids
 
 **Constraints:** the fetcher cannot reach private/localhost ranges and truncates
 pages at 200 KB — a researcher that hits a truncation marks it rather than
@@ -63,7 +55,7 @@ fetch proxy.
 - **Do not fill gaps from memory**: truncated or blocked pages are marked; the
   parent asks for a source URL before accepting the claim (guideline *verify,
   do not synthesize*).
-- A blocked source → that slot is `converse`d (re-sub) or, if truly unreachable,
+- A blocked source: that slot is `converse`d (re-sub) or, if truly unreachable,
   resolved as un-rated rather than guessed (Layer-1 resume / Layer-4 escalate).
 
 ## Fit checklist & caveats

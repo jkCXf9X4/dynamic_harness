@@ -1,6 +1,6 @@
 ---
 title: Self-Healing Agents
-summary: How the runtime recovers an agent run that did not produce its intended deliverable without restarting the whole task — salvaging healthy work while n…
+summary: How the runtime recovers an agent run that did not produce its deliverable without restarting the task — salvaging healthy work, never grinding a poisoned context
 ---
 
 # Self-Healing Agents
@@ -17,9 +17,9 @@ not prompt suggestions.
 - Configuration, integration points, caveats, and the implementation/test plan
 
 ## Excludes
-- Agent states/run loop → [agent-lifecycle/](../agent-lifecycle/README.md)
-- Parent failure choices → [delegation-model/failure-handling.md](../delegation-model/failure-handling.md)
-- Artifact/commit mechanics → [artifact-system/](../artifact-system/README.md)
+- Agent states/run loop to [agent-lifecycle/](../agent-lifecycle/README.md)
+- Parent failure choices to [delegation-model/failure-handling.md](../delegation-model/failure-handling.md)
+- Artifact/commit mechanics to [artifact-system/](../artifact-system/README.md)
 
 See `../../../../docs/api/agent.md`, `runtime.md`, `tools.md`.
 
@@ -28,10 +28,10 @@ See `../../../../docs/api/agent.md`, `runtime.md`, `tools.md`.
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
 - **INFO-045** [Configuration & Integration](configuration.md) — A conservative budget beside the existing safety knobs
-- **INFO-046** [Design Rationale](design-rationale.md) — Self-healing recovers an agent run that did not produce its intended deliverable without restarting the whole task. The goal is to salvage healthy wor…
-- **INFO-047** [Implementation Plan](implementation-plan.md) — Rely on deterministic Runtime logic, not model compliance. the rot discriminator. because the model keeps refusing the tool, escalate rather than loop…
-- **INFO-048** [Layer 3 — Fresh Worker](layer-fresh-worker.md) — Trigger: context rot — fired, reached, wall-clock timeout, or repeated Layer-1 misses. Resuming here would replay the poisoned context. Instead, re-de…
-- **INFO-049** [Layer 2 — Parent Heal](layer-parent-heal.md) — At the delegation boundary the runtime already runs its own automatic recovery. Separately, a parent can drive recovery explicitly via the tool — choo…
-- **INFO-050** [Layer 1 — Resume-once (the escape hatch)](layer-resume-once.md) — Primitive: / (runtime.py:115-137, agent.py:163-171). Appends a user message and re-runs on the same agent — has no guard against a prior terminal stat…
-- **INFO-051** [The Layered Policy](layered-policy.md) — Wall-clock timeouts never self-heal. A timed-out agent ( is false > for it — the context is fine, the run simply exhausted its wall-clock budget) > is…
+- **INFO-046** [Design Rationale](design-rationale.md) — Self-healing recovers an agent run that did not produce its deliverable without restarting the task, salvaging healthy work while never grinding a poisoned context
+- **INFO-047** [Implementation Plan](implementation-plan.md) — Rely on deterministic Runtime logic, not model compliance; the rot discriminator bounds cost and retries, and a missing deliverable escalates rather than loops
+- **INFO-048** [Layer 3 — Fresh Worker](layer-fresh-worker.md) — Layer 3 fresh worker: on context rot, re-delegate a fresh agent over the same task, injecting the failure reason and pointing at on-disk artifacts
+- **INFO-049** [Layer 2 — Parent Heal](layer-parent-heal.md) — Layer 2 parent heal: a parent drives recovery explicitly via the resume tool, choosing resume or fresh per child, sharing the same heal budget
+- **INFO-050** [Layer 1 — Resume-once (the escape hatch)](layer-resume-once.md) — Layer 1 resume-once: re-run the same agent via continue_with_input after a blunt stop with no deliverable, exactly once
+- **INFO-051** [The Layered Policy](layered-policy.md) — Five recovery layers (in-loop, resume-once, parent heal, fresh worker, escalate) chosen by a rot discriminator; wall-clock timeouts never self-heal
 <!-- pb:index:end -->

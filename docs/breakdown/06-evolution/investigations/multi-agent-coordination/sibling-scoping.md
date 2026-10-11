@@ -10,7 +10,7 @@ status: current
 # Sibling Scoping: Mitigations and Residual Concerns
 
 How common-parent scoping mitigates each of option B's cons, and what it does
-not fix. Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decisions/AD-002.md`).
+not fix. Decisions: `AD-002`.
 
 ## How common-parent scoping mitigates each of B's cons
 - **Violates context encapsulation (cross-branch contamination)** — contamination
@@ -23,7 +23,7 @@ not fix. Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decis
   **denied**; enabled per-delegation (opt-in `collaborate=True` on `delegate`, or
   a parent-declared group). The parent is the existing authority — no new global
   permission system. **Strongly** mitigated.
-- **Churn / looping (A↔B↔A not caught)** — cycles are bounded to a small, known
+- **Churn / looping (A to B to A not caught)** — cycles are bounded to a small, known
   edge set (the subtree). The runtime can track exchanges per sibling-pair and
   enforce a per-pair/per-round cap with "must settle and yield". Still new
   detection, but tiny and known. **Partially** mitigated.
@@ -33,7 +33,7 @@ not fix. Decisions: AD-002 (`product-breakdown/06-evolution/investigations/decis
   **Largely** mitigated.
 - **Recipient inbox flood** — bounded mailbox per agent + per-sibling budget cap;
   the parent can revoke/close a channel. **Mostly** mitigated.
-- **Large test surface** — restricted to parent + 2–3 children groups →
+- **Large test surface** — restricted to parent + 2–3 children groups, so
   tractable mock-LLM scenarios. **Partially** mitigated.
 
 ## Residual cons and new concerns (what scoping does NOT fix)

@@ -35,3 +35,11 @@ class RetryAgent(Agent):
 
         print(f"[RETRY] All {self.max_retries} attempts failed")
 ```
+
+## Owns
+- The full retry agent example: a run() loop around super().run() with max_retries.
+
+## Excludes
+- Basic subclassing and registration: INFO-096
+- Replacing the execution loop and pre/post hooks: INFO-099
+- Choosing which override to use: INFO-101

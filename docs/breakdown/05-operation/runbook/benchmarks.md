@@ -2,7 +2,7 @@
 id: INFO-136
 type: info
 title: Benchmark Runners
-summary: Benchmark Runners
+summary: Run the prompt, comms, and scaling benchmarks — commands, inputs, and output locations.
 date: 2026-09-23
 status: current
 ---
@@ -17,7 +17,10 @@ python -m dynamic_harness.benchmark.run --seed-only
 python -m dynamic_harness.benchmark.run --report profile
 ```
 
-Compares prompts against all tasks from the single canonical task source `src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`), ranked by a weighted rubric; metrics written to `.optimize_benchmarks/metrics.json` / `.md`. Variants are read from a JSON file mapping `prompt_id -> system_prompt text` (or null = seed). Needs `OPENROUTER_API_KEY` + `dynamic_harness.json` pointing at a tool-calling model (default: deepseek flash with a `provider_ignore` list).
+- Compares prompts against all tasks from the single canonical task source `src/dynamic_harness/benchmark/tasks.py` (`ALL_TASKS`).
+- Ranked by a weighted rubric; metrics written to `.optimize_benchmarks/metrics.json` / `.md`.
+- Variants are read from a JSON file mapping each `prompt_id` to its `system_prompt` text (or null = seed).
+- Needs `OPENROUTER_API_KEY` + `dynamic_harness.json` pointing at a tool-calling model (default: deepseek flash with a `provider_ignore` list).
 
 Related optimization runners (see `prompt-optimization`):
 
@@ -35,7 +38,12 @@ python -m dynamic_harness.benchmark.run_comms --cells off,shared,topics_parent
 python -m dynamic_harness.benchmark.run_comms --tasks interdependent --replicates 2
 ```
 
-Each cell = one `communication.topology` value; everything else (task, LLM, workspace snapshot) identical. Unclean runs are re-attempted `--retries` times. Results (markdown report + raw `metrics-cells.json`) are written under `../04-verification/communication-structures/`. **Caution:** real-LLM runs cost tokens and time; the 2026-09-18 run took up to ~15 min / ~0.8–5.2M tokens per cell (per FINDINGS.md). Use `--smoke` first; treat small-n results as variance, not truth (n=1 caveat).
+- Each cell = one `communication.topology` value; everything else (task, LLM, workspace snapshot) identical.
+- Unclean runs are re-attempted `--retries` times.
+- Results (markdown report + raw `metrics-cells.json`) are written to the experiment directory — the communication-structures evidence chain (`INFO-063`).
+- **Caution:** real-LLM runs cost tokens and time.
+  - A prior run took up to ~15 min / ~0.8–5.2M tokens per cell (per FINDINGS.md).
+  - Use `--smoke` first; treat small-n results as variance, not truth (n=1 caveat).
 
 ## Performance / Scaling Diagnostics
 
@@ -44,4 +52,14 @@ python -m dynamic_harness.benchmark.profile_scaling          # full grid
 python -m dynamic_harness.benchmark.profile_scaling --quick  # fast sanity pass
 ```
 
-Mock-LLM scaler isolating four axes (checkpoint cost, bytes/token sent per turn, CLI snapshot cost, end-to-end). See `performance-diagnostics`.
+- Mock-LLM scaler isolating four axes: checkpoint cost, bytes/token sent per turn, CLI snapshot cost, end-to-end.
+- See `performance-diagnostics`.
+
+## Owns
+- Benchmark run procedure: prompt, comms, and scaling.
+
+## Excludes
+- Prompt optimization workflow: `prompt-optimization` guide.
+- Performance diagnostics method: `performance-diagnostics` guide.
+- Release and build steps: `INFO-137`.
+- Setup and test: `INFO-138`.

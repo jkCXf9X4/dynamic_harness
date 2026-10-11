@@ -1,17 +1,10 @@
 ---
 title: "Competitive Differentiation"
-category: meta
 summary: >
   What separates Dynamic Harness from other agent harnesses (CrewAI, LangGraph,
   AutoGen, OpenAI Agents SDK, Claude Code, MCP-based tools): the
   mechanically-enforced guarantees that survive model disobedience, separated
   from prompt-level advice shared with the field.
-related:
-  - ../VISION.md
-  - ../../02-architecture/concepts/self-healing.md
-  - ../../02-architecture/concepts/agent-lifecycle.md
-  - ../../02-architecture/concepts/delegation-model.md
-  - ../../04-verification/gap-analysis/README.md
 ---
 
 # Competitive Differentiation
@@ -26,13 +19,18 @@ breaks?"*:
   differentiator.
 
 Ground truth: the founding thesis is **"fresh context is cheaper than accumulated
-context"** ([VISION](../VISION.md)). Most harnesses share surface features
+context"** (`INFO-001`). Most harnesses share surface features
 (recursive delegation, tool-calling loops, context management) but not the
 deterministic enforcement below.
 
-Related: [platform-evaluation](../platform-evaluation/README.md),
+## Owns
+- The competitive differentiation story: mechanically enforced guarantees vs prompt-level advice shared with the field
+- The enforced/distinctive scoreboard and the defensible "only-us" positioning
 
-[gap-analysis](../../04-verification/gap-analysis/README.md).
+## Excludes
+- The founding thesis and vision: `INFO-001`
+- Platform/portability position: `06-evolution/investigations/platform-evaluation/`
+- Gap analysis: `04-verification/gap-analysis/`
 
 ## Contents
 

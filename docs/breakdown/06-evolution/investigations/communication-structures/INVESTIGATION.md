@@ -1,21 +1,17 @@
 ---
 id: INFO-064
 type: info
-title: "Investigation — Communication Structures vs Agent Success"
-category: investigation
+title: Investigation — Communication Structures vs Agent Success
+summary: "Measurement-first comparison of four communication topologies (parent-mediated, same-parent siblings, one shared channel, topic channels) on a fixed collaboration task, to establish how structure affects agent success before any one mechanism is built out."
 date: 2026-09-22
-status: open
-summary: >
-  Measurement-first comparison of four communication topologies — parent-mediated,
-  same-parent siblings, one shared channel, topic channels — on a fixed
-  collaboration task, to establish how structure affects agent success before any
-  one mechanism is built out.
+status: current
 ---
 
-# Investigation: Communication structures vs agent success
+
+# Investigation — Communication Structures vs Agent Success
 
 A **measurement-first** verification item: before committing to any one
-collaboration mechanism (`../../06-evolution/investigations/multi-agent-coordination/`),
+collaboration mechanism (the multi-agent-coordination investigation, `INFO-148`),
 establish how different communication structures influence how agents succeed —
 same task, same tree shape, only the topology varying.
 
@@ -38,10 +34,10 @@ Ground-truth audit of the current seams (an earlier draft wrongly assumed a
 
 | Structure | Current reality | Real moving part |
 |---|---|---|
-| 1 Parent-mediated | **Not the default.** `converse` is a global by-ID RPC (`runtime.get_agent`, `core/agent.py:1708` → `runtime.py:1043`), gated only by target status (`ToolPermissionPolicy.conversable`, `core/policies/permissions.py:51`); a parent relays only if the model forwards. Relay pieces exist (`stream_children` + `[child settled]` folding, `_format_delegate_result` `core/agent.py:985`) | Backend routing any non-parent-peer message to the common parent |
+| 1 Parent-mediated | **Not the default.** `converse` is a global by-ID RPC (`runtime.get_agent`, `core/agent.py:1708` to `runtime.py:1043`), gated only by target status (`ToolPermissionPolicy.conversable`, `core/policies/permissions.py:51`); a parent relays only if the model forwards. Relay pieces exist (`stream_children` + `[child settled]` folding, `_format_delegate_result` `core/agent.py:985`) | Backend routing any non-parent-peer message to the common parent |
 | 2 Same-parent siblings | **Gate does not exist.** `converse` reaches *any* agent, across unrelated subtrees; nothing enforces same-parent | Restrict `message`/`converse` targets to same-parent peers |
 | 3 One shared channel | **Partial.** No runtime mailbox, but delivery primitives exist: `submit_input`/`_inject_event` mid-run injection (`core/agent.py:1428/246`), tail-append `_drain_inject_input` (`core/agent.py:1440`), broadcast-shaped `EventBus` (`core/events.py`) | One append-only log (per-subscriber watermark) + cacheable read tool + push digest |
-| 4 Topic channels | **De facto but implicit.** Agents emulate channels via scoped artifacts + `converse` pushes; nothing *routes* — no registry, subscription, or per-agent delta | `topic → {subscribers, artifact area}` registry + `join`/`post`/`read` tools; routing authority via a `ChannelPolicy` |
+| 4 Topic channels | **De facto but implicit.** Agents emulate channels via scoped artifacts + `converse` pushes; nothing *routes* — no registry, subscription, or per-agent delta | `topic` to `{subscribers, artifact area}` registry + `join`/`post`/`read` tools; routing authority via a `ChannelPolicy` |
 
 **Corrected baseline:** today there is exactly *one* router — any-agent by-ID,
 blocking request/response (cell 2/3-ish reachability, none of the containment).

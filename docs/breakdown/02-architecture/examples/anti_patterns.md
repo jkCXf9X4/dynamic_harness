@@ -13,7 +13,7 @@ The most common failure modes observed in agent behavior. **All of them are
 methodology violations.**
 
 ## AP-1: Skipping decomposition
-**Looks like:** Agent receives task → immediately calls `glob()` or `grep()`.
+**Looks like:** Agent receives a task, then immediately calls `glob()` or `grep()`.
 **Why:** Without a plan the agent grinds through search results turn-by-turn,
 accumulating bloat without direction; by turn 15 the task is diluted.
 **Fix:** Output a decomposition plan first, then delegate. If the LLM won't plan,
@@ -27,7 +27,7 @@ observations. Focus degrades and cost scales unnecessarily.
 this?" The answer is almost always yes.
 
 ## AP-3: Blind synthesis
-**Looks like:** Parent receives `"Status: completed"` → calls `report()` based on
+**Looks like:** Parent receives `"Status: completed"`, then calls `report()` based on
 the delegation description, not the child's actual output.
 **Why:** The parent synthesizes what it *asked for*, not what the child *found* —
 correct-looking but factually wrong output.
@@ -44,7 +44,7 @@ can't verify intermediate steps.
 the prior step's artifact is verified.
 
 ## AP-5: Abandoning failed children
-**Looks like:** One child returns `"Status: failed"` → parent ignores it and
+**Looks like:** One child returns `"Status: failed"`, then the parent ignores it and
 synthesizes from the successful children.
 **Why:** The result is partial and missing critical information, yet the parent
 reports success.
@@ -60,7 +60,7 @@ e.g. "Read src/auth/login.py, add the JWT-expiry (3600s) check, run
 `pytest tests/test_auth.py`, write outputs/auth_fix_summary.txt, report() it."
 
 ## AP-7: Hallucinating sub-agent output
-**Looks like:** Parent receives only status strings → in `report()` it describes
+**Looks like:** Parent receives only status strings, then in `report()` it describes
 detailed findings the children never produced.
 **Why:** The parent's LLM fills gaps with fabricated detail. The output sounds
 authoritative but is fiction.

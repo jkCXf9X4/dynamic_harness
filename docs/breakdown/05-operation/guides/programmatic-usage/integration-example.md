@@ -2,7 +2,7 @@
 id: INFO-126
 type: info
 title: Complete Integration Example
-summary: `python import asyncio from pathlib import Path from dynamic_harness.core.runtime import Runtime from dynamic_harness.core.task import Task from dynam…
+summary: End-to-end Python example wiring an OpenAI provider, a Runtime, and a delegated Task into one async analysis run with report collection and usage reporting.
 date: 2026-09-23
 status: current
 ---
@@ -56,3 +56,14 @@ async def run_analysis(repo_path: str) -> dict:
 
 asyncio.run(run_analysis("/path/to/repo"))
 ```
+
+## Owns
+- The complete end-to-end integration example: provider setup, Runtime construction, report collection, delegation, and result aggregation in one script.
+
+## Excludes
+- Artifact and repository layout: INFO-121
+- Custom agent class definitions: INFO-122
+- Delegation patterns: INFO-123
+- No-LLM mode and error handling: INFO-124
+- Event and usage APIs: INFO-125
+- Runtime setup: INFO-127

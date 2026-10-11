@@ -2,7 +2,7 @@
 id: INFO-095
 type: info
 title: Terminal-Bench
-summary: shipped as Docker images with a task dir (, a and gold solution to verify). The agent interacts through a shell; success = the task's own passes again…
+summary: Terminal-Bench — terminal-computing tasks shipped as Docker images (task dir, test.sh, gold solution); the agent works through a shell, success = the task's own test.sh passes.
 date: 2026-09-23
 status: current
 ---
@@ -24,3 +24,10 @@ status: current
   style (bash-first, artifact-on-disk), and worth building the mini version of:
   a checked-in corpus of ~5–10 single-fix tasks (`stub repo` + `test_issue.py`)
   evaluated by the identical `BenchmarkTask.verify()`.
+
+## Owns
+- The Terminal-Bench survey and verdict.
+
+## Excludes
+- The built-in suite — `INFO-090`.
+- Selection criteria and the decision summary — `INFO-093`.

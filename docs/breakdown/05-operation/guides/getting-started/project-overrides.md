@@ -35,7 +35,7 @@ cp dynamic_harness.json.example dynamic_harness.json
 ```
 
 `max_agent_tokens` (optional) force-fails an agent once its total cumulative
-usage (prompt + completion) passes the cap. It is surfaced to agents as a static
+usage (prompt and completion) passes the cap. It is surfaced to agents as a static
 budget line, and the `usage` tool lets any agent read its own live message/token
 counters — so a tight per-agent goal (e.g. **under 50,000 tokens**) can be
 communicated both up-front and as the agent runs, without adding a per-turn
@@ -44,3 +44,9 @@ observation message.
 Every setting — safety, self-heal, agent, and more — is documented in the
 Configuration Reference (`docs/api/config.md`), with defaults and the
 `0`/`null` "cap disabled" convention.
+
+## Owns
+- Project-local dynamic_harness.json: template copy, override keys, max_agent_tokens.
+
+## Excludes
+- Config layering and common base (`INFO-109`).

@@ -21,3 +21,9 @@ Slash commands available in the interactive terminal:
 - `/index` — write the run's `index.jsonl`.
 - `/reset` — clear all agents and state.
 - `exit` — quit.
+
+## Owns
+- Slash commands in the interactive terminal.
+
+## Excludes
+- First task workflow (`INFO-110`).

@@ -7,20 +7,13 @@ summary: What controlled changes come next?
 
 **What controlled changes come next?**
 
-The evolution layer is the controlled-change register: the roadmap (`roadmap.md`) is the IMP-style canonical list of open work — each item with status (Proposed/Selected/Completed/Superseded), priority, evidence, and a task-contract seed — and `backlog.md` is the raw idea/suggestion log (the moved `__undeveloped_sugestions__.md`, now with disposition discipline). Selected IMPs are filed under `selected/` per the IMP template and cross-listed in the Implementation Status table below. An IMP is **a scoped candidate needing a task contract before code changes — not implementation approval.**
+The evolution layer is the controlled-change register: the roadmap (INFO-196) is the canonical list of open work — each item with status, priority, evidence, and a task-contract seed — and `backlog.md` (INFO-140) is the raw idea/suggestion log. Selected IMPs are filed under `selected/` and cross-listed in the generated Contents below. An IMP is **a scoped candidate needing a task contract before code changes — not implementation approval.**
 
-## Implementation Status
+## IMP lifecycle
 
-| IMP | Theme | Stage | Priority |
-|-----|-------|-------|----------|
-| [IMP-001](selected/IMP-001.md) | Comms benchmark P4 (topics_parent) replicates | Proposed | Medium |
-| [IMP-002](selected/IMP-002.md) | Workspace mechanics + round/cadence semantics | Proposed | High |
-| [IMP-003](selected/IMP-003.md) | Equivocality heuristic (message vs workspace) | Proposed | Medium |
-| [IMP-004](selected/IMP-004.md) | The `introduce` mechanism | Proposed | Medium |
-| [IMP-005](selected/IMP-005.md) | Mechanize verification (gap G1) | Proposed | High |
-| [IMP-006](selected/IMP-006.md) | Maintain traceability map as a living register | Proposed | Medium |
-
-Other open candidates are listed in the [roadmap.md](roadmap.md) register (IMP-008…IMP-015); selected ones are filed under `selected/`.
+- Stages: Proposed to Selected to Implemented.
+- Status is read only from the IMP file header (front-matter `status:`); no second copy.
+- Implemented IMPs move to `implemented/` and are no longer tracked (IMP-016 is the exemplar).
 
 ## Owns
 - Roadmap, risks, improvement candidates (IMPs), deferred work
@@ -35,15 +28,15 @@ Other open candidates are listed in the [roadmap.md](roadmap.md) register (IMP-0
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
-- **INFO-140** [Backlog — raw suggestion log](backlog.md) — Raw idea/suggestion log for the evolution layer (moved from ). Disposition markers: DONE / RESOLVED / PICKED UP (with target); unmarked items are open…
-- **INFO-196** [Roadmap — dynamic_harness](roadmap.md) — IMP-style register of open work. Created 2026-09-21 (fills review GAP-4 — the repo previously had no roadmap; the suggestions file pointed at , a path…
+- **INFO-140** [Backlog — raw suggestion log](backlog.md) — Raw idea/suggestion log for the evolution layer. Disposition markers: DONE / RESOLVED / PICKED UP (with target); unmarked items are open.
+- **INFO-196** [Roadmap — dynamic_harness](roadmap.md) — IMP-style register of open work. Created 2026-09-21 (fills review GAP-4); replaces the stale docs/roadmap/LIVE_CAPITAL_READINESS.md pointer that never existed.
 - [Implemented IMPs](implemented/README.md) — Implemented improvement candidates — historical; no longer tracked.
 - [Investigations](investigations/README.md) — Design-space investigations feeding the roadmap register
-- [Selected IMPs](selected/README.md) — Filed improvement records. An IMP is a scoped candidate needing a task contract — not implementation approval. The roadmap is the full register (IMP-0…
+- [Selected IMPs](selected/README.md) — Filed IMP records (IMP-001..006). An IMP is a scoped candidate needing a task contract — not implementation approval.
 <!-- pb:index:end -->
 
 ## Rules
 
 - Assign the next free IMP number; prefer updating an existing IMP's status over creating competing records.
-- Cross-list every IMP here with its stage; status is read from the file header.
+- Cross-list every open IMP in the generated Contents; status is read from the file header.
 - The roadmap is the canonical answer to "what is decided vs proposed vs abandoned" — future runs must not re-search the same design space.

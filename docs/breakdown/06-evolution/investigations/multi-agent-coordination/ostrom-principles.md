@@ -2,7 +2,7 @@
 id: INFO-172
 type: info
 title: Ostrom's Commons Governance (Evidence for Facilitation)
-summary: "Elinor Ostrom's Nobel-winning analysis of long-lived shared-resource groups (\"common-pool resources\") is the direct analogue of a shared artifact work…"
+summary: "Elinor Ostrom's analysis of long-lived shared-resource groups is the direct analogue of a shared artifact workspace: sustainable self-governance is neither anarchy nor a boss, but explicit institutional design (mechanisms, not a person)."
 date: 2026-09-28
 status: current
 ---

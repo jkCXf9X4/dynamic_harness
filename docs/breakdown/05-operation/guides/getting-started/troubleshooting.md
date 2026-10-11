@@ -2,7 +2,7 @@
 id: INFO-115
 type: info
 title: Common Issues
-summary: Ensure or is set in your shell config (e.g. ), or pass on the command line
+summary: Fix common issues: missing API key, missing config file, runaway agents, high token costs.
 date: 2026-09-23
 status: current
 ---
@@ -32,5 +32,12 @@ pieces.
 ### High token costs
 
 Use `/tree` (or `agents.txt`) to see per-agent token usage, or `/agents` for the
-running total. If a single agent uses >50K tokens, the task should be decomposed
+running total. If a single agent uses more than 50K tokens, the task should be decomposed
 into sub-agents.
+
+## Owns
+- Common issues and fixes: API key, missing config, runaway agents, token costs.
+
+## Excludes
+- Install and API key setup (`INFO-111`).
+- Config layering (`INFO-109`).

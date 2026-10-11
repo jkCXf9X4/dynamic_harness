@@ -21,7 +21,7 @@ distorted.
 > Translation: a parent relaying child A's findings to child B is a
 > retransmission stage. Each relay adds a parent LLM turn (cost + latency) and
 > distorts the message (the parent summarizes from its own perspective). Direct
-> A→B links minimize stages. The parent's one-time introduction is a *link
+> Direct A to B links minimize stages. The parent's one-time introduction is a *link
 > setup*, not a retransmission.
 
 ## 1.2 Transaction cost economics: when direct links beat the hub

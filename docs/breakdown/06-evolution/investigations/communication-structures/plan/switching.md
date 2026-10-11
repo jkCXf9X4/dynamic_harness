@@ -1,15 +1,14 @@
 ---
 id: INFO-077
 type: info
-title: "Plan — Switching Seams"
-category: investigation / plan
-parent: "README.md"
-summary: Seam A — construction. gains a section
+title: Plan — Switching Seams
+summary: "The two switching seams. The `communication` config section (Seam A, construction) and the one-time environment note (Seam B, the model's view)."
 date: 2026-09-23
 status: current
 ---
 
-# Switching — the two seams
+
+# Plan — Switching Seams
 
 **Seam A — construction.** `HarnessConfig` gains a `communication` section:
 

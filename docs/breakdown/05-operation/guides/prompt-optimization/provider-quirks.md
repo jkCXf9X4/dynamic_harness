@@ -2,7 +2,7 @@
 id: INFO-132
 type: info
 title: Rate Limits & Provider Quirks
-summary: mid-run with . Use a paid/served model for full runs. calls. If the orchestrator returns empty output instead of tool calls, a guessed provider is ref…
+summary: Free-tier models hit per-minute rate limits mid-run; use a paid/served model for full runs and `provider_ignore` for tool-refusing providers
 date: 2026-09-23
 status: current
 ---
@@ -20,3 +20,11 @@ status: current
   now returns a `"No change: content identical..."` message on identical content
   (`src/dynamic_harness/core/tools/filesystem.py:write`) so agents recover
   instead of spinning.
+
+## Owns
+- Free-tier rate limits and the paid/served-model requirement for full runs
+- `provider_ignore` routing for tool-refusing OpenRouter providers
+- The repeated-identical-`write()` safety behavior
+
+## Excludes
+- Where `harness.json` lives and its default config: `INFO-130`

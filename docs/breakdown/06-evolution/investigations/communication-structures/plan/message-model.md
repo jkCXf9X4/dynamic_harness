@@ -1,15 +1,14 @@
 ---
 id: INFO-073
 type: info
-title: "Plan — CommsMessage Model"
-category: investigation / plan
-parent: "README.md"
-summary: Plan — CommsMessage Model
+title: Plan — CommsMessage Model
+summary: "The `CommsMessage` typed envelope (id, topic, kind, sender, recipients, stage, content, seq) and why each field is shaped that way."
 date: 2026-09-23
 status: current
 ---
 
-# CommsMessage — the typed envelope
+
+# Plan — CommsMessage Model
 
 ```python
 class CommsMessage(BaseModel):
@@ -24,10 +23,10 @@ class CommsMessage(BaseModel):
     created_at: datetime
 ```
 
-Why this shape (from `../context-injection-design.md` §1–2):
+Why this shape (from `INFO-067` §1–2):
 
-- **`kind` names the authority.** `instruction` (parent → binding) vs
-  `notification` (peer → advisory); the model triages without reading the body.
+- **`kind` names the authority.** `instruction` (parent, binding) vs
+  `notification` (peer, advisory); the model triages without reading the body.
 - **`headline` only; body behind a pointer.** A push is re-sent every remaining
   turn (push-multiplier), so the pushed surface stays ~200 chars. Body lives in
   the existing `ArtifactStore`/`ResultStore`; the agent pulls via the already-

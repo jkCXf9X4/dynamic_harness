@@ -2,18 +2,13 @@
 id: INFO-066
 type: info
 title: "Analysis — Channel Context Design (pollution, discovery, creation)"
-category: investigation / analysis
+summary: "Containing shared-channel pollution with a per-agent watermark log (not a shared inbox), and designing topic-channel discovery (compact directory) and creation (rules + ChannelPolicy authority); cell 3 = cell 4 with one universal topic."
 date: 2026-09-23
-status: open
-summary: >
-  Containing shared-channel pollution with a per-agent watermark log (not a
-  shared inbox), and designing topic-channel discovery (compact directory) and
-  creation (rules + ChannelPolicy authority); cell 3 = cell 4 with one universal
-  topic.
-parent: "INVESTIGATION.md"
+status: current
 ---
 
-# Channel context design
+
+# Analysis — Channel Context Design (pollution, discovery, creation)
 
 Companion to `INFO-067`; the
 implementation is the plan (PLAN (`plan`)).
@@ -36,20 +31,20 @@ the push-multiplier. Defensible reading of "one shared channel":
 
 ## Topic channels: discovery and creation
 
-**Discovery:** a registry mapping `topic → {subscribers, artifact area, last
+**Discovery:** a registry mapping `topic` to `{subscribers, artifact area, last
 activity}` (Wegner/TMS directory), injected as a **compact index once**
 (`render_reference_index` pattern), with delta re-injection on change; read-only
 `channels()`/`channel_info(topic)` tools for mid-run lookups (cacheable, exempt).
 
 **Creation — rules** (authority in `ChannelPolicy`):
 
-- A channel = a stable, recurring topic shared by **≥2 agents** (one-off → bounded message).
+- A channel = a stable, recurring topic shared by **≥2 agents** (one-off to bounded message).
 - **Cohesion:** named by the shared deliverable/domain, not the team (directory stays scannable).
 - Prefer an existing channel + bounded `converse` for one-off negotiation (media richness).
 - A **private** persistent work area is an artifact directory, not a channel.
 - Do not create what you alone consume (zero subscribers = registry tax); sprawl is a cost.
 
-**Authority:** creation is a boundary decision → host-agnostic `ChannelPolicy`,
+**Authority:** creation is a boundary decision, so a host-agnostic `ChannelPolicy`,
 default **parent-authorized at its delegation boundary**. "All nodes can
 register/create" is a valid *experiment cell* (anarchic registration), not the
 default; run both and report the sprawl/contamination.

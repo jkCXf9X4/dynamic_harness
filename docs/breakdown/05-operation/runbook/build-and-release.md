@@ -2,7 +2,7 @@
 id: INFO-137
 type: info
 title: Build & Release
-summary: Build & Release
+summary: Build the wheel and run the release practice — verify, benchmark gate, version, build, document, regenerate, ship.
 date: 2026-09-23
 status: current
 ---
@@ -15,7 +15,10 @@ status: current
 python -m build          # requires: pip install build
 ```
 
-Build backend: `setuptools` (build-system in `pyproject.toml`), packages found under `src/` (`pip install -e .` uses the same layout). Artifacts land in `dist/`. **`build/` at the repo root is stale gitignored debris — do not confuse it with `dist/`; it should be removed.**
+- Build backend: `setuptools` (build-system in `pyproject.toml`).
+- Packages found under `src/` (`pip install -e .` uses the same layout).
+- Artifacts land in `dist/`.
+- **`build/` at the repo root is stale gitignored debris — do not confuse it with `dist/`; it should be removed.**
 
 ## Release Practice
 
@@ -26,5 +29,15 @@ Deliberately lightweight (solo/small project):
 3. **Version** — bump `version` in `pyproject.toml` (currently `0.1.0`); keep it in sync with the package metadata.
 4. **Build** — `python -m build`, sanity-install the wheel into a clean venv (`pip install dist/*.whl`) and smoke-run `dynamic-harness --help` / one benchmark cell.
 5. **Document** — reflect any user-visible change in the layer docs (this runbook, `01-product/requirements.md` if the CLI changes, `06-evolution/roadmap.md` if open work moved).
-6. **Regenerate the breakdown's generated surfaces** — `pb registers` from the repo root: refreshes the registers, and index `## Contents` lists (banner-marked); commit the result. `pb registers --clear` additionally strips legacy `## Decisions` footer blocks (no longer generated). Nothing regenerates them outside release builds — never hand-edit one.
+6. **Regenerate the breakdown's generated surfaces** — `pb registers` from the repo root:
+   - Refreshes the registers and index `## Contents` lists (banner-marked); commit the result.
+   - `pb registers --clear` additionally strips legacy `## Decisions` footer blocks (no longer generated).
+   - Nothing regenerates them outside release builds — never hand-edit one.
 7. **Ship** — tag with the version (`git tag v0.1.0`), push. License: MIT.
+
+## Owns
+- Build and release procedure for the runtime.
+
+## Excludes
+- Setup and test: `INFO-138`.
+- Benchmark run procedure: `INFO-136`.

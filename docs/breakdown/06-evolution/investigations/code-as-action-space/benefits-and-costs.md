@@ -2,7 +2,7 @@
 id: INFO-142
 type: info
 title: Benefits and costs — code-as-action evidence
-summary: "Sources are the works mapped in INVESTIGATION.md; the headline numbers are cited inline. The paradigm's core evidence is CodeAct (ICML 2024, arXiv:240…"
+summary: "Evidence for and against code-as-action, mapped to this harness: benefits (context/token economics, multi-tool success, self-evolution) and costs (security, injection, no determinism), with headline numbers cited inline."
 date: 2026-09-28
 status: current
 ---
@@ -37,9 +37,9 @@ success**; weakest for determinism and security-neutrality.
 | # | Claim | Evidence | Source | Relevance to this harness |
 |---|-------|----------|--------|---------------------------|
 | C1 | Security: arbitrary code is a wider surface than bash (imports, pickles, /proc, network libs) | Every serious deployment sandboxes: Manus = per-task VM (Firecracker microVM), CodeAct = docker-per-session, Hermes = child process + tool whitelist + env scrub | Manus, CodeAct, Hermes | Harness `bash` is already host-access by decision — `invoke` at equal trust is *not a new boundary*, but a wider capability surface; stdout caps + timeout still required |
-| C2 | Prompt-injection → code execution: web-fetched content pasted into code runs it | Tool-use survey cites "Les Dissonances": payloads propagate across tool boundaries | arXiv:2603.22862 | `webfetch`/`read` results must be consumed as data (RPC / result pages), never copied into `invoke` source — a policy, not prompt advice |
+| C2 | Prompt-injection to code execution: web-fetched content pasted into code runs it | Tool-use survey cites "Les Dissonances": payloads propagate across tool boundaries | arXiv:2603.22862 | `webfetch`/`read` results must be consumed as data (RPC / result pages), never copied into `invoke` source — a policy, not prompt advice |
 | C3 | "Runs" ≠ correct: fewer typed contracts; verification shifts to the agent | CodeMem on probabilistic instability; the framework literature | CodeMem | Structured tools carry harness validation; terminal contracts must stay stub-enforced |
-| C4 | No determinism: same task → different code each run | CodeMem's core motivation | CodeMem | Procedural memory (skills) must be built, or the harness loses today's reproducibility |
+| C4 | No determinism: same task to different code each run | CodeMem's core motivation | CodeMem | Procedural memory (skills) must be built, or the harness loses today's reproducibility |
 | C5 | No gain on simple/atomic tasks; abstraction overhead | "for small tasks with one or two tool calls, the added abstraction may not buy you much" | Microsoft Agent Framework | Measure turn/token delta per task class; do not blanket-replace |
 | C6 | Coarse governance: approval is per-`execute_code`, not per-tool | Microsoft Agent Framework notes | MS AF | Budget lines, plan compliance, spawn caps must live in the RPC stub, not the raw tool |
 | C7 | Audit trail is text, not typed ToolResults | Structural | — | Keep full executed source + stdout in the trace; ResultStore handle in the footer |

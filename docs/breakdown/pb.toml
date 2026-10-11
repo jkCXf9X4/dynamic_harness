@@ -20,22 +20,32 @@ exempt = ["traceability-map.md"]
 
 [ids]
 # IMP candidates keep their Evolution handles (IMP-NNN) as stable ids.
-prefixes = { info = "INFO", decision = "DEC", eval = "EVAL", imp = "IMP" }
-# Leaf/status vocabulary incl. the repo's investigation-doc statuses and the
-# IMP lifecycle end-state (implemented IMPs keep their file under implemented/).
-leaf_statuses = ["current", "draft", "superseded", "proposed", "accepted", "open", "implemented"]
-# IMP-007…IMP-015 are Proposed in 06-evolution/selected/README.md but not yet
-# filed (6 of them are cited from roadmap/watchdog); reserve the handles so
-# those forward references resolve. They register with no path.
+prefixes = { info = "INFO", decision = "AD", eval = "EVAL", imp = "IMP" }
+# Leaf `status:` vocabulary. The skill's canonical three (current/draft/
+# superseded) govern info leaves. The schema has no separate IMP-status list:
+# check_ids validates every leaf (incl. type: imp) against this one list, and
+# [records].statuses only covers decision records in decisions/ — IMPs live in
+# 06-evolution/, so their lifecycle statuses must be unioned in here. Minimal
+# union: `proposed` (selected IMPs) + `implemented` (IMP-016, kept under
+# implemented/). Dropped: `open` (old investigation-doc status; the 6
+# investigation leaves now use `current`) and `accepted` (a record status, not
+# a leaf status — no live leaf uses it).
+leaf_statuses = ["current", "draft", "superseded", "proposed", "implemented"]
+# IMP-008..015 are Proposed in 06-evolution/roadmap.md (the register) but not
+# yet filed as files (6 of them are cited from roadmap/watchdog); reserve the
+# handles so those forward references resolve. IMP-007 was a real roadmap row
+# (gap G1, Proposed/High) in commit 11e2367, superseded by IMP-005 in 7ded00f
+# ("G1 is now IMP-005") and never filed; it is kept reserved because
+# selected/README.md still cites the range "IMP-007…IMP-015" — a full
+# tombstone/roadmap row would need roadmap.md or the archive, out of scope
+# here. The REQ-10..15 handles are collaboration requirements defined in the
+# body text of 06-evolution/investigations/multi-agent-coordination/
+# (requirements-group and friends) — no leaf front-matter carries their ids,
+# so the two-digit ones (the only ones the citation check can see) are
+# reserved to keep the citations resolvable. Reserved ids register with no
+# path.
 reserved_ids = ["IMP-007", "IMP-008", "IMP-009", "IMP-010", "IMP-011", "IMP-012", "IMP-013", "IMP-014", "IMP-015",
                 "REQ-10", "REQ-11", "REQ-12", "REQ-13", "REQ-14", "REQ-15"]
-# The IMP handles are Proposed in 06-evolution/selected/README.md but not yet
-# filed (6 of them are cited from roadmap/watchdog). The REQ-10..15 handles
-# are collaboration requirements defined in the body text of
-# 06-evolution/investigations/multi-agent-coordination/ (requirements-group
-# and friends) — no leaf front-matter carries their ids, so the two-digit
-# ones (the only ones the citation check can see) are reserved to keep the
-# citations resolvable. Reserved ids register with no path.
 
 [records]
 # The 9 legacy ADRs (archived 2026-09-29) are fact-dense records that predate

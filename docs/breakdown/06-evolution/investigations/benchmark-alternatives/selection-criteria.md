@@ -27,7 +27,7 @@ codebase:
 
 | Benchmark | Tests | Ease | Relevance | Delegation payoff | Verdict |
 |---|---|---|---|---|---|
-| **SWE-bench** (Full/Verified/Lite) | real GitHub issue → patch | Hard (Docker, ~120GB) | High | None | gold standard for repo fixes; infra-heavy batch eval only |
+| **SWE-bench** (Full/Verified/Lite) | real GitHub issue to patch | Hard (Docker, ~120GB) | High | None | gold standard for repo fixes; infra-heavy batch eval only |
 | **Terminal-Bench** | CLI/computing tasks, bash-facing | Medium (image per task) | High | Low | closest to the harness's bash-first style; mini version worth building |
 | **Aider Exercism / polyglot** | single-file bug fix, stdlib-only | Trivial | Medium | None | no env needed, first cheap smoke suite — but least diagnostic |
 | **TheAgentCompany** | simulated software company, multi-agent | Low (6 Docker services, 30GB) | Medium | Medium (cross-role coordination) | LLM-judged grading clashes with the "failable ground-truth verifier" rule |
@@ -38,3 +38,10 @@ codebase:
 External benchmarks that **don't fit** should not be added to the default
 `ALL_TASKS` — keep them as opt-in `scripts/` pipelines (see
 `INFO-090`).
+
+## Owns
+- The three selection questions (ease, relevance, delegation payoff) and the decision summary table.
+
+## Excludes
+- The per-benchmark surveys — `INFO-089`, `INFO-091`, `INFO-094`, `INFO-095`.
+- The built-in suite — `INFO-090`.

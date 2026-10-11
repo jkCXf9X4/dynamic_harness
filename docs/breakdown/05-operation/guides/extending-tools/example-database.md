@@ -2,7 +2,7 @@
 id: INFO-104
 type: info
 title: "Example: Database Tool"
-summary: `python import sqlite3
+summary: A complete read-only SQL query tool: ToolDef, async handler, and registration.
 date: 2026-09-23
 status: current
 ---
@@ -36,3 +36,10 @@ async def _tool_db_query(*, ctx, query: str, limit: int = 100) -> str:
 
 runtime.tool_registry.register(TOOL_DB_QUERY, _tool_db_query)
 ```
+
+## Owns
+- A complete read-only SQL query tool example.
+
+## Excludes
+- ToolDef field schema: `INFO-108`.
+- Tool shape guidance: `INFO-102`.

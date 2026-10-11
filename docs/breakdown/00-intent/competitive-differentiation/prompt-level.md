@@ -2,14 +2,10 @@
 id: INFO-004
 type: info
 title: "Prompt-Level — Shared with the Field"
-category: meta
 summary: >
   Design intent real in this codebase but not a mechanical guarantee — role
   allow-lists, context tools, progressive disclosure, provenance, streaming
   children, CLI composability — hence equivalent to what other harnesses offer.
-parent: "README.md"
-related:
-  - ../../02-architecture/concepts/delegation-model.md
 date: 2026-09-23
 status: current
 ---
@@ -24,7 +20,7 @@ therefore equivalent to what other harnesses offer at the API level:
   concept exists elsewhere.
 - **Prune / restore / compress context tools** — implemented (`core/context.py`).
   Standard context-management surface.
-- **Progressive disclosure (headline → raw)** — implemented (`artifact/store.py`).
+- **Progressive disclosure (headline to raw)** — implemented (`artifact/store.py`).
   Unusual degree, but the idea exists in artifact layers everywhere.
 - **Git-like provenance (commits, parents, children)** — implemented
   (`memory/repository.py`). Shared with versioned-artifact systems.
@@ -41,4 +37,4 @@ are fire-and-forget and the parent is re-admitted to its loop as each child
 settles (`[child settled]` injected), letting it react to one child before
 siblings finish — re-delegate a failed branch, cancel stragglers, or report
 early. The cost trade-off is documented in
-delegation-model (`docs/breakdown/02-architecture/concepts/delegation-model/README.md`).
+delegation-model.

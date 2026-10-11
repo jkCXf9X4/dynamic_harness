@@ -1,18 +1,14 @@
 ---
 id: INFO-068
 type: info
-title: "Measurement Design — Communication Topology Comparison"
-category: investigation
+title: Measurement Design — Communication Topology Comparison
+summary: "How the communication-topology comparison is measured: five success axes, the controlled comparison bed, predicted outcomes, open questions, and success criteria. Companion to INVESTIGATION.md."
 date: 2026-09-23
-status: open
-summary: >
-  How the communication-topology comparison is measured: five success axes, the
-  controlled comparison bed, predicted outcomes, open questions, and success
-  criteria. Companion to INVESTIGATION.md.
-parent: "INVESTIGATION.md"
+status: current
 ---
 
-# Measurement design
+
+# Measurement Design — Communication Topology Comparison
 
 ## What "agents succeed at their work" means — measurable
 
@@ -42,15 +38,15 @@ same budgets, N replicates per cell.
 ## Key open questions
 
 1. **Natural comparison unit?** One run yields an outcome, but success is noisy; set replicate count / variance budget before calling a loser on noise.
-2. **Is "richer channel = better" the right hypothesis?** Media-richness predicts *matching* medium to task (lean → shared store; equivocal → rich messages), not "more channel always wins"; score per-task equivocality, not an overall average.
-3. **Does structure change who succeeds or only what it costs?** On easy tasks all may complete; need a task gradient (easy → hard collaboration).
+2. **Is "richer channel = better" the right hypothesis?** Media-richness predicts *matching* medium to task (lean to shared store; equivocal to rich messages), not "more channel always wins"; score per-task equivocality, not an overall average.
+3. **Does structure change who succeeds or only what it costs?** On easy tasks all may complete; need a task gradient (easy to hard collaboration).
 4. **What role does the parent play per structure?** Router in 1; boundary authority in 2/4; nobody in 3. Is "no authority" survivable (Ostrom: long-lived commons have institutions)?
 5. **Can cell 3 run as designed** without instantly tripping the repeated-call/context guards? If safety makes it untestable, that is itself a result.
 
 ## Next steps
 
 1. Write the success-battery definition (5 axes, operationalized).
-2. Define the task gradient (independent → interdependent → adversarial), reusing `benchmark/tasks.py`.
+2. Define the task gradient (independent to interdependent to adversarial), reusing `benchmark/tasks.py`.
 3. Implement the 4 topologies as thin switches on the existing links/mailbox/artifact seams.
 4. Run the controlled comparison (deterministic mock-LLM first, then real-LLM probes with N replicates per cell).
 5. Report completion/quality/cost/context-health/contention per cell.

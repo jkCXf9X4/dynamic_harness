@@ -2,7 +2,7 @@
 id: INFO-094
 type: info
 title: SWE-bench (Full / Verified / Lite)
-summary: "problem_statement, gold_patch, FAIL_TO_PASS, PASS_TO_PASS) base_commit pytest -k \"F2P or P2P\" verify(output_dir, scan_root) Runtime .optimize_benchmar…"
+summary: SWE-bench (Full / Verified / Lite) — the canonical agent benchmark: instance = repo + base_commit + issue, patch verified by the F2P/P2P pytest gate; gold standard, infra-heavy, batch-only.
 date: 2026-09-23
 status: current
 ---
@@ -33,3 +33,10 @@ status: current
   `swebench` when installed. Add **one or two mini-SWE-bench fixture repos**
   (checked-in, deps-free, one failing test) to `ALL_TASKS` to get the
   repo-bugfix shape without Docker (this is the "SWE-bench-mini" plan).
+
+## Owns
+- The SWE-bench (Full / Verified / Lite) survey and verdict.
+
+## Excludes
+- The built-in suite — `INFO-090`.
+- Selection criteria and the decision summary — `INFO-093`.

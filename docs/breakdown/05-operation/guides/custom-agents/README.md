@@ -1,15 +1,6 @@
 ---
 title: "Custom Agents"
-category: guide
-difficulty: advanced
-summary: >
-  How to create custom Agent subclasses — overriding the run loop, adding
-  hooks, injecting custom system prompts, and registering named agent types
-  for programmatic delegation.
-related:
-  - ../../../../docs/api/agent.md
-  - ../../../../docs/api/runtime.md
-  - ../programmatic-usage/README.md
+summary: How to create custom Agent subclasses — overriding the run loop, adding hooks, injecting custom system prompts, and registering named agent types for programmatic delegation.
 ---
 
 # Custom Agents (Index)
@@ -22,10 +13,10 @@ during delegation.
 
 <!-- pb:index:start -->
 <!-- GENERATED FILE — do not edit. Regenerate with pb-registers. -->
-- **INFO-096** [Basic Custom Agent](basic-agent.md) — `python from dynamic_harness.core.agent import Agent
-- **INFO-097** [Agent with Custom State](custom-state.md) — `python from collections import Counter
+- **INFO-096** [Basic Custom Agent](basic-agent.md) — Subclass Agent, override run(), register the class, and delegate by name
+- **INFO-097** [Agent with Custom State](custom-state.md) — Add per-agent state in __init__ and override _run_loop for custom behavior
 - **INFO-098** [Full Example: Retry Agent](retry-agent.md) — An agent that automatically retries on failure up to N times
 - **INFO-099** [Run Overrides](run-overrides.md) — Replace the entire execution loop
-- **INFO-100** [System Prompt & Safety Limits](system-prompt-and-limits.md) — Pass a custom system prompt when constructing
-- **INFO-101** [When to Use Custom Agents](when-to-use.md) — Logging/metrics — override with pre/post hooks
+- **INFO-100** [System Prompt & Safety Limits](system-prompt-and-limits.md) — Pass a custom system prompt and safety limits when constructing an agent
+- **INFO-101** [When to Use Custom Agents](when-to-use.md) — Match the need to the right override: hooks, preprocessing, prompt, limits, or retry
 <!-- pb:index:end -->

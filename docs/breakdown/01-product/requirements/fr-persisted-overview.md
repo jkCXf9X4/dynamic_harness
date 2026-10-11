@@ -1,14 +1,10 @@
 ---
 id: INFO-017
 type: info
-title: "FR-2 — Persisted overview"
-category: requirement
+title: "FR-2. Persisted overview"
 summary: >
   Every run writes a continuously-refreshed overview to the run root (the parent
   of artifacts/, repo/, and traces/).
-related:
-  - direction.md
-  - ../use-cases/pipelines-and-jobs.md
 date: 2026-09-23
 status: current
 ---
@@ -27,5 +23,10 @@ parent of `artifacts/`, `repo/`, and `traces/`):
   timestamp).
 - **FR-2.4** `events.jsonl` — append-only structured event stream
   (report/failure/escalation/activity).
-- **FR-2.5** `index.jsonl` — flat artifact→agent/task/path map, written after
-  the run when artifacts exist.
+- **FR-2.5** `index.jsonl` — flat artifact to agent/task/path map, written
+  after the run when artifacts exist.
+
+## Related
+
+- `INFO-014` — why the CLI is minimal and prompt-only
+- `INFO-026` — pipelines and long jobs built on the persisted overview

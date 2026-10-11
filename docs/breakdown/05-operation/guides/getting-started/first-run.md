@@ -2,7 +2,7 @@
 id: INFO-110
 type: info
 title: Your First Task
-summary: Your First Task
+summary: Run a first task in the interactive terminal, single-shot mode, or no-LLM mode.
 date: 2026-09-23
 status: current
 ---
@@ -17,7 +17,7 @@ dynamic-harness
 
 Opens the prompt-only interactive terminal. Type a task and press Enter (paste
 multi-line text directly, or use Ctrl+J to add a line break). During the run the
-prompt shows a live **token counter** + the current activity, and input stays
+prompt shows a live **token counter** and the current activity, and input stays
 **always available**: type a command (e.g. `/tree` for a live status snapshot)
 or send a message to the running agent — it is queued while the agent works and
 applied immediately when the agent is waiting on its children. Use `/help` for
@@ -35,7 +35,7 @@ event stream — is persisted to files under the run directory (see
 dynamic-harness "Find the 3 largest Python files in this project"
 ```
 
-Runs the task headlessly, prints the final outcome + aggregate, and writes the
+Runs the task headlessly, prints the final outcome and aggregate, and writes the
 run's persisted overview (agents/tree/stats/events) to
 `.dynamic-harness/<ts>_<id>/`.
 
@@ -49,3 +49,10 @@ Runs without an LLM. Because no LLM is configured, the agent immediately
 **fails** with `"No LLM provider configured"`. Useful for verifying the
 runtime/tool infrastructure without API costs, but it does **not** produce a
 report — expect a failure, not a summary.
+
+## Owns
+- Running a first task: interactive terminal, single-shot mode, no-LLM mode.
+
+## Excludes
+- Slash command reference (`INFO-114`).
+- Output and persisted run files (`INFO-112`).

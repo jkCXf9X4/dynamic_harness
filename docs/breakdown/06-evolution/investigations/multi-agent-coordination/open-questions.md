@@ -22,9 +22,8 @@ design is implemented. Record: `INFO-148`.
    architecture avoids)? Need a measurable budget / handoff rule.
 3. **Verification is prompt-discipline, not a mechanism.** G1 (acceptance
    criteria never mechanically checked) and G7 (converse-based heal reuses the
-   shared `_recover`, not a distinct mechanism) — see
-   `../../04-verification/gap-analysis.md`. Should "converse → demand better"
-   become a first-class mechanism?
+   shared `_recover`, not a distinct mechanism) — see the gap analysis. Should
+   "converse to demand better" become a first-class mechanism?
 4. **Failure steering.** How does a parent reliably detect a bad child result and
    decide converse vs resume vs kill vs re-delegate — and does the current
    `resume`/self-heal budget cover the multi-round coordination case?

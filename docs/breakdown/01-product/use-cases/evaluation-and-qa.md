@@ -1,17 +1,11 @@
 ---
 id: INFO-023
 type: info
-title: "Use-Case — Evaluation & QA"
-category: use-case
+title: "Evaluation & QA"
 summary: >
   Dogfooding the runtime as its own QA lab: run the deterministic benchmark
   suite, A/B-test system prompts, triage failures, and audit provenance — a
   first-class use-case thanks to the failable verifiers.
-related:
-  - ../../02-architecture/concepts/self-healing/README.md
-  - ../../../docs/api/repository.md
-  - ../../05-operation/guides/prompt-optimization/README.md
-  - ../../05-operation/guides/benchmark-alternatives/README.md
 date: 2026-09-22
 status: current
 ---
@@ -48,9 +42,9 @@ the framework improving itself.
 > which turn, which tool call, the failure reason, and whether the rot
 > discriminator classified it blunt-vs-rot."
 
-**Flow:** `/provenance <id>` (CLI) maps task → trace → artifacts → commits;
+**Flow:** `/provenance <id>` (CLI) maps task to trace to artifacts to commits;
 `/trace <id>` points at `trace.jsonl`; run-level `index.jsonl` maps
-artifact→agent. A QA agent reads these on-disk records and synthesizes a
+artifact to agent. A QA agent reads these on-disk records and synthesizes a
 diagnosis — **failure analysis does not require rerunning** because artifacts +
 traces are immutable and greppable by a child that never re-executes the work.
 

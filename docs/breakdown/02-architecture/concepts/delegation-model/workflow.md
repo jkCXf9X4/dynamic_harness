@@ -2,7 +2,7 @@
 id: INFO-044
 type: info
 title: The Mandatory Workflow
-summary: Every agent except a leaf follows
+summary: Every agent except a leaf follows the six-step workflow: analyze, decompose, delegate, verify, synthesize, terminate
 date: 2026-09-23
 status: current
 ---

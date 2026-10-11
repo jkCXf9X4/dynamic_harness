@@ -26,14 +26,14 @@ glob()/grep() is the #1 cause of context bloat.
 ### P3 — Verify Before Synthesizing (most violated)
 1. Read the artifact file(s) the child wrote
 2. Confirm content is non-empty and matches the delegation description
-3. If verification fails → re-delegate or escalate
-4. Failed child → task is incomplete. Retry or escalate.
+3. If verification fails, re-delegate or escalate
+4. Failed child: the task is incomplete. Retry or escalate.
 5. **Never synthesize from assumed results.** Blind synthesis is the most harmful failure mode.
 
 ### P4 — Artifact-Driven Interfaces
 - Sub-agents MUST write findings to disk via `write()`
 - Reference files by path; do not pass large raw data in-memory
-- delegate() returns only status + ID + summary preview → you MUST read artifacts
+- delegate() returns only status + ID + summary preview, so you MUST read artifacts
 
 ### P5 — Context Health
 | Condition | Action |
@@ -53,11 +53,11 @@ glob()/grep() is the #1 cause of context bloat.
 ## Guardrails
 
 - Never re-read source a sub-agent already processed — read its artifact.
-- 3+ similar tool calls in a row → delegate.
-- Context > 50 messages → `compress()`, do not continue.
-- Stuck → `escalate()`, do not spin.
+- 3+ similar tool calls in a row: delegate.
+- Context > 50 messages: `compress()`, do not continue.
+- Stuck: `escalate()`, do not spin.
 - Never synthesize from assumed results.
-- Failed child → task incomplete. Retry or escalate.
+- Failed child: task incomplete. Retry or escalate.
 - Every delegation must include a role.
 
 See `INFO-052` for the nine

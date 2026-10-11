@@ -2,7 +2,7 @@
 id: INFO-089
 type: info
 title: Aider Exercism / Polyglot & Single-Function Benches
-summary: "exercises; take a stub module + instructions, implement it, pass the unit tests. Also the newer benchmark (\"make the tests pass\" across 200+ files in…"
+summary: Aider's Exercism Python practice exercises (133, stub + instructions, pass the unit tests) and the polyglot benchmark ("make the tests pass" across 200+ files); cheap smoke signal, not the headline benchmark.
 date: 2026-09-23
 status: current
 ---
@@ -31,3 +31,10 @@ status: current
   repo to explore, no multi-file, no agents — they measure raw code-space
   ability, not agentic capability. The existing `FibonacciTask` covers this
   noise. **Verdict**: skip.
+
+## Owns
+- The aider Exercism / polyglot and single-function (HumanEval, MBPP) bench surveys and verdicts.
+
+## Excludes
+- The built-in suite — `INFO-090`.
+- Selection criteria and the decision summary — `INFO-093`.

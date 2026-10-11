@@ -2,8 +2,6 @@
 id: INFO-187
 type: info
 title: "Plugin Direction — Target Common-Interface Set (~7)"
-category: investigation
-parent: "README.md"
 summary: >
   The seven interfaces that constitute the target; success means the count
   holds while couplings are removed.
@@ -11,7 +9,7 @@ date: 2026-09-28
 status: current
 ---
 
-# The count — target common-interface set (~7)
+# Plugin Direction — Target Common-Interface Set (~7)
 
 | # | Interface | Where | Status |
 |---|-----------|-------|--------|

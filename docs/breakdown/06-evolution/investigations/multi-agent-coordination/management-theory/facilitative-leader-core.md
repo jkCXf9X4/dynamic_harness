@@ -50,16 +50,16 @@ forward a message's *content*, stop — that is control; redraw it as context.
 Hackman is explicit that leader *intervention* is most valuable at the team's
 boundaries and transitions, not inside the work itself.
 
-**Design translation.** Real team → the common-parent group (membership is who
-the parent introduced). Compelling direction → each delegation's
-description/role. Enabling structure → **the hardest to copy and the key
+**Design translation.** Real team to the common-parent group (membership is who
+the parent introduced). Compelling direction to each delegation's
+description/role. Enabling structure to **the hardest to copy and the key
 insight**: Hackman's *norms* map to the guardrail set (delivery caps,
 summary-only messaging, escalate-on-conflict, advisory-not-authoritative),
 encoded as *policy* (like `ToolPermissionPolicy`), not prompt text. Supportive
-context → artifact store, provenance, budgets. Expert coaching → the parent
-intervenes at connect, disconnect, and escalation only.
+context to artifact store, provenance, budgets. Expert coaching to the parent
+intervening at connect, disconnect, and escalation only.
 
-## 3.3 McChrystal: shared consciousness → empowered execution
+## 3.3 McChrystal: shared consciousness to empowered execution
 **Source.** Stanley McChrystal, *Team of Teams* (2015), the NATO/JSOC
 transformation: defeating a distributed network enemy required replacing
 centralized command with a linked network.

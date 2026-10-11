@@ -15,14 +15,14 @@ Operationalizes the channel + facilitation decisions.
 ## 5.1 Channel selection — workspace first, message on equivocality
 Operationalized media-richness heuristic injected into the member prompt
 (`prompts.py` / `agent_system_prompt.txt`):
-1. **Share / store** a finding, value, constraint → `workspace_write` (lean
+1. **Share / store** a finding, value, constraint: `workspace_write` (lean
    medium, uncertainty).
-2. **Find out** who knows / where it lives → `converse` a *pointer* (ID + why),
+2. **Find out** who knows / where it lives: `converse` a *pointer* (ID + why),
    then `workspace_read` (TMS retrieval; REQ-4).
-3. **Reconcile** conflicting interpretations / demand revision → `converse`
+3. **Reconcile** conflicting interpretations / demand revision: `converse`
    (rich medium, equivocality); bounded by `max_messages_per_pair` + `max_rounds`
    (REQ-6, REQ-9).
-4. **Stalemate after the budget** → `escalate(resolve_as=dispute)` (REQ-14).
+4. **Stalemate after the budget**: `escalate(resolve_as=dispute)` (REQ-14).
 
 ## 5.2 Cadence — settle-then-yield for the workspace
 - A member persists (checkpoint/`workspace_write` with a settle marker) before it
@@ -40,7 +40,7 @@ Operationalized media-richness heuristic injected into the member prompt
 
 ## 5.4 Loop detection (REQ-9)
 `pair_counts` is the per-pair exchange counter. A pair that reaches the cap
-*without* a settle marker → Level 2, then Level 3. Independent of the existing
+*without* a settle marker goes to Level 2, then Level 3. Independent of the existing
 per-agent repeated-call detector (this is a *group* detector, small known edge
 set).
 
@@ -56,5 +56,5 @@ When a dispute reaches the founder:
 ## 5.6 Verify — charter as the mechanical G1 target
 On team settlement, the founder runs `VerifyPolicy.check(body=workspace artifact
 summary, acceptance=charter.acceptance)` (existing `policies/verify.py` — the G1
-mechanism). Missing acceptance terms → converse/assign-fresh; met → synthesize.
+mechanism). Missing acceptance terms: converse/assign-fresh; met: synthesize.
 This is the team's "compelling direction" made *mechanically checkable*.

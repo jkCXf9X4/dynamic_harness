@@ -2,7 +2,7 @@
 id: INFO-173
 type: info
 title: Requirements — Group, Context, Norms (REQ-1..7)
-summary: Consolidated guardrails from the B-curated deep-dive, strengthened by folding in the 8 design implications from the management-theory report (manageme…
+summary: "Consolidated guardrails from the B-curated deep-dive, strengthened by the 8 design implications from the management-theory report. REQ-1..7: group, context, norms."
 date: 2026-09-28
 status: current
 ---

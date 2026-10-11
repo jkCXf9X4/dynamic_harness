@@ -2,7 +2,7 @@
 id: INFO-047
 type: info
 title: Implementation Plan
-summary: Rely on deterministic Runtime logic, not model compliance. the rot discriminator. because the model keeps refusing the tool, escalate rather than loop…
+summary: Rely on deterministic Runtime logic, not model compliance; the rot discriminator bounds cost and retries, and a missing deliverable escalates rather than loops
 date: 2026-09-23
 status: current
 ---

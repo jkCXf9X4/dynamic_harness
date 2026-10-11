@@ -23,9 +23,9 @@ TERMINATE → report() / escalate() / fail()
 | Step | Exit Condition |
 |---|---|
 | **ANALYZE** | Bullet-point decomposition. First decision: are you a leaf agent (0-1 tool calls)? If yes, execute directly and terminate. |
-| **DECOMPOSE** | N delegation descriptions with roles. Independent units → parallel delegation. Sequential units → sequential delegation. |
+| **DECOMPOSE** | N delegation descriptions with roles. Independent units: parallel delegation. Sequential units: sequential delegation. |
 | **DELEGATE** | All sub-agents return completed/failed. Delegate in ONE turn for parallelism. |
-| **VERIFY** | Every child's artifact read and confirmed. Failed children → retry or escalate. |
+| **VERIFY** | Every child's artifact read and confirmed. Failed children: retry or escalate. |
 | **SYNTHESIZE** | Report references each child's verified artifact IDs. No fabrication. |
 | **TERMINATE** | `report()` with concrete summary and artifact_ids. |
 
@@ -39,5 +39,5 @@ Standalone unit?
           └── 2+  → DELEGATE
 ```
 
-**Stop and delegate if:** you are about to chain grep→multiple reads,
-glob→multiple reads, or have made the same tool call 2+ times.
+**Stop and delegate if:** you are about to chain grep into multiple reads,
+glob into multiple reads, or have made the same tool call 2+ times.

@@ -2,7 +2,7 @@
 id: INFO-144
 type: info
 title: Communication experiments via code-as-action
-summary: "Communication is the dimension where the design space is largest relative to what is built: four fixed topologies ( / / / ) against several still-open…"
+summary: "Communication as the highest-leverage probe surface for code-as-action: four fixed topologies against open questions, with a variant matrix, three lab rules, and a concrete minimal experiment."
 date: 2026-09-28
 status: current
 ---
@@ -66,7 +66,7 @@ by default. Three rules keep it an honest lab:
    of each variant, not the absence of a baseline.
 3. **Settled decisions stay settled until evidence flips them** — this is a probe
    surface for IMP-002/003/004 and topology futures, *not* a re-litigation of
-   the DL-* / channel decisions (workspace-primary, messages-as-exception),
+   the `AD-002` / `AD-003` channel decisions (workspace-primary, messages-as-exception),
    introduce-not-mediate, or the L0/L1/L2 facilitation layer. A winning variant
    gets spec'd as real mechanism through the RPC stub (`INFO-146`)
    — the stub is both the enabler (code reaches `post` / `channel_read` /
@@ -85,9 +85,6 @@ already-written info), and churn in the variant trace vs baseline.
 - `INFO-146` — the hybrid (`invoke` + `harness_tools` RPC stub +
   procedural skills); policy parity by construction
 - `INFO-141` — the canonical record
-- Multi-agent coordination leaves: channel-decision (`product-breakdown/06-evolution/multi-agent-coordination/channel-decision.md`),
-  channel-evidence (`product-breakdown/06-evolution/multi-agent-coordination/channel-evidence.md`),
-  introduce-not-mediate (`product-breakdown/06-evolution/multi-agent-coordination/introduce-not-mediate.md`),
-  facilitation-layer (`product-breakdown/06-evolution/multi-agent-coordination/facilitation-layer.md`)
+- Multi-agent coordination leaves: `INFO-150` (channel-decision), `INFO-151` (channel-evidence), `INFO-161` (introduce-not-mediate), `INFO-160` (facilitation-layer)
 - IMP-001..004 — roadmap (`INFO-196`)
-- Communication structures plan (`04-verification/communication-structures/plan/README.md`)
+- Communication structures plan

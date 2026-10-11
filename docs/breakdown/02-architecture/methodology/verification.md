@@ -2,7 +2,7 @@
 id: INFO-061
 type: info
 title: Verification Protocol
-summary: For each child after returns
+summary: For each child after delegate() returns, read and confirm its artifact exists and is non-empty before synthesizing
 date: 2026-09-23
 status: current
 ---
@@ -20,8 +20,8 @@ Status is "completed"?
 
 ## Pre-report Checklist
 
-- [ ] Every child has `Status: completed`
-- [ ] Every child's artifact read and confirmed
-- [ ] Synthesis reflects (not fabricates) artifact contents
-- [ ] Failed children retried or escalated
-- [ ] Final report includes all relevant artifact IDs
+- Every child has `Status: completed`
+- Every child's artifact read and confirmed
+- Synthesis reflects (not fabricates) artifact contents
+- Failed children retried or escalated
+- Final report includes all relevant artifact IDs

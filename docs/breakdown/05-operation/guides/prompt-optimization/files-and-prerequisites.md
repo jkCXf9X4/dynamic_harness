@@ -2,7 +2,7 @@
 id: INFO-130
 type: info
 title: Files & Prerequisites
-summary: uses DeepSeek flash and keeps the list to route around providers that cannot handle tool calling
+summary: The default `harness.json` uses DeepSeek flash and keeps the `provider_ignore` list to route around providers that cannot handle tool calling
 date: 2026-09-23
 status: current
 ---
@@ -53,3 +53,11 @@ status: current
     }
   }
   ```
+
+## Owns
+- The file map of the prompt-optimization workflow (task source, runners, prompts, config, output dirs)
+- Prerequisites: venv install, `OPENROUTER_API_KEY`, `harness.json` model/provider config
+
+## Excludes
+- What each output file contains: `INFO-131`
+- Provider rate limits and tool-calling quirks: `INFO-132`

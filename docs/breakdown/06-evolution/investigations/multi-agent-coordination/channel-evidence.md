@@ -2,7 +2,7 @@
 id: INFO-151
 type: info
 title: "Channel Evidence: Why Workspace-Primary"
-summary: "The theory anchors behind the channel decision. The decision itself is in channel-decision.md; decisions: AD-003"
+summary: "The theory anchors behind the channel decision. The decision itself is in `INFO-150`; decisions: `AD-003`"
 date: 2026-09-28
 status: current
 ---
@@ -10,8 +10,7 @@ status: current
 # Channel Evidence: Why Workspace-Primary
 
 The theory anchors behind the channel decision. The decision itself is in
-`INFO-150`; decisions:
-AD-003 (`product-breakdown/06-evolution/investigations/decisions/AD-003.md`).
+`INFO-150`; decisions: `AD-003`.
 
 ## 1. Media Richness Theory (Daft & Lengel, 1986)
 The sharpest fit. Richness is the medium's ability to "change understanding

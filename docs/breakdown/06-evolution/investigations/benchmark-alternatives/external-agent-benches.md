@@ -2,7 +2,7 @@
 id: INFO-091
 type: info
 title: TheAgentCompany, GAIA & BigCodeBench
-summary: Plane issue-tracker, ownCloud, RocketChat backends pre-seeded; 175 tasks across software engineer, data scientist, PM, HR, finance, admin roles. Agent…
+summary: TheAgentCompany (175 multi-agent company tasks, LLM-judged), GAIA (open-ended assistant synthesis), and BigCodeBench (~1,140 parallel function tasks) surveyed against the failable-verifier rule.
 date: 2026-09-23
 status: current
 ---
@@ -52,3 +52,10 @@ per-package dependencies mean the exact same env/Docker problem as SWE-bench;
 and in this repo the `parallel` `ParallelSubtasksTask` probes the same property
 much cheaper. **Verdict**: useful as an external sanity reference; overkill for
 prompt optimization.
+
+## Owns
+- The TheAgentCompany, GAIA, and BigCodeBench surveys and verdicts.
+
+## Excludes
+- The built-in suite — `INFO-090`.
+- Selection criteria and the decision summary — `INFO-093`.

@@ -42,3 +42,12 @@ python -m dynamic_harness.benchmark.run --seed-only
 
 This runs every task in `ALL_TASKS` against the seed prompt and prints the
 verification verdict per task.
+
+## Owns
+- The run commands: clean state, run `scripts/run_optimize.py`, smoke test via the standalone CLI
+- What the runner does internally (variant generation, measurement, ranking) and its runtime
+
+## Excludes
+- What the run produces: `INFO-131`
+- Prerequisites and file map: `INFO-130`
+- Provider rate limits and quirks: `INFO-132`

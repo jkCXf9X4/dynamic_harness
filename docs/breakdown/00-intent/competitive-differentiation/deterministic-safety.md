@@ -2,24 +2,20 @@
 id: INFO-002
 type: info
 title: "Deterministic Safety — Loop Detection and Spawn Limits"
-category: meta
 summary: >
   The runtime-enforced mechanisms that keep a disobedient model bounded:
   repeated-call / fuzzy near-identical loop detection, and per-lineage spawn caps
   keyed on target signatures.
-parent: "README.md"
-related:
-  - ../../02-architecture/concepts/self-healing.md
 date: 2026-09-23
 status: current
 ---
 
-# Deterministic Safety
+# Deterministic Safety — Loop Detection and Spawn Limits
 
 Mainstream harnesses *tell* the model to behave ("verify your children", "prune
 your context", "don't loop"). Measured behavior shows the model rarely complies —
 it almost never calls `prune` in the manyfiles task, and token use balloons to
-200–680K (self-healing (`docs/breakdown/02-architecture/concepts/self-healing/README.md`)). Dynamic
+200–680K (self-healing). Dynamic
 Harness enforces the equivalent safety in `_run_loop()`.
 
 ## Loop detection

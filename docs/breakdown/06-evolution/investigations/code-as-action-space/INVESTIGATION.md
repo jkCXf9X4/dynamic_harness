@@ -2,23 +2,13 @@
 id: INFO-141
 type: info
 title: "Investigation — Code-as-Action: the single invoke(code) tool"
-category: investigation
+summary: "Investigation of the code-as-action paradigm: one `invoke(code)` tool that runs Python, so the agent sets up and manages tools, subagents, memory, and communication from code. Question: where does this converge with or improve this harness."
 date: 2026-09-28
-status: open
-summary: >
-  Design-space investigation into the code-as-action paradigm: giving the agent a
-  single `invoke(code)` tool that executes Python so it can set up and manage
-  tools, subagents, memory, and agent communication from code (CodeAct lineage:
-  arXiv:2402.01030, Manus, Hermes, CodeMem, AgentFactory). Question: where does
-  this converge with or improve this harness — which already has a `bash`
-  do-anything tool, a lean-context ResultStore, a ToolContext that is RPC-shaped,
-  and a skills layer that is procedural-memory-shaped. Recommendation: the model
-  contract may collapse to (at most) one code tool, but the runtime keeps its
-  rich, policy-enforcing surface behind an RPC stub — see proposal.md.
+status: current
 pb_exempt: true
 ---
 
-# Direction: Code-as-Action — the single `invoke(code)` tool
+# Investigation — Code-as-Action: the single invoke(code) tool
 
 ## The step being investigated
 
@@ -72,7 +62,7 @@ boundary*, not a new category of execution.
   (`python -m dynamic_harness.benchmark.run`); `register_agent_class` for new
   agent types.
 
-## What the evidence supports (summary; details in benefits-and-costs.md)
+## What the evidence supports (summary; details in `INFO-142`)
 
 - **Context/token economics** — the strongest, most-replicated benefit: fewer
   model turns (CodeAct: up to 30% fewer actions on multi-tool tasks) and only the
@@ -91,14 +81,14 @@ boundary*, not a new category of execution.
 
 - **No benefit on simple/atomic tasks** — CodeAct is merely comparable there; the
   gains are on multi-tool, multi-turn trajectories. Must be measured, not assumed.
-- **No determinism win** — same task → different code each run (CodeMem): a
+- **No determinism win** — same task to different code each run (CodeMem): a
   procedural-memory layer is the fix and must be built, else the harness trades
   away reproducibility it has today via structured tools + checkpoints.
 - **Not a security neutralizer** — arbitrary code is a wider capability surface
   than bash (imports, pickles, network libs); every serious deployment sandboxes
   (Manus VM, CodeAct docker-per-session, Hermes whitelist + env scrub).
 - **Prompt-injection caution** — web-fetched content copy-pasted into code is an
-  injection→execution channel (tool-use survey: "Les Dissonances").
+  injection to execution channel (tool-use survey: "Les Dissonances").
 - Manus, the marquee production example, has published no benchmark scores (GAIA /
   SWE-bench unsubmitted).
 
@@ -140,27 +130,17 @@ boundary*, not a new category of execution.
 - `INFO-143` — identity evaluation grounded in
   VISION.md:59 ("not a code generation platform"): the hybrid capability is a
   development; the single-tool end-state is a new project on the shared
-  skeleton; sequence = probe here → judge by the product's own success criteria
-  → route by rule.
+  skeleton; sequence = probe here, then judge by the product's own success
+  criteria, then route by rule.
 
 ## Investigation next steps
 
-- [x] Survey the paradigm and evidence (CodeAct, Manus, Hermes, CodeMem,
-      AgentFactory, MS Agent Framework, tool-use survey)
-- [x] Map the paradigm against existing harness mechanisms (above)
-- [ ] Decide open questions 1–6
-- [ ] Prototype `invoke` + RPC stub and run the benchmark comparison
-      (codeact agent type vs default; batch-loop microbenchmark)
-- [ ] Run the communication variant sweep (per
-      `INFO-144`)
-- [ ] Measure option-load metrics per model class (per
-      `INFO-147`)
-- [ ] Specify level-budget enforcement + context-efficiency score (per
-      `INFO-145`)
-- [ ] Record the identity ruling: hybrid = development; single-tool end-state =
-      new project on shared skeleton (per
-      `INFO-143`); VISION:59 stays governing unless
-      intent shifts via decision-log record
-- [ ] If signal → file an IMP with a task contract (roadmap register)
-- [ ] Extend near-identical detection to Python `invoke` families
-- [ ] Specify procedural-skill persistence rules (frontmatter + validation)
+- Decide open questions 1–6
+- Prototype `invoke` + RPC stub and run the benchmark comparison (codeact agent type vs default; batch-loop microbenchmark)
+- Run the communication variant sweep (per `INFO-144`)
+- Measure option-load metrics per model class (per `INFO-147`)
+- Specify level-budget enforcement + context-efficiency score (per `INFO-145`)
+- Record the identity ruling: hybrid = development; single-tool end-state = new project on shared skeleton (per `INFO-143`); VISION:59 stays governing unless intent shifts via decision-log record
+- If signal, file an IMP with a task contract (roadmap register)
+- Extend near-identical detection to Python `invoke` families
+- Specify procedural-skill persistence rules (frontmatter + validation)

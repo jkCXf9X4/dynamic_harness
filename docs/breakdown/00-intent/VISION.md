@@ -13,7 +13,7 @@ status: current
 
 **Dynamic Harness is a recursive agent runtime that maximizes LLM output quality
 while minimizing cost — by enforcing disciplined task decomposition, strict
-context encapsulation, and a mandatory analyze → implement → verify loop inspired
+context encapsulation, and a mandatory analyze to implement to verify loop inspired
 by ISO/IEC 15288 systems engineering.**
 
 **Fresh context is cheaper than accumulated context.** A 3-turn sub-agent with a
@@ -23,13 +23,13 @@ rot (>15K tokens for a 20-turn monolith).
 
 ## ISO/IEC 15288 Foundation
 
-The V-model runs requirements down the left (analyze → decompose), implements at
-the bottom (delegate), and verifies/validates back up the right (verify → synthesize).
+The V-model runs requirements down the left (analyze to decompose), implements at
+the bottom (delegate), and verifies/validates back up the right (verify to synthesize).
 
 | 15288 process | Phase | What happens |
 |---|---|---|
 | Business/Mission Analysis | ANALYZE | Define the problem space and required outcomes |
-| Stakeholder Needs → Requirements + Architecture Definition | DECOMPOSE | Derive task requirements into a system breakdown structure and assign roles, scope, and interfaces — each requirement unit maps to one sub-agent (system element) |
+| Stakeholder Needs to Requirements + Architecture Definition | DECOMPOSE | Derive task requirements into a system breakdown structure and assign roles, scope, and interfaces — each requirement unit maps to one sub-agent (system element) |
 | Implementation | DELEGATE | Sub-agents implement their allocated requirements, in parallel |
 | Integration + Verification | VERIFY | Aggregate sub-agent artifacts; confirm interfaces are satisfied and each output meets its acceptance criteria |
 | Validation | SYNTHESIZE | Confirm the integrated result satisfies the original task |
@@ -42,16 +42,16 @@ Verification is **not optional**; never synthesize from assumed results.
 1. **Recursive task decomposition.** Parents define requirements, then decompose
    into a hierarchy of system elements (sub-agents), each with an allocated
    requirement set (task + role). Parents orchestrate; they do not implement.
-2. **Analyze → implement → verify (V-model).** ANALYZE → DECOMPOSE → DELEGATE →
-   VERIFY → SYNTHESIZE → TERMINATE, every output traced to a requirement.
+2. **Analyze to implement to verify (V-model).** ANALYZE to DECOMPOSE to DELEGATE to
+   VERIFY to SYNTHESIZE to TERMINATE, every output traced to a requirement.
 3. **Context encapsulation.** Agents know only parent, children, and allocated
    requirements — never siblings, cousins, or the architecture (Runtime-owned).
 4. **Artifact-driven communication.** Findings persist to disk as immutable
    artifacts; parents get summaries + artifact IDs (~300 tokens, not 30,000).
-5. **Progressive disclosure.** Artifacts expose layered views (headline →
-   summary → report); parents consume the shallow tier and pull detail on demand.
+5. **Progressive disclosure.** Artifacts expose layered views (headline to
+   summary to report); parents consume the shallow tier and pull detail on demand.
 6. **Fresh-context economics.** Decomposed 3×3-turn work beats a 20-turn monolith
-   on both cost and quality (~3K delegation overhead < >15K context rot).
+   on both cost and quality.
 7. **Disposable workers.** State lives in artifacts, not agent memory; the store
    is the single source of truth and no worker carries history forward.
 8. **Parent-defined specialized agents.** Every parent defines its children's

@@ -2,7 +2,7 @@
 id: INFO-107
 type: info
 title: Registration & Unregistration
-summary: Tools can be registered at any time, but they only become visible to agents when the agent next enters (i.e., the next tool-calling turn). For agents…
+summary: Tools register at any time but only become visible when an agent next enters the tool-calling loop; unregistration affects all agents.
 date: 2026-09-23
 status: current
 ---
@@ -53,3 +53,12 @@ my_registry = ToolRegistry()
 register_default_tools(my_registry)
 my_registry.register(my_tool_def, my_tool_fn)
 ```
+
+## Owns
+- When registered tools become visible to agents.
+- Registration patterns: startup, conditional, per-agent.
+- Unregistration and custom registries.
+
+## Excludes
+- ToolDef field schema: `INFO-108`.
+- Tool function signature rules: `INFO-106`.

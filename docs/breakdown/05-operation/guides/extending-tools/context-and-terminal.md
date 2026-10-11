@@ -2,7 +2,7 @@
 id: INFO-103
 type: info
 title: ToolContext & Terminal Tools
-summary: The parameter gives access to everything a tool is allowed to see — it is a narrow public façade, so tools cannot reach into agent/runtime private sta…
+summary: The `ctx` parameter is a narrow public façade over runtime services; terminal tools stop the agent loop via ctx.report, ctx.fail, or ctx.escalate.
 date: 2026-09-23
 status: current
 ---
@@ -51,3 +51,11 @@ async def my_approve(*, ctx, decision: str) -> str:
         ctx.fail(f"Decision rejected: {decision}")
         return "Rejected"
 ```
+
+## Owns
+- What `ctx` (ToolContext) exposes and the agent-access boundary.
+- How terminal tools stop the agent loop.
+
+## Excludes
+- Tool function signature rules: `INFO-106`.
+- Registration and visibility: `INFO-107`.
