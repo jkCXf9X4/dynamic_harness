@@ -360,6 +360,30 @@ Example:
 
 ---
 
+## `input_requests` — mid-run external input channel (IMP-006)
+
+Lets models ask their parent/user a structured question mid-run via the
+`request_input` tool. An unanswered request never settles as pass — it
+resolves via answer, default/assumption (recorded), or failure.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `policy` | `"assume_and_record"` | How an unanswered request settles: `assume_and_record` (default — answer with the request's `default`, or an empty string, marked assumed and recorded; the loop stays closed), `default_answer` (same, but only when the request carries a `default`; a request without one fails the requesting agent), `fail_fast` (fail the requesting agent on timeout). |
+| `timeout_seconds` | `120.0` | Cap for requests that do not carry their own `timeout` (`null` = no cap). |
+| `max_pending` | `10` | Request-flood guard: at most this many requests pending per agent; further ones are refused (the tool call errors at once). |
+
+Example — fail fast on unanswered questions:
+
+```json
+{
+  "input_requests": {
+    "policy": "fail_fast"
+  }
+}
+```
+
+---
+
 ## `communication` — swappable routing layer (topology experiments)
 
 | Key | Default | Description |

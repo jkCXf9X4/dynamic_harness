@@ -209,6 +209,27 @@ class ToolContext:
         if target is not None:
             await target.continue_with_input(envelope)
 
+    async def request_input(
+        self,
+        question: str,
+        *,
+        kind: str = "clarification",
+        options: list[str] | None = None,
+        context_id: str | None = None,
+        timeout: float | None = None,
+        default: str | None = None,
+    ) -> str:
+        """Emit a structured external-input request (IMP-006) and block until
+        the answer arrives (or the timeout policy settles the request)."""
+        return await self._agent.request_input(
+            question,
+            kind=kind,
+            options=options,
+            context_id=context_id,
+            timeout=timeout,
+            default=default,
+        )
+
     def queue_comms_message(self, agent_id: str, envelope: str) -> None:
         """Fire-and-forget delivery (message path): queues the envelope in the
         target's inject queue; it is picked up on the target's next turn."""

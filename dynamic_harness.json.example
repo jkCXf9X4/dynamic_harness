@@ -72,6 +72,11 @@
     "active_turn_window": 50,
     "stream_children": true
   },
+  "input_requests": {
+    "policy": "assume_and_record",
+    "timeout_seconds": 120.0,
+    "max_pending": 10
+  },
   "communication": {
     "topology": "off",
     "registration": "parent",

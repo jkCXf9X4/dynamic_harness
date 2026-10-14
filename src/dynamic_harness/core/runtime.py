@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from ..artifact.store import Artifact, ArtifactStore, ArtifactView
-from ..config import HarnessConfig, ModelProfile, ResolvedModel
+from ..config import HarnessConfig, InputRequestConfig, ModelProfile, ResolvedModel
 from ..memory.repository import Commit, Repository
 from .comms import CommsLog, build_backend
 from .agent import Agent, progress_summary_block
@@ -38,7 +38,18 @@ from .spawn_limits import (
 )
 from .tools import ToolRegistry, register_default_tools
 from .events import EventBus
-from .task import ActivityEvent, ActivityEventType, BudgetRequest, Escalation, Failure, ReportPayload, Task, TaskStatus
+from .task import (
+    ActivityEvent,
+    ActivityEventType,
+    BudgetRequest,
+    Escalation,
+    Failure,
+    InputAnswer,
+    InputRequest,
+    ReportPayload,
+    Task,
+    TaskStatus,
+)
 from .trace import TraceStore
 from .usage import UsageTracker
 
@@ -250,6 +261,15 @@ class Runtime:
         self._environment_info: EnvironmentInfo = build_environment_info(notes=notes)
 
         self.event_bus = EventBus()
+        # IMP-006: pending external-input requests, keyed by request id.
+        # Each entry carries the requesting agent's id so answers, timeouts
+        # and policy failures route back to the right agent.
+        self._pending_input_requests: dict[str, tuple[InputRequest, str]] = {}
+        # IMP-006: per-request futures the request_input tool awaits, so the
+        # agent's tool call blocks (non-polling) until the answer arrives.
+        self._input_waiters: dict[str, asyncio.Future[str]] = {}
+        # IMP-006: per-request timeout watchdogs, keyed by request id.
+        self._input_timeout_tasks: dict[str, asyncio.Task[None]] = {}
         self.usage_tracker = UsageTracker()
         # The most recent live root agent (or latest self-heal successor), used
         # by the interactive terminal as the target for mid-run injections.
@@ -1270,10 +1290,192 @@ class Runtime:
             agent.task.status = TaskStatus.escalated
         self.event_bus.emit_escalation(agent_id, esc)
 
+    # -- external input channel (IMP-006) ---------------------------------
+
+    def _input_request_policy(self) -> Any:
+        """The configured input-request policy (defaults when unset)."""
+        cfg = getattr(self._config, "input_requests", None)
+        return cfg if cfg is not None else InputRequestConfig()
+
+    def _resolve_input_answer(
+        self, req: InputRequest, agent_id: str, *, value: str, by: str, assumed: bool
+    ) -> str:
+        """Route an answer back to the waiting requester and record the event."""
+        self._pending_input_requests.pop(req.id, None)
+        watchdog = self._input_timeout_tasks.pop(req.id, None)
+        if watchdog is not None and not watchdog.done():
+            watchdog.cancel()
+        waiter = self._input_waiters.pop(req.id, None)
+        if waiter is not None and not waiter.done():
+            waiter.set_result(value)
+        ans = InputAnswer(request_id=req.id, value=value, by=by, assumed=assumed)
+        self.event_bus.emit_input_answer(agent_id, ans)
+        return value
+
+    def _fail_input_request(self, req: InputRequest, agent_id: str, reason: str) -> None:
+        """Settle a request by failing the requesting agent (timeout policy)."""
+        self._pending_input_requests.pop(req.id, None)
+        watchdog = self._input_timeout_tasks.pop(req.id, None)
+        if watchdog is not None and not watchdog.done():
+            watchdog.cancel()
+        waiter = self._input_waiters.pop(req.id, None)
+        if waiter is not None and not waiter.done():
+            waiter.set_exception(RuntimeError(reason))
+        agent = self._agents.get(agent_id)
+        if agent is not None:
+            agent.fail(reason)
+
+    def settle_input_request_per_policy(self, req: InputRequest, agent_id: str) -> None:
+        """Settle a pending request per the configured policy.
+
+        Called by the per-request timeout watchdog and by the terminal when no
+        operator can answer (non-interactive batch): an unanswered request
+        never settles as pass — it resolves via answer, default/assumption
+        (recorded), or failure.
+
+        - ``fail_fast``: fail the requesting agent.
+        - ``default_answer`` with no default on the request: fail it.
+        - otherwise (``assume_and_record``, or ``default_answer`` with a
+          default): answer with the request's default (or an empty string),
+          marked ``assumed`` and recorded on the event bus.
+        """
+        policy = self._input_request_policy()
+        if policy.policy == "fail_fast":
+            self._fail_input_request(
+                req, agent_id, f"input request '{req.id}' timed out (policy=fail_fast)"
+            )
+            return
+        if policy.policy == "default_answer" and not req.default:
+            self._fail_input_request(
+                req, agent_id,
+                f"input request '{req.id}' timed out with no default (policy=default_answer)",
+            )
+            return
+        # assume_and_record (default), or default_answer with a default present:
+        # answer with the request's default (or empty), marked assumed.
+        self._resolve_input_answer(
+            req, agent_id, value=req.default or "", by="policy",
+            assumed=True,
+        )
+
+    async def _input_request_timeout_watchdog(
+        self, req: InputRequest, agent_id: str
+    ) -> None:
+        """Per-request timeout hook (IMP-006): settle the request per policy
+        when its deadline passes.
+
+        The requesting agent is blocked awaiting the answer, so it cannot
+        sweep for itself — a watchdog task per request does the settling.
+        A request with no cap (both timeouts null) waits until it is
+        answered, failed, or the runtime is reset.
+        """
+        limit = req.timeout
+        if limit is None:
+            limit = self._input_request_policy().timeout_seconds
+        if limit is None:
+            return
+        try:
+            await asyncio.sleep(limit)
+        except asyncio.CancelledError:
+            return
+        if req.id in self._pending_input_requests:
+            self.settle_input_request_per_policy(req, agent_id)
+
+    def request_input(self, agent_id: str, req: InputRequest) -> asyncio.Future[str]:
+        """Queue an agent's external-input request; returns the future the
+        ``request_input`` tool awaits.
+
+        Rate-limited per ``input_requests.max_pending``: once an agent has this
+        many requests pending, further ones are refused (the tool call errors
+        at once and the agent adapts) — a request flood cannot grow without
+        bound.
+
+        With no answer source registered (no terminal, no outer-harness
+        handler), the request settles immediately per policy — a run never
+        blocks on input nobody can give.
+        """
+        policy = self._input_request_policy()
+        pending_for_agent = sum(
+            1 for _, aid in self._pending_input_requests.values() if aid == agent_id
+        )
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[str] = loop.create_future()
+        if pending_for_agent >= policy.max_pending:
+            fut.set_exception(RuntimeError(
+                f"input request '{req.id}' refused: {pending_for_agent} requests "
+                f"already pending (max_pending={policy.max_pending})"
+            ))
+            return fut
+        self._input_waiters[req.id] = fut
+        if not self.event_bus.handler_counts().get("input_request"):
+            self.settle_input_request_per_policy(req, agent_id)
+        else:
+            req._started_at = _time.monotonic()
+            self._pending_input_requests[req.id] = (req, agent_id)
+            self.event_bus.emit_input_request(agent_id, req)
+            self._input_timeout_tasks[req.id] = asyncio.ensure_future(
+                self._input_request_timeout_watchdog(req, agent_id)
+            )
+        return fut
+    def answer_input(self, request_id: str, value: str, *, by: str = "operator") -> bool:
+        """Answer a pending input request by id (outer-harness / operator seam).
+
+        Returns True when the request was pending and has been routed; False
+        for an unknown or already-answered id (the answer is dropped).
+        """
+        entry = self._pending_input_requests.get(request_id)
+        if entry is None:
+            return False
+        req, agent_id = entry
+        self._resolve_input_answer(req, agent_id, value=value, by=by, assumed=False)
+        return True
+
+    def settle_pending_input_requests(self) -> int:
+        """Settle every pending input request per policy (non-TTY terminal).
+
+        Returns the number of requests settled. A batch run with no operator
+        never blocks on input: each pending request resolves via answer,
+        default/assumption (recorded), or failure — never as pass.
+        """
+        settled = 0
+        for req, agent_id in list(self._pending_input_requests.values()):
+            self.settle_input_request_per_policy(req, agent_id)
+            settled += 1
+        return settled
+
+    def pending_input_requests(self) -> list[dict[str, Any]]:
+        """Snapshot of pending input requests for the seam / terminal surfacing."""
+        return [
+            {
+                "id": req.id,
+                "agent_id": agent_id,
+                "kind": req.kind,
+                "question": req.question,
+                "options": list(req.options),
+                "context_id": req.context_id,
+                "timeout": req.timeout,
+                "default": req.default,
+            }
+            for req, agent_id in self._pending_input_requests.values()
+        ]
+
     def deliver_failure(self, agent_id: str, fail: Failure) -> None:
         agent = self._agents.get(agent_id)
         if agent:
             agent.task.status = TaskStatus.failed
+        # IMP-006: a failed agent's pending input requests must never settle as
+        # pass — fail them (their waiters raise out of the request_input tool).
+        for rid, (req, aid) in list(self._pending_input_requests.items()):
+            if aid == agent_id:
+                self._pending_input_requests.pop(rid, None)
+                watchdog = self._input_timeout_tasks.pop(rid, None)
+                if watchdog is not None and not watchdog.done():
+                    watchdog.cancel()
+                waiter = self._input_waiters.pop(rid, None)
+                if waiter is not None:
+                    waiter.set_exception(RuntimeError(
+                        f"input request '{rid}' cancelled: requesting agent failed"
+                    ))
         self.event_bus.emit_failure(agent_id, fail)
 
     def on_report(self, handler: Callable[[str, ReportPayload], None]) -> None:
@@ -1614,6 +1816,17 @@ class Runtime:
             self.trace_store.clear()
         self._path_locks.clear()
         self._agent_retries.clear()
+        # IMP-006: a reset drops pending input requests; their waiters get a
+        # clean error instead of hanging past the run's lifetime.
+        for waiter in self._input_waiters.values():
+            if not waiter.done():
+                waiter.set_exception(RuntimeError('runtime reset'))
+        self._input_waiters.clear()
+        for watchdog in self._input_timeout_tasks.values():
+            if not watchdog.done():
+                watchdog.cancel()
+        self._input_timeout_tasks.clear()
+        self._pending_input_requests.clear()
         self._heal_counts.clear()
         self._agent_run_tasks_by_agent.clear()
         # Fresh run, fresh channel store: a rebuilt backend drops stale topics /
