@@ -128,7 +128,17 @@ class LLMSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    verify_ssl: bool = True
+    verify_ssl: bool | str = Field(
+        default=True,
+        description="Verify TLS certificates on LLM requests. ``true`` verifies "
+                    "against the system trust store (certifi), ``false`` disables "
+                    "verification, and a string is the filesystem path to a CA "
+                    "bundle (PEM) handed to httpx as ``verify`` — for endpoints "
+                    "whose CA the public trust stores lack (e.g. an internal "
+                    "gateway). The env-var alternative is SSL_CERT_FILE, which "
+                    "points the system store at a bundle without touching the "
+                    "config.",
+    )
     call_timeout_seconds: float = Field(
         default=500.0, gt=0,
         description="Hard total deadline for a single LLM request, in seconds "

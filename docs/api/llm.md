@@ -133,7 +133,7 @@ OpenAIProvider(
     model: str = "gpt-4o",                  # Model name
     base_url: str | None = None,            # None → OpenAI default
     api_key: str | None = None,             # None → uses env / AsyncOpenAI
-    verify_ssl: bool = True,
+    verify_ssl: bool | str = True,           # bool, or CA-bundle (PEM) path
     provider_ignore: list[str] | None = None,    # OpenRouter providers to exclude
     provider_allow_fallbacks: bool = True,       # Allow OpenRouter fallback routing
     provider_force: str | None = None,           # Pin a single OpenRouter provider (disables fallbacks)

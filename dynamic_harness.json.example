@@ -1,6 +1,8 @@
 {
   "root_model": "openrouter/deepseek/deepseek-v4-flash-0731",
   "llm": {
+    // verify_ssl: true | false | "<path to a CA bundle (PEM)>" — for endpoints
+    // whose CA the public trust stores lack. Env-var alternative: SSL_CERT_FILE.
     "verify_ssl": true,
     "call_timeout_seconds": 500.0,
     "retry_max_attempts": 4,

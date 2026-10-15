@@ -67,7 +67,8 @@ class OpenAIProvider(LLMProvider):
         model: str = "gpt-4o",
         base_url: str | None = None,
         api_key: str | None = None,
-        verify_ssl: bool = True,
+        # bool | str: a str is a CA-bundle (PEM) path, passed to httpx as `verify`.
+        verify_ssl: bool | str = True,
         provider_ignore: list[str] | None = None,
         provider_allow_fallbacks: bool = True,
         provider_force: str | None = None,

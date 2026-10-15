@@ -74,6 +74,23 @@ class TestHarnessConfig:
         assert llm.verify_ssl is False
         assert llm.call_timeout_seconds == 45.0
 
+    def test_llm_verify_ssl_ca_bundle_path(self) -> None:
+        llm = LLMSettings(verify_ssl="/path/to/ca.pem")
+        assert llm.verify_ssl == "/path/to/ca.pem"
+        assert llm.model_dump()["verify_ssl"] == "/path/to/ca.pem"
+
+    def test_llm_verify_ssl_bools_unchanged(self) -> None:
+        assert LLMSettings(verify_ssl=True).verify_ssl is True
+        assert LLMSettings(verify_ssl=False).verify_ssl is False
+        assert LLMSettings(verify_ssl=True).model_dump()["verify_ssl"] is True
+
+    def test_harness_config_llm_verify_ssl_round_trip(self) -> None:
+        cfg = HarnessConfig.model_validate(
+            {"llm": {"verify_ssl": "/path/to/ca.pem"}}
+        )
+        assert cfg.llm.verify_ssl == "/path/to/ca.pem"
+        assert cfg.model_dump()["llm"]["verify_ssl"] == "/path/to/ca.pem"
+
     def test_custom_model_and_provider(self) -> None:
         cfg = HarnessConfig.model_validate(
             {

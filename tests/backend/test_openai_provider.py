@@ -14,9 +14,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import httpx
+import pytest
 from openai import BadRequestError
 
+from dynamic_harness.config import HarnessConfig
+from dynamic_harness.llm import openai_provider
 from dynamic_harness.llm.openai_provider import OpenAIProvider
+from dynamic_harness.llm.provider import LLMConfig
+from dynamic_harness.llm.registry import ProviderRegistry
 from dynamic_harness.llm.provider import LLMConfig
 
 
@@ -321,3 +326,52 @@ class TestStreaming:
         assert "stream" not in call
         assert out.content == "ok"
         assert out.usage == {"prompt_tokens": 1, "completion_tokens": 1}
+
+
+class _RecordingAsyncClient(httpx.AsyncClient):
+    """``httpx.AsyncClient`` stand-in that records its constructor kwargs.
+
+    The recorded kwargs keep the caller's original ``verify`` value; the real
+    httpx init gets a sanitized copy (httpx loads a CA-bundle path eagerly, so
+    the fake ``/path/to/ca.pem`` would fail) — the test never touches the disk.
+    """
+
+    last_kwargs: dict | None = None
+
+    def __init__(self, **kwargs: object) -> None:
+        _RecordingAsyncClient.last_kwargs = dict(kwargs)
+        super().__init__(**{**kwargs, "verify": True})
+
+
+class TestVerifySslPlumbing:
+    """``llm.verify_ssl`` flows from config through the registry to httpx."""
+
+    def _config(self, verify_ssl: object) -> HarnessConfig:
+        return HarnessConfig.model_validate({
+            "root_model": "corp/model",
+            "llm": {"verify_ssl": verify_ssl},
+            "providers": {
+                "corp": {
+                    "env": ["CORP_API_KEY"],
+                    "base_url": "https://saga.corp.saab.se/v1",
+                    "models": {"model": {"name": "Model"}},
+                },
+            },
+        })
+
+    def test_ca_bundle_path_reaches_httpx(self, monkeypatch) -> None:
+        monkeypatch.setattr(openai_provider.httpx, "AsyncClient", _RecordingAsyncClient)
+        registry = ProviderRegistry.from_config(
+            self._config("/path/to/ca.pem"), api_key="test"
+        )
+        provider = registry.select("corp/model")
+        assert _RecordingAsyncClient.last_kwargs is not None
+        assert _RecordingAsyncClient.last_kwargs["verify"] == "/path/to/ca.pem"
+        assert isinstance(provider, OpenAIProvider)
+
+    def test_bool_verify_passes_through(self, monkeypatch) -> None:
+        monkeypatch.setattr(openai_provider.httpx, "AsyncClient", _RecordingAsyncClient)
+        registry = ProviderRegistry.from_config(self._config(False), api_key="test")
+        registry.select("corp/model")
+        assert _RecordingAsyncClient.last_kwargs is not None
+        assert _RecordingAsyncClient.last_kwargs["verify"] is False
