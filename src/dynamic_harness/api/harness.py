@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
+from ..config import HarnessConfig
 from ..core.agent import Agent
 from ..core.events_format import format_event
 from ..core.runtime import Runtime
