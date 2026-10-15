@@ -218,29 +218,27 @@ class Harness:
         return self._runtime.answer_input(request_id, value, by=by)
 
     def on_input_request(self, handler: Callable[[str, Any], None]) -> None:
-        """Register a handler for ``INPUT_REQUEST`` activity events (push).
+        """Register a handler for the runtime's ``input_request`` channel (push).
 
         The handler receives ``(agent_id, request_dict)``; it should call
         ``answer_input(request_id, value)`` — an unanswered request never
         settles as pass, it resolves via answer, default/assumption
         (recorded), or failure per policy.
+
+        Registering here also marks the run as having an answer source, so
+        requests stay pending (under their timeout watchdog) instead of
+        settling immediately per policy.
         """
-        def _h(event: Any) -> None:
-            if event.event_type is not ActivityEventType.INPUT_REQUEST:
-                return
-            req = event.data.get("request") or {}
-            handler(event.agent_id, req)
+        def _h(agent_id: str, req: Any) -> None:
+            handler(agent_id, req.model_dump() if hasattr(req, "model_dump") else req)
 
         self._user_on_input_request = _h
-        self._runtime.on_activity(_h)
+        self._runtime.event_bus.on_input_request(_h)
 
     def on_input_answer(self, handler: Callable[[str, Any], None]) -> None:
-        """Register a handler for ``INPUT_ANSWER`` activity events."""
-        def _h(event: Any) -> None:
-            if event.event_type is not ActivityEventType.INPUT_ANSWER:
-                return
-            ans = event.data.get("answer") or {}
-            handler(event.agent_id, ans)
+        """Register a handler for the runtime's ``input_answer`` channel."""
+        def _h(agent_id: str, ans: Any) -> None:
+            handler(agent_id, ans.model_dump() if hasattr(ans, "model_dump") else ans)
 
         self._user_on_input_answer = _h
-        self._runtime.on_activity(_h)
+        self._runtime.event_bus.on_input_answer(_h)

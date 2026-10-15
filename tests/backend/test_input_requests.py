@@ -276,3 +276,88 @@ async def test_end_to_end_tool_round_trip(tmp_path) -> None:
 
     assert root.task.status.value == "completed"
     assert "done: blue" in root.last_report.summary
+
+
+
+# -- IMP-006 push-answer regressions (trial findings BUG #3) ------------------
+
+
+class _RecordingAskingLLM(_AskingLLM):
+    """_AskingLLM that records the messages it sees, so a test can assert
+    what the agent was actually told (the channel round-trip, not the mock's
+    own echo)."""
+
+    def __init__(self, question: str) -> None:
+        super().__init__(question)
+        self.seen: list[list[dict]] = []
+
+    async def generate_with_tools(self, messages, tools, config=None):
+        self.seen.append(list(messages))
+        return await super().generate_with_tools(messages, tools, config)
+
+
+async def test_sync_activity_handler_answer_reaches_agent(tmp_path) -> None:
+    """BUG #3a regression: the INPUT_REQUEST activity event must fire only
+    AFTER the runtime has registered the request as pending, so a
+    synchronous activity-stream handler answering via ``answer_input``
+    inside the event reaches the agent instead of being dropped.
+
+    Pre-fix the event fired before the request was registered:
+    ``answer_input`` returned False and the answer was silently lost (the
+    tool call then failed)."""
+    rt = _runtime(tmp_path, with_handler=True)
+    seen: list[InputRequest] = []
+
+    def _answer(aid: str, req: InputRequest) -> None:
+        seen.append(req)
+        assert rt.answer_input(req.id, "the pushed answer") is True
+
+    rt.event_bus.on_activity(lambda ev: (
+        _answer(ev.agent_id, InputRequest(**ev.data["request"]))
+        if ev.event_type.value == "input_request" else None
+    ))
+
+    llm = _RecordingAskingLLM("what color?")
+    llm.answer = "the pushed answer"
+    rt.set_llm(llm)
+    root = rt.delegate(Task(description="ask"))
+    await asyncio.wait_for(rt.run("ask", root_agent=root), timeout=5)
+
+    assert len(seen) == 1
+    assert seen[0].question == "what color?"
+    tool_msgs = [m for m in llm.seen[-1] if m.get("role") == "tool"]
+    assert any("the pushed answer" in str(m.get("content", "")) for m in tool_msgs)
+    assert not any("blue" in str(m.get("content", "")) for m in tool_msgs)
+    assert "done: the pushed answer" in root.last_report.summary
+
+
+async def test_bare_activity_handler_is_not_an_answer_source(tmp_path) -> None:
+    """The no-source check counts the dedicated ``input_request`` channel —
+    the answer surface — not the activity stream (an observability broadcast:
+    the CLI and Harness internals always listen there without being able to
+    answer). A bare activity handler therefore does NOT keep a request
+    pending: with no answer source the request settles immediately per
+    policy, preserving the batch non-blocking guarantee."""
+    rt = _runtime(tmp_path, policy="assume_and_record", timeout_seconds=120.0)
+    rt.event_bus.on_activity(lambda ev: None)  # bare activity listener
+
+    agent = rt.delegate(Task(description="root"))
+    req = InputRequest(question="q?", default="proceed")
+    fut = rt.request_input(agent.id, req)
+    assert fut.done()  # settled on the spot — no answer source exists
+    assert await fut == "proceed"
+    assert rt.pending_input_requests() == []
+
+
+async def test_zero_handlers_still_settles_immediately(tmp_path) -> None:
+    """The batch non-blocking guarantee: with NO answer source registered at
+    all (no dedicated input_request handler, no activity handler), the
+    request settles immediately per policy — a run never blocks on input
+    nobody can give."""
+    rt = _runtime(tmp_path, policy="assume_and_record", timeout_seconds=120.0)
+    agent = rt.delegate(Task(description="root"))
+    req = InputRequest(question="q?", default="fallback")
+    fut = rt.request_input(agent.id, req)
+    assert fut.done()  # settled on the spot, never blocks
+    assert await fut == "fallback"
+    assert rt.pending_input_requests() == []

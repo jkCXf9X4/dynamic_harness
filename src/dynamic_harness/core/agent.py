@@ -2032,12 +2032,17 @@ class Agent:
             timeout=timeout,
             default=default,
         )
+        # IMP-006 ordering: register the request (and arm its watchdog) BEFORE
+        # broadcasting the activity event, so a synchronous activity-stream
+        # handler answering via ``answer_input`` inside the event finds the
+        # request pending instead of dropping the answer.
+        fut = self._runtime.request_input(self.id, req)
         self._event_bus.emit_activity(ActivityEvent(
             agent_id=self.id,
             event_type=ActivityEventType.INPUT_REQUEST,
             data={"request": req.model_dump()},
         ))
-        return await self._runtime.request_input(self.id, req)
+        return await fut
 
     def get_other_agent(self, agent_id: str) -> Agent | None:
         return self._runtime.get_agent(agent_id)
