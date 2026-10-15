@@ -38,7 +38,6 @@ def register_default_tools(
     registry.register(_agents.TOOL_ESCALATE_DEF, _agents.escalate)
     registry.register(_agents.TOOL_FAIL_DEF, _agents.fail)
     registry.register(_agents.TOOL_ASK_DEF, _agents.ask)
-    registry.register(_agents.TOOL_REQUEST_INPUT_DEF, _agents.request_input)
     registry.register(_context.TOOL_COMPRESS_DEF, _context.compress)
     registry.register(_context.TOOL_PRUNE_DEF, _context.prune)
     registry.register(_context.TOOL_RESTORE_DEF, _context.restore)

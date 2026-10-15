@@ -78,8 +78,6 @@ class Harness:
         self._user_on_report: Callable[[str, ReportPayload], None] | None = None
         self._user_on_failure: Callable[[str, Failure], None] | None = None
         self._user_on_activity: Callable[[ActivityEvent], None] | None = None
-        self._user_on_input_request: Callable[[str, dict[str, Any]], None] | None = None
-        self._user_on_input_answer: Callable[[str, dict[str, Any]], None] | None = None
 
     def _configure_llm(self, llm_config: dict[str, Any]) -> None:
         """Build the LLM provider from a config mapping.
@@ -201,44 +199,3 @@ class Harness:
     def reset(self) -> None:
         self._runtime.reset()
         self._last_reports = []
-
-    # -- external input channel (IMP-006) ------------------------------------
-
-    def pending_input_requests(self) -> list[dict[str, Any]]:
-        """Snapshot of the runtime's pending external-input requests.
-
-        An outer harness polls this (or registers ``on_input_request``) to
-        surface mid-run questions to its own user.
-        """
-        return self._runtime.pending_input_requests()
-
-    def answer_input(self, request_id: str, value: str, *, by: str = "outer_harness") -> bool:
-        """Answer a pending input request by id; returns False for an unknown
-        or already-answered id (the answer is dropped)."""
-        return self._runtime.answer_input(request_id, value, by=by)
-
-    def on_input_request(self, handler: Callable[[str, Any], None]) -> None:
-        """Register a handler for the runtime's ``input_request`` channel (push).
-
-        The handler receives ``(agent_id, request_dict)``; it should call
-        ``answer_input(request_id, value)`` — an unanswered request never
-        settles as pass, it resolves via answer, default/assumption
-        (recorded), or failure per policy.
-
-        Registering here also marks the run as having an answer source, so
-        requests stay pending (under their timeout watchdog) instead of
-        settling immediately per policy.
-        """
-        def _h(agent_id: str, req: Any) -> None:
-            handler(agent_id, req.model_dump() if hasattr(req, "model_dump") else req)
-
-        self._user_on_input_request = _h
-        self._runtime.event_bus.on_input_request(_h)
-
-    def on_input_answer(self, handler: Callable[[str, Any], None]) -> None:
-        """Register a handler for the runtime's ``input_answer`` channel."""
-        def _h(agent_id: str, ans: Any) -> None:
-            handler(agent_id, ans.model_dump() if hasattr(ans, "model_dump") else ans)
-
-        self._user_on_input_answer = _h
-        self._runtime.event_bus.on_input_answer(_h)

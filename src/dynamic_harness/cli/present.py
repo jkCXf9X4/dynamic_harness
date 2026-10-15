@@ -96,10 +96,6 @@ def activity_brief(event: ActivityEvent) -> str:
         return "warn"
     if et == ActivityEventType.SELF_HEAL:
         return f"heal {d.get('action', 'heal')}"
-    if et == ActivityEventType.INPUT_REQUEST:
-        return "input?"
-    if et == ActivityEventType.INPUT_ANSWER:
-        return "input answer"
     return et.value
 
 

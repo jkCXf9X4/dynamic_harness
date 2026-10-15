@@ -32,8 +32,7 @@ class ToolPermissionPolicy:
     #: that an orchestrator physically cannot invoke — closing the "what counts
     #: as work" loophole in code, not just in prompt text.
     ORCHESTRATOR_ALLOWED_TOOLS: frozenset[str] = frozenset({
-        "delegate", "converse", "kill", "status", "resume", "ask", "request_input",
-        "read_artifact", "usage",
+        "delegate", "converse", "kill", "status", "resume", "ask", "read_artifact", "usage",
         "report", "escalate", "fail",
         "compress", "prune", "restore",
         "plan", "checkpoint",

@@ -49,7 +49,6 @@ from .task import (
     BudgetRequest,
     Escalation,
     Failure,
-    InputRequest,
     ReportPayload,
     Task,
     TaskStatus,
@@ -2004,45 +2003,6 @@ class Agent:
 
     def emit_activity(self, event: ActivityEvent) -> None:
         self._event_bus.emit_activity(event)
-
-    async def request_input(
-        self,
-        question: str,
-        *,
-        kind: str = "clarification",
-        options: list[str] | None = None,
-        context_id: str | None = None,
-        timeout: float | None = None,
-        default: str | None = None,
-    ) -> str:
-        """Emit a structured external-input request and block for the answer.
-
-        The request rides the activity stream (``INPUT_REQUEST`` event) and the
-        runtime's pending-request queue; the answer arrives via the runtime's
-        ``answer_input`` seam (operator terminal, outer harness, or policy).
-        Per the configured policy, an unanswered request never settles as
-        pass: it resolves via answer, default/assumption (recorded), or
-        failure.
-        """
-        req = InputRequest(
-            kind=kind,
-            question=question,
-            options=options or [],
-            context_id=context_id,
-            timeout=timeout,
-            default=default,
-        )
-        # IMP-006 ordering: register the request (and arm its watchdog) BEFORE
-        # broadcasting the activity event, so a synchronous activity-stream
-        # handler answering via ``answer_input`` inside the event finds the
-        # request pending instead of dropping the answer.
-        fut = self._runtime.request_input(self.id, req)
-        self._event_bus.emit_activity(ActivityEvent(
-            agent_id=self.id,
-            event_type=ActivityEventType.INPUT_REQUEST,
-            data={"request": req.model_dump()},
-        ))
-        return await fut
 
     def get_other_agent(self, agent_id: str) -> Agent | None:
         return self._runtime.get_agent(agent_id)

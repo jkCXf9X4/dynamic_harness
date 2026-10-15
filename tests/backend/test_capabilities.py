@@ -257,8 +257,6 @@ def test_default_tools_all_twenty_four(runtime: Runtime) -> None:
     # Communication layer (all topologies share this surface).
     expected |= {"post", "channel_read", "channels", "channel_info",
                  "subscribe", "unsubscribe", "message"}
-    # External input channel (IMP-006).
-    expected.add("request_input")
     assert set(runtime.tool_registry.list_tools()) == expected
 
 

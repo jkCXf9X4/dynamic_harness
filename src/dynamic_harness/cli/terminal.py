@@ -245,9 +245,6 @@ async def _drive(
     editor entirely and just await the task (clean for batch/pipelines).
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        # Non-interactive (batch/pipes): there is no live operator, so a
-        # pending request settles per policy instead of blocking the run —
-        # an unanswered request never settles as pass (IMP-006).
         while not task.done():
             while not question_queue.empty():
                 q = question_queue.get_nowait().strip()
@@ -256,7 +253,6 @@ async def _drive(
                 except EOFError:
                     answer = ""
                 answer_queue.put_nowait(answer.strip())
-            runtime.settle_pending_input_requests()
             await asyncio.sleep(0.2)
         return await task
 

@@ -96,19 +96,6 @@ def format_event(
         if wtype == "checkpoint_error":
             return f"{lead(WARN if emoji else '')}\u26a0 checkpoint write failed (non-fatal): {str(d.get('error', ''))[:120]}"
         return f"{lead(WARN if emoji else '')}\u26a0 {wtype}"
-    elif et == ActivityEventType.INPUT_REQUEST:
-        req = d.get("request") or {}
-        q = str(req.get("question", "") or "")
-        if len(q) > 120:
-            q = q[:120] + "\u2026"
-        opts = req.get("options") or []
-        opt = f" [{len(opts)} options]" if opts else ""
-        return f"{lead(CK if emoji else '')}input? {q}{opt}"
-    elif et == ActivityEventType.INPUT_ANSWER:
-        ans = d.get("answer") or {}
-        by = ans.get("by", "operator")
-        assumed = " (assumed)" if ans.get("assumed") else ""
-        return f"{lead(CK if emoji else '')}input answer {ans.get('request_id', '?')} <- {by}{assumed}"
     elif et == ActivityEventType.ITERATION:
         return None
     return None

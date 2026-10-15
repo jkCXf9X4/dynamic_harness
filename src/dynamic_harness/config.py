@@ -6,7 +6,7 @@ from pathlib import Path
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 DEFAULT_CONFIG_FILENAME = "dynamic_harness.json"
@@ -658,49 +658,6 @@ class AgentConfig(BaseModel):
     )
 
 
-class InputRequestConfig(BaseModel):
-    """Policy for mid-run external input requests (IMP-006).
-
-    ``policy`` decides how an unanswered request settles when its timeout
-    expires (or the run ends with it still pending):
-
-    - ``assume_and_record`` (default): answer with the request's ``default``
-      (or an empty string), mark the answer ``assumed`` and record it — the
-      loop stays closed and the run continues.
-    - ``default_answer``: same, but only when the request carries a
-      ``default``; a request without one fails the requesting agent.
-    - ``fail_fast``: fail the requesting agent immediately on timeout.
-
-    ``timeout_seconds`` caps requests that do not carry their own timeout.
-    ``max_pending`` rate-limits request floods: once an agent has this many
-    requests pending, further ones fail fast instead of queueing.
-    """
-
-    policy: str = Field(
-        default="assume_and_record",
-        description="'assume_and_record' (default) | 'default_answer' | "
-                    "'fail_fast' — how an unanswered input request settles.",
-    )
-    timeout_seconds: float | None = Field(
-        default=120.0,
-        description="Cap for requests without their own timeout (null = no cap).",
-    )
-    max_pending: int = Field(
-        default=10, ge=1,
-        description="Max pending input requests per agent before further "
-                    "requests fail fast (request-flood guard).",
-    )
-
-    @field_validator("policy")
-    @classmethod
-    def _policy_known(cls, v: str) -> str:
-        if v not in ("assume_and_record", "default_answer", "fail_fast"):
-            raise ValueError(
-                "policy must be 'assume_and_record', 'default_answer' or 'fail_fast'"
-            )
-        return v
-
-
 class HarnessConfig(BaseModel):
     root_model: str = Field(
         default="openrouter/deepseek/deepseek-v4-flash",
@@ -745,7 +702,6 @@ class HarnessConfig(BaseModel):
     self_heal: SelfHealConfig = Field(default_factory=SelfHealConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     communication: CommsConfig = Field(default_factory=CommsConfig)
-    input_requests: InputRequestConfig = Field(default_factory=InputRequestConfig)
 
     def resolve_model(
         self, model_ref: str | None = None, provider: str | None = None

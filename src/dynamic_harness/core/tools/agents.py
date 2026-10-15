@@ -155,30 +155,6 @@ TOOL_FAIL_DEF = ToolDef(
     },
 )
 
-TOOL_REQUEST_INPUT_DEF = ToolDef(
-    name="request_input",
-    description="Ask the parent/user a structured question mid-run and wait for "
-                "the answer. kind: clarification (missing info), decision (a "
-                "choice between options), data (missing facts), capability "
-                "(missing permission/tool). An unanswered request never settles "
-                "as pass — it resolves via answer, default/assumption (recorded), "
-                "or failure per policy.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "question": {"type": "string", "description": "The question to present to the user"},
-            "kind": {"type": "string", "enum": ["clarification", "decision", "data", "capability"],
-                     "description": "clarification (default) | decision | data | capability"},
-            "options": {"type": "array", "items": {"type": "string"},
-                        "description": "For 'decision' kind: the choices"},
-            "context_id": {"type": "string", "description": "Optional id linking this request to a context (e.g. a task or artifact)"},
-            "timeout": {"type": "number", "description": "Seconds to wait before the policy settles the request (default: config cap)"},
-            "default": {"type": "string", "description": "Assumed answer applied on timeout (policy-dependent)"},
-        },
-        "required": ["question"],
-    },
-)
-
 TOOL_ASK_DEF = ToolDef(
     name="ask",
     description="Ask the user a question and get their response. Use when you need input, clarification, or confirmation.",
@@ -384,53 +360,6 @@ async def ask(*, ctx: ToolContext, question: str) -> str:
     loop = asyncio.get_event_loop()
     answer = await loop.run_in_executor(None, lambda: input(f"\n[Agent asks] {question}\nYour response: "))
     return answer.strip()
-
-
-TOOL_REQUEST_INPUT_DEF = ToolDef(
-    name="request_input",
-    description="Ask the parent/user a structured question mid-run and wait for "
-                "the answer. kind: clarification (missing info), decision (a "
-                "choice between options), data (missing facts), capability "
-                "(missing permission/tool). An unanswered request never settles "
-                "as pass — it resolves via answer, default/assumption (recorded), "
-                "or failure per policy.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "question": {"type": "string", "description": "The question to present to the user"},
-            "kind": {"type": "string", "enum": ["clarification", "decision", "data", "capability"],
-                     "description": "clarification (default) | decision | data | capability"},
-            "options": {"type": "array", "items": {"type": "string"},
-                        "description": "For 'decision' kind: the choices"},
-            "context_id": {"type": "string", "description": "Optional id linking this request to a context (task/artifact)"},
-            "timeout": {"type": "number", "description": "Seconds to wait before the policy settles the request (default: config cap)"},
-            "default": {"type": "string", "description": "Assumed answer applied on timeout (policy-dependent)"},
-        },
-        "required": ["question"],
-    },
-)
-
-
-async def request_input(
-    *,
-    ctx: ToolContext,
-    question: str,
-    kind: str = "clarification",
-    options: list[str] | None = None,
-    context_id: str | None = None,
-    timeout: float | None = None,
-    default: str | None = None,
-) -> str:
-    """Structured mid-run external-input request (IMP-006): blocks this tool
-    call until the answer arrives (or the timeout policy settles it)."""
-    return await ctx.request_input(
-        question,
-        kind=kind,
-        options=options,
-        context_id=context_id,
-        timeout=timeout,
-        default=default,
-    )
 
 
 async def converse(*, ctx: ToolContext, agent_id: str, message: str) -> str:

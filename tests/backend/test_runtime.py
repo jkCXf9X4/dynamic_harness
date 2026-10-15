@@ -286,7 +286,6 @@ def test_installed_components_canonical_map(runtime: Runtime) -> None:
     assert isinstance(map["event_handlers"], dict)
     assert set(map["event_handlers"]) == {
         "activity", "report", "budget_request", "escalation", "failure",
-        "input_request", "input_answer",
     }
     assert all(v >= 0 for v in map["event_handlers"].values())
 

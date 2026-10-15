@@ -3,15 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from .task import (
-    ActivityEvent,
-    BudgetRequest,
-    Escalation,
-    Failure,
-    InputAnswer,
-    InputRequest,
-    ReportPayload,
-)
+from .task import Failure, ReportPayload, Escalation, BudgetRequest, ActivityEvent
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +28,6 @@ class EventBus:
         self._budget_handlers: list[Callable[[str, BudgetRequest], None]] = []
         self._escalation_handlers: list[Callable[[str, Escalation], None]] = []
         self._failure_handlers: list[Callable[[str, Failure], None]] = []
-        self._input_request_handlers: list[Callable[[str, InputRequest], None]] = []
-        self._input_answer_handlers: list[Callable[[str, InputAnswer], None]] = []
 
     def emit_activity(self, event: ActivityEvent) -> None:
         _dispatch(self._activity_handlers, event)
@@ -54,12 +44,6 @@ class EventBus:
     def emit_failure(self, agent_id: str, fail: Failure) -> None:
         _dispatch(self._failure_handlers, agent_id, fail)
 
-    def emit_input_request(self, agent_id: str, req: InputRequest) -> None:
-        _dispatch(self._input_request_handlers, agent_id, req)
-
-    def emit_input_answer(self, agent_id: str, ans: InputAnswer) -> None:
-        _dispatch(self._input_answer_handlers, agent_id, ans)
-
     def on_activity(self, handler: Callable[[ActivityEvent], None]) -> None:
         self._activity_handlers.append(handler)
 
@@ -75,12 +59,6 @@ class EventBus:
     def on_failure(self, handler: Callable[[str, Failure], None]) -> None:
         self._failure_handlers.append(handler)
 
-    def on_input_request(self, handler: Callable[[str, InputRequest], None]) -> None:
-        self._input_request_handlers.append(handler)
-
-    def on_input_answer(self, handler: Callable[[str, InputAnswer], None]) -> None:
-        self._input_answer_handlers.append(handler)
-
     def handler_counts(self) -> dict[str, int]:
         """Registered handler counts per event type (introspection).
 
@@ -94,8 +72,6 @@ class EventBus:
             "budget_request": len(self._budget_handlers),
             "escalation": len(self._escalation_handlers),
             "failure": len(self._failure_handlers),
-            "input_request": len(self._input_request_handlers),
-            "input_answer": len(self._input_answer_handlers),
         }
 
     def clear(self) -> None:
@@ -104,5 +80,3 @@ class EventBus:
         self._budget_handlers.clear()
         self._escalation_handlers.clear()
         self._failure_handlers.clear()
-        self._input_request_handlers.clear()
-        self._input_answer_handlers.clear()

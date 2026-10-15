@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, Field
 
 
 class TaskStatus(str, Enum):
@@ -103,8 +103,6 @@ class ActivityEventType(str, Enum):
     SELF_HEAL = "self_heal"
     ITERATION = "iteration"
     ASSISTANT_REPLY = "assistant_reply"
-    INPUT_REQUEST = "input_request"
-    INPUT_ANSWER = "input_answer"
 
 
 class ActivityEvent(BaseModel):
@@ -112,43 +110,3 @@ class ActivityEvent(BaseModel):
     event_type: ActivityEventType
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     data: dict[str, Any] = Field(default_factory=dict)
-
-
-#: The kinds of external input a model may request mid-run (IMP-006).
-INPUT_REQUEST_KINDS = ("clarification", "decision", "data", "capability")
-
-
-class InputRequest(BaseModel):
-    """A structured mid-run request for external input (IMP-006).
-
-    Emitted by an agent via the ``request_input`` tool; rides the activity
-    stream as an ``INPUT_REQUEST`` event and waits on the runtime's
-    pending-request queue until an answer, the timeout policy, or a failure
-    resolves it. An unanswered request never settles as pass.
-    """
-
-    id: str = Field(default_factory=lambda: uuid4().hex[:12])
-    kind: str = Field(default="clarification")
-
-    _started_at: float = PrivateAttr(default=0.0)
-    question: str
-    options: list[str] = Field(default_factory=list)
-    context_id: str | None = None
-    timeout: float | None = Field(default=None, ge=0)
-    default: str | None = None
-
-    @field_validator("kind")
-    @classmethod
-    def _kind_known(cls, v: str) -> str:
-        if v not in INPUT_REQUEST_KINDS:
-            raise ValueError(f"kind must be one of {', '.join(INPUT_REQUEST_KINDS)}")
-        return v
-
-
-class InputAnswer(BaseModel):
-    """An answer to a pending :class:`InputRequest`, routed back by id."""
-
-    request_id: str
-    value: str
-    by: str = "operator"
-    assumed: bool = False

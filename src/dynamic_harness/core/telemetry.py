@@ -104,7 +104,6 @@ class Telemetry:
                 event_type=ActivityEventType.ASSISTANT_REPLY,
                 data={"content": content},
             ))
-
         ts = self._trace_store
         if ts is not None:
             tc_info = [
