@@ -145,7 +145,7 @@ default is OpenRouter.
 | `provider_force` | `null` | OpenRouter provider slug to pin exclusively. Setting this disables fallbacks. |
 | `provider_ignore` | `[]` | OpenRouter provider slugs to exclude from routing. |
 | `provider_allow_fallbacks` | `true` | Let the provider fall back to other models when the primary is unavailable. |
-| `models` | `{}` | Model catalog keyed by the model id used in model refs. `model_id` remaps the id sent upstream (default: the map key); `name` is a display name; `limit`/`cost` add token limits and USD-per-1M pricing. A model absent from the map passes through as-is. |
+| `models` | `{}` | Model catalog keyed by the model id used in model refs. `model_id` remaps the id sent upstream (default: the map key); `name` is a display name; `limit`/`cost` add token limits and USD-per-1M pricing; `reasoning_effort` forwards a reasoning level (`low`/`high`/`max` on SAGA vLLM, `low`/`medium`/`high` on OpenAI o-series) as the request body's `reasoning_effort`. A model absent from the map passes through as-is. |
 
 Example:
 

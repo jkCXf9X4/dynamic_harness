@@ -203,11 +203,22 @@ class TestBuild:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-oai-key")
-        registry = ProviderRegistry.from_config(_config())
+        cfg = _config()
+        cfg.providers["openai"].models["gpt-5.2"].reasoning_effort = "high"
+        registry = ProviderRegistry.from_config(cfg)
         llm = registry.build("openai")
         assert llm.default_model == "gpt-5.2"
         assert llm._provider_force is None
         assert llm._provider_allow_fallbacks is True
+        assert llm._reasoning_effort == "high"
+
+    def test_catalog_effort_unset_builds_clean(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-key")
+        registry = ProviderRegistry.from_config(_config())
+        llm = registry.build("openrouter")
+        assert llm._reasoning_effort is None
 
 
 class TestCloseAll:

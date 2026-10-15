@@ -58,6 +58,15 @@ class ModelSpec(BaseModel):
     name: str | None = Field(default=None, description="Display name.")
     limit: ModelLimit | None = None
     cost: ModelCost | None = None
+    reasoning_effort: str | None = Field(
+        default=None,
+        description=(
+            "Reasoning level forwarded as the request body's reasoning_effort "
+            "for reasoning-capable models/gateways (e.g. SAGA vLLM serves "
+            "'low'/'high'/'max' tiers; OpenAI o-series uses 'low'/'medium'/'high'). "
+            "Unset sends nothing; an unsupported value is rejected by the gateway."
+        ),
+    )
 
 
 class ModelProfile(BaseModel):

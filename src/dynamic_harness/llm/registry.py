@@ -164,6 +164,7 @@ class ProviderRegistry:
             provider_ignore=pc.provider_ignore or None,
             provider_allow_fallbacks=pc.provider_allow_fallbacks,
             provider_force=pc.provider_force,
+            reasoning_effort=spec.reasoning_effort,
             timeout=self._llm.call_timeout_seconds,
         )
         self._built[(provider_id, model_key)] = llm

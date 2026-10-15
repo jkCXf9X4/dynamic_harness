@@ -171,6 +171,34 @@ class TestSessionIdForwarding:
         assert self._last_call(provider).get("extra_body") is None
 
 
+class TestReasoningEffortForwarding:
+    @staticmethod
+    def _last_call(provider: OpenAIProvider) -> dict:
+        return provider.client.chat.completions.create.last_call
+
+    async def test_configured_effort_reaches_the_wire(self) -> None:
+        """A per-model reasoning_effort must reach the request body."""
+        resp = _choice(SimpleNamespace(content="ok", tool_calls=[]))
+        resp.usage = _usage(prompt=1, completion=1)
+        provider = _make_provider(resp, reasoning_effort="high")
+        await provider.generate(system="s", user="u")
+        assert self._last_call(provider)["extra_body"]["reasoning_effort"] == "high"
+
+    async def test_unset_effort_sends_no_extra_body(self) -> None:
+        resp = _choice(SimpleNamespace(content="ok", tool_calls=[]))
+        resp.usage = _usage(prompt=1, completion=1)
+        provider = _make_provider(resp)
+        await provider.generate(system="s", user="u")
+        assert self._last_call(provider).get("extra_body") is None
+
+    async def test_effort_forwarded_on_tool_calls(self) -> None:
+        resp = _choice(SimpleNamespace(content=None, tool_calls=[]))
+        resp.usage = _usage(prompt=1, completion=1)
+        provider = _make_provider(resp, reasoning_effort="max")
+        await provider.generate_with_tools(messages=[], tools=[])
+        assert self._last_call(provider)["extra_body"]["reasoning_effort"] == "max"
+
+
 class TestCachedTokensCapture:
     async def test_generate_with_tools_captures_cached_tokens(self) -> None:
         resp = _choice(SimpleNamespace(content=None, tool_calls=[]))

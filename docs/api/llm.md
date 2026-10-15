@@ -137,6 +137,7 @@ OpenAIProvider(
     provider_ignore: list[str] | None = None,    # OpenRouter providers to exclude
     provider_allow_fallbacks: bool = True,       # Allow OpenRouter fallback routing
     provider_force: str | None = None,           # Pin a single OpenRouter provider (disables fallbacks)
+    reasoning_effort: str | None = None,        # Reasoning level in the request body ('low'/'high'/'max' on SAGA vLLM; 'low'/'medium'/'high' on OpenAI o-series)
     timeout: httpx.Timeout | float = 500.0,      # httpx + SDK timeout (see llm.call_timeout_seconds)
     max_retries: int = 0,                     # SDK-level retries; 0 so the agent owns retry/backoff
     stream: bool = True,                      # Streamed completions (see below)

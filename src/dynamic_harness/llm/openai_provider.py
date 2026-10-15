@@ -72,6 +72,7 @@ class OpenAIProvider(LLMProvider):
         provider_ignore: list[str] | None = None,
         provider_allow_fallbacks: bool = True,
         provider_force: str | None = None,
+        reasoning_effort: str | None = None,
         timeout: httpx.Timeout | float = 500.0,
         max_retries: int = 0,
         stream: bool = True,
@@ -101,6 +102,12 @@ class OpenAIProvider(LLMProvider):
         self._provider_ignore = provider_ignore or []
         self._provider_allow_fallbacks = provider_allow_fallbacks
         self._provider_force = provider_force
+        # Adjustable reasoning depth for reasoning-capable models: the SAGA
+        # vLLM gateway serves 'low'/'high'/'max' tiers (validated — an
+        # unknown value is a 400, not a silent no-op), OpenAI's o-series
+        # accepts 'low'/'medium'/'high'. Forwarded as a top-level request
+        # body key; unset sends nothing.
+        self._reasoning_effort = reasoning_effort
         # Streamed completions keep the wire active while the model generates,
         # so a gateway with a total-request-time cap (the SAGA vLLM gateway
         # 504s ``gateway_timeout`` after 300s) does not kill a long generation
@@ -118,6 +125,8 @@ class OpenAIProvider(LLMProvider):
 
     def _build_extra_body(self, cfg: LLMConfig) -> dict | None:
         body: dict = {}
+        if self._reasoning_effort:
+            body["reasoning_effort"] = self._reasoning_effort
         force = cfg.provider_force or self._provider_force
         if force:
             body["provider"] = {
